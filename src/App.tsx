@@ -28,7 +28,6 @@ import SalesReport from './pages/SalesReport';
 import BranchSalesReport from './pages/BranchSalesReport';
 import CreateSale from './pages/CreateSale';
 import  AdminSalesReport   from './pages/AdminSalesReport';
-import DailyOrdersTable from './pages/DailyOrdersTable';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Chefstatics from './pages/Chefstatics';
@@ -37,13 +36,13 @@ import { ChefDetails } from './pages/ChefDetails';
 import BranchSalesAnalytics from './pages/BranchSalesAnalytics';
 import SalesAnalytics from './pages/SalesAnalytics';
 import ReturnStats from './pages/ReturnStats';
-import ProductionInventory from './pages/ProductionInventory';
+import InventoryOrders from './pages/InventoryOrders';
 import { FactoryInventory } from './pages/FactoryInventory';
 import DailyOrdersSummary from './pages/DailyOrdersSummary';
 
 // New imports for separate pages
 import OrdersTablePage from './pages/OrdersTablePage';
-import { FactoryOrders } from './pages/FactoryOrders';
+import { FactoryOrders } from './pages/InventoryOrders';
 
 
 
@@ -93,7 +92,7 @@ function AppContent() {
                   <Route path="/returns" element={<BranchReturns />} />
                   <Route path="/production-report" element={<ProductionReport />} />
                   <Route path="/FactoryInventory" element={<FactoryInventory />} />
-                  <Route path="/factoryOrders" element={<FactoryOrders />} />
+                  <Route path="/InventoryOrders" element={<InventoryOrders />} />
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
                   <Route path="/branch-inventory" element={<BranchInventory />} />

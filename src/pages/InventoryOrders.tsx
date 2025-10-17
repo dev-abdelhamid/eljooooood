@@ -1,20 +1,19 @@
-import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { ShoppingCart, AlertCircle, Download, Table2, Grid } from 'lucide-react';
+import { Modal } from '../components/UI/Modal';
+import { Select } from '../components/UI/Select';
+import { Input } from '../components/UI/Input';
+import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import * as XLSX from 'xlsx';
-import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
-import { useNavigate } from 'react-router-dom';
-import { exportToPDF } from '../components/Shared/PDFExporter';
-import { OrderCardSkeleton, OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
+import { FactoryOrder, Chef, AssignChefsForm, OrderStatus } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/Shared/AssignChefsModal';
 import OrderTable from '../components/Shared/OrderTable';
@@ -32,17 +31,27 @@ const normalizeText = (text: string) => {
     .trim();
 };
 
+interface Product {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  unit: string;
+  unitEn?: string;
+  department: { _id: string; name: string; nameEn?: string };
+}
+
 interface State {
-  orders: Order[];
-  selectedOrder: Order | null;
+  orders: FactoryOrder[];
+  selectedOrder: FactoryOrder | null;
   chefs: Chef[];
-  branches: Branch[];
+  products: Product[];
   isAssignModalOpen: boolean;
+  isCreateModalOpen: boolean;
   assignFormData: AssignChefsForm;
+  createFormData: { productId: string; quantity: string; notes: string };
   filterStatus: string;
-  filterBranch: string;
   searchQuery: string;
-  sortBy: 'date' | 'totalAmount' | 'priority';
+  sortBy: 'date' | 'totalQuantity';
   sortOrder: 'asc' | 'desc';
   currentPage: number;
   loading: boolean;
@@ -57,10 +66,9 @@ interface Action {
   type: string;
   payload?: any;
   orderId?: string;
-  status?: Order['status'];
-  returnId?: string;
+  status?: FactoryOrder['status'];
   items?: any[];
-  by?: 'date' | 'totalAmount' | 'priority';
+  by?: 'date' | 'totalQuantity';
   order?: 'asc' | 'desc';
   isOpen?: boolean;
 }
@@ -69,11 +77,12 @@ const initialState: State = {
   orders: [],
   selectedOrder: null,
   chefs: [],
-  branches: [],
+  products: [],
   isAssignModalOpen: false,
+  isCreateModalOpen: false,
   assignFormData: { items: [] },
+  createFormData: { productId: '', quantity: '', notes: '' },
   filterStatus: '',
-  filterBranch: '',
   searchQuery: '',
   sortBy: 'date',
   sortOrder: 'desc',
@@ -92,11 +101,12 @@ const reducer = (state: State, action: Action): State => {
     case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
     case 'SET_CHEFS': return { ...state, chefs: action.payload };
-    case 'SET_BRANCHES': return { ...state, branches: action.payload };
-    case 'SET_MODAL': return { ...state, isAssignModalOpen: action.isOpen ?? false };
+    case 'SET_PRODUCTS': return { ...state, products: action.payload };
+    case 'SET_ASSIGN_MODAL': return { ...state, isAssignModalOpen: action.isOpen ?? false };
+    case 'SET_CREATE_MODAL': return { ...state, isCreateModalOpen: action.isOpen ?? false };
     case 'SET_ASSIGN_FORM': return { ...state, assignFormData: action.payload };
+    case 'SET_CREATE_FORM': return { ...state, createFormData: action.payload };
     case 'SET_FILTER_STATUS': return { ...state, filterStatus: action.payload, currentPage: 1 };
-    case 'SET_FILTER_BRANCH': return { ...state, filterBranch: action.payload, currentPage: 1 };
     case 'SET_SEARCH_QUERY': return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_SORT': return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
     case 'SET_PAGE': return { ...state, currentPage: action.payload };
@@ -148,9 +158,9 @@ const reducer = (state: State, action: Action): State => {
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
-                        ? { 
-                            ...assignment.assignedTo, 
-                            displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                        ? {
+                            ...assignment.assignedTo,
+                            displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -170,9 +180,9 @@ const reducer = (state: State, action: Action): State => {
                 ? {
                     ...i,
                     assignedTo: assignment.assignedTo
-                      ? { 
-                          ...assignment.assignedTo, 
-                          displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                      ? {
+                          ...assignment.assignedTo,
+                          displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                         }
                       : undefined,
                     status: assignment.status || i.status,
@@ -180,39 +190,6 @@ const reducer = (state: State, action: Action): State => {
                 : i;
             }),
             status: state.selectedOrder.items.every(i => i.status === 'assigned') ? 'in_production' : state.selectedOrder.status,
-          }
-        : state.selectedOrder,
-    };
-    case 'RETURN_STATUS_UPDATED': return {
-      ...state,
-      orders: state.orders.map(order =>
-        order.id === action.orderId
-          ? {
-              ...order,
-              returns: order.returns.map(ret =>
-                ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
-              ),
-              adjustedTotal: action.status === 'approved'
-                ? order.adjustedTotal - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
-                    const orderItem = order.items.find(i => i.productId === item.productId);
-                    return sum + (orderItem ? orderItem.price * item.quantity : 0);
-                  }, 0) || 0)
-                : order.adjustedTotal,
-            }
-          : order
-      ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? {
-            ...state.selectedOrder,
-            returns: state.selectedOrder.returns.map(ret =>
-              ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
-            ),
-            adjustedTotal: action.status === 'approved'
-              ? state.selectedOrder.adjustedTotal - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
-                  const orderItem = state.selectedOrder.items.find(i => i.productId === item.productId);
-                  return sum + (orderItem ? orderItem.price * item.quantity : 0);
-                }, 0) || 0)
-              : state.selectedOrder.adjustedTotal,
           }
         : state.selectedOrder,
     };
@@ -226,8 +203,8 @@ const validTransitions: Record<OrderStatus, OrderStatus[]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
   in_production: ['completed', 'cancelled'],
-  completed: ['in_transit'],
-  in_transit: ['delivered'],
+  completed: [],
+  in_transit: [],
   delivered: [],
   cancelled: [],
 };
@@ -237,14 +214,11 @@ const statusOptions = [
   { value: 'approved', label: 'approved' },
   { value: 'in_production', label: 'in_production' },
   { value: 'completed', label: 'completed' },
-  { value: 'in_transit', label: 'in_transit' },
-  { value: 'delivered', label: 'delivered' },
   { value: 'cancelled', label: 'cancelled' },
 ];
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
-  { value: 'totalAmount', label: 'sort_total_amount' },
-  { value: 'priority', label: 'sort_priority' },
+  { value: 'totalQuantity', label: 'sort_total_quantity' },
 ];
 
 const translateUnit = (unit: string, isRtl: boolean) => {
@@ -261,41 +235,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: (order: Order) => string, calculateTotalQuantity: (order: Order) => number, translateUnit: (unit: string, isRtl: boolean) => string) => {
-  const headers = [
-    isRtl ? 'رقم الطلب' : 'Order Number',
-    isRtl ? 'الفرع' : 'Branch',
-    isRtl ? 'الحالة' : 'Status',
-    isRtl ? 'المنتجات' : 'Products',
-    isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-    isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-    isRtl ? 'التاريخ' : 'Date',
-  ];
-  const data = orders.map(order => {
-    const productsStr = order.items.map(i => `${i.displayProductName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
-    const totalAmount = calculateAdjustedTotal(order);
-    const totalQuantity = `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
-    const statusLabel = isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status;
-    return {
-      [headers[0]]: order.orderNumber,
-      [headers[1]]: order.branch.displayName,
-      [headers[2]]: statusLabel,
-      [headers[3]]: productsStr,
-      [headers[4]]: totalAmount,
-      [headers[5]]: totalQuantity,
-      [headers[6]]: order.date,
-    };
-  });
-  const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
-  if (isRtl) ws['!views'] = [{ RTL: true }];
-  ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 20 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
-  XLSX.writeFile(wb, 'Orders.xlsx');
-  toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { position: isRtl ? 'top-left' : 'top-right' });
-};
-
-export const Orders: React.FC = () => {
+export const InventoryOrders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -304,39 +244,14 @@ export const Orders: React.FC = () => {
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
-  const navigate = useNavigate();
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  const calculateTotalQuantity = useCallback((order: Order) => {
+  const calculateTotalQuantity = useCallback((order: FactoryOrder) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
-
-  const calculateAdjustedTotal = useCallback((order: Order) => {
-    const approvedReturnsTotal = order.returns
-      .filter(ret => ret.status === 'approved')
-      .reduce((sum, ret) => {
-        const returnTotal = ret.items.reduce((retSum, item) => {
-          const orderItem = order.items.find(i => i.productId === item.productId);
-          return retSum + (orderItem ? orderItem.price * item.quantity : 0);
-        }, 0);
-        return sum + returnTotal;
-      }, 0);
-    const adjusted = (order.totalAmount || 0) - approvedReturnsTotal;
-    return adjusted.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  }, [isRtl]);
-
-  const handleNavigateToDetails = useCallback((orderId: string) => {
-    navigate(`/orders/${orderId}`);
-    window.scrollTo(0, 0);
-  }, [navigate]);
 
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role) || !socket) {
@@ -363,21 +278,14 @@ export const Orders: React.FC = () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
 
-    socket.on('newOrder', (order: any) => {
+    socket.on('newFactoryOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
-        console.warn('Invalid new order data:', order);
+        console.warn('Invalid new factory order data:', order);
         return;
       }
-      const mappedOrder: Order = {
+      const mappedOrder: FactoryOrder = {
         id: order._id,
         orderNumber: order.orderNumber,
-        branchId: order.branch?._id || 'unknown',
-        branch: {
-          _id: order.branch?._id || 'unknown',
-          name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          nameEn: order.branch?.nameEn,
-          displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
-        },
         items: Array.isArray(order.items)
           ? order.items.map((item: any) => ({
               _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
@@ -386,7 +294,6 @@ export const Orders: React.FC = () => {
               productNameEn: item.product?.nameEn,
               displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
               quantity: Number(item.quantity) || 1,
-              price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
               unitEn: item.product?.unitEn,
               displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
@@ -396,71 +303,28 @@ export const Orders: React.FC = () => {
                 nameEn: item.product?.department?.nameEn,
                 displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
               },
-              assignedTo: item.assignedTo ? {
-                _id: item.assignedTo._id,
-                username: item.assignedTo.username,
-                name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.assignedTo.nameEn,
-                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
-                department: item.assignedTo.department
-              } : undefined,
+              assignedTo: item.assignedTo
+                ? {
+                    _id: item.assignedTo._id,
+                    username: item.assignedTo.username,
+                    name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: item.assignedTo.nameEn,
+                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                    department: item.assignedTo.department,
+                  }
+                : undefined,
               status: item.status || 'pending',
-              returnedQuantity: Number(item.returnedQuantity) || 0,
-              returnReason: item.returnReason || '',
-            }))
-          : [],
-        returns: Array.isArray(order.returns)
-          ? order.returns.map((ret: any) => ({
-              returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-              returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-              items: Array.isArray(ret.items)
-                ? ret.items.map((item: any) => ({
-                    productId: item.product?._id || 'unknown',
-                    productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    productNameEn: item.product?.nameEn,
-                    quantity: Number(item.quantity) || 0,
-                    reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                    unit: item.product?.unit || 'unit',
-                    unitEn: item.product?.unitEn,
-                    displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-                  }))
-                : [],
-              status: ret.status || 'pending',
-              reviewNotes: ret.notes || '',
-              createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-              createdBy: {
-                _id: ret.createdBy?._id,
-                username: ret.createdBy?.username,
-                name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: ret.createdBy?.nameEn,
-                displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
-              },
             }))
           : [],
         status: order.status || 'pending',
-        totalAmount: Number(order.totalAmount) || 0,
-        adjustedTotal: Number(order.totalAmount) || 0,
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-        requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : null,
         notes: order.notes || '',
         priority: order.priority || 'medium',
         createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-        approvedAt: order.approvedAt ? new Date(order.approvedAt) : null,
-        deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : null,
-        transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : null,
-        statusHistory: Array.isArray(order.statusHistory)
-          ? order.statusHistory.map((history: any) => ({
-              status: history.status || 'pending',
-              changedBy: history.changedBy?.name || 'unknown',
-              changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-              notes: history.notes || '',
-            }))
-          : [],
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
-      toast.success(isRtl ? `طلب جديد: ${order.orderNumber}` : `New order: ${order.orderNumber}`, {
+      toast.success(isRtl ? `طلب إنتاج جديد: ${order.orderNumber}` : `New production order: ${order.orderNumber}`, {
         position: isRtl ? 'top-left' : 'top-right',
       });
     });
@@ -487,17 +351,6 @@ export const Orders: React.FC = () => {
       });
     });
 
-    socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
-      if (!orderId || !returnId || !status) {
-        console.warn('Invalid return status update data:', { orderId, returnId, status });
-        return;
-      }
-      dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
-      toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${status}` : `Return status updated to: ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
         console.warn('Invalid task assigned data:', { orderId, items });
@@ -511,10 +364,9 @@ export const Orders: React.FC = () => {
       clearInterval(reconnectInterval);
       socket.off('connect');
       socket.off('connect_error');
-      socket.off('newOrder');
+      socket.off('newFactoryOrder');
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
-      socket.off('returnStatusUpdated');
       socket.off('taskAssigned');
     };
   }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
@@ -533,23 +385,16 @@ export const Orders: React.FC = () => {
           sortOrder: state.sortOrder,
         };
         if (user.role === 'production' && user.department) query.department = user.department._id;
-        const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
-          ordersAPI.getAll(query),
+        const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
+          factoryOrdersAPI.getAll(query),
           chefsAPI.getAll(),
-          branchesAPI.getAll(),
+          productsAPI.getAll(),
         ]);
-        const mappedOrders: Order[] = ordersResponse
+        const mappedOrders: FactoryOrder[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
             id: order._id,
             orderNumber: order.orderNumber,
-            branchId: order.branch?._id || 'unknown',
-            branch: {
-              _id: order.branch?._id || 'unknown',
-              name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: order.branch?.nameEn,
-              displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
-            },
             items: Array.isArray(order.items)
               ? order.items.map((item: any) => ({
                   _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
@@ -558,7 +403,6 @@ export const Orders: React.FC = () => {
                   productNameEn: item.product?.nameEn,
                   displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
                   quantity: Number(item.quantity) || 1,
-                  price: Number(item.price) || 0,
                   unit: item.product?.unit || 'unit',
                   unitEn: item.product?.unitEn,
                   displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
@@ -568,67 +412,24 @@ export const Orders: React.FC = () => {
                     nameEn: item.product?.department?.nameEn,
                     displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
                   },
-                  assignedTo: item.assignedTo ? {
-                    _id: item.assignedTo._id,
-                    username: item.assignedTo.username,
-                    name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.assignedTo.nameEn,
-                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
-                    department: item.assignedTo.department
-                  } : undefined,
+                  assignedTo: item.assignedTo
+                    ? {
+                        _id: item.assignedTo._id,
+                        username: item.assignedTo.username,
+                        name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                        nameEn: item.assignedTo.nameEn,
+                        displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                        department: item.assignedTo.department,
+                      }
+                    : undefined,
                   status: item.status || 'pending',
-                  returnedQuantity: Number(item.returnedQuantity) || 0,
-                  returnReason: item.returnReason || '',
-                }))
-              : [],
-            returns: Array.isArray(order.returns)
-              ? order.returns.map((ret: any) => ({
-                  returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-                  items: Array.isArray(ret.items)
-                    ? ret.items.map((item: any) => ({
-                        productId: item.product?._id || 'unknown',
-                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                        productNameEn: item.product?.nameEn,
-                        quantity: Number(item.quantity) || 0,
-                        reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                        unit: item.product?.unit || 'unit',
-                        unitEn: item.product?.unitEn,
-                        displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-                      }))
-                    : [],
-                  status: ret.status || 'pending',
-                  reviewNotes: ret.notes || '',
-                  createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-                  createdBy: {
-                    _id: ret.createdBy?._id,
-                    username: ret.createdBy?.username,
-                    name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: ret.createdBy?.nameEn,
-                    displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
-                  },
                 }))
               : [],
             status: order.status || 'pending',
-            totalAmount: Number(order.totalAmount) || 0,
-            adjustedTotal: Number(order.totalAmount) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : null,
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-            approvedAt: order.approvedAt ? new Date(order.approvedAt) : null,
-            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : null,
-            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : null,
-            statusHistory: Array.isArray(order.statusHistory)
-              ? order.statusHistory.map((history: any) => ({
-                  status: history.status || 'pending',
-                  changedBy: history.changedBy?.name || 'unknown',
-                  changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-                  notes: history.notes || '',
-                }))
-              : [],
           }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -641,26 +442,39 @@ export const Orders: React.FC = () => {
               name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
               nameEn: chef.user?.nameEn || chef.nameEn,
               displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
-              department: chef.department ? {
-                _id: chef.department._id,
-                name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: chef.department.nameEn,
-                displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name)
-              } : null,
+              department: chef.department
+                ? {
+                    _id: chef.department._id,
+                    name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: chef.department.nameEn,
+                    displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name),
+                  }
+                : null,
               status: chef.status || 'active',
             })),
         });
         dispatch({
-          type: 'SET_BRANCHES',
-          payload: branchesResponse
-            .filter((branch: any) => branch && branch._id)
-            .map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : (branch.nameEn || branch.name),
+          type: 'SET_PRODUCTS',
+          payload: productsResponse
+            .filter((product: any) => product && product._id)
+            .map((product: any) => ({
+              _id: product._id,
+              name: product.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: product.nameEn,
+              unit: product.unit || 'unit',
+              unitEn: product.unitEn,
+              department: {
+                _id: product.department?._id || 'unknown',
+                name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                nameEn: product.department?.nameEn,
+                displayName: isRtl ? product.department?.name : product.department?.nameEn || product.department?.name,
+              },
             }))
-            .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language)),
+            .sort((a: Product, b: Product) => {
+              const nameA = isRtl ? a.name : a.nameEn || a.name;
+              const nameB = isRtl ? b.name : b.nameEn || b.name;
+              return nameA.localeCompare(nameB, language);
+            }),
         });
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
@@ -693,7 +507,6 @@ export const Orders: React.FC = () => {
         .filter(
           order =>
             normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
-            normalizeText(order.branch.displayName || '').includes(normalizedQuery) ||
             normalizeText(order.notes || '').includes(normalizedQuery) ||
             normalizeText(order.createdBy || '').includes(normalizedQuery) ||
             order.items.some(item =>
@@ -703,13 +516,12 @@ export const Orders: React.FC = () => {
         .filter(
           order =>
             (!state.filterStatus || order.status === state.filterStatus) &&
-            (!state.filterBranch || order.branchId === state.filterBranch) &&
             (user?.role === 'production' && user?.department
               ? order.items.some(item => item.department._id === user.department._id)
               : true)
         );
     },
-    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
+    [state.orders, state.searchQuery, state.filterStatus, user]
   );
 
   const sortedOrders = useMemo(() => {
@@ -719,15 +531,13 @@ export const Orders: React.FC = () => {
         return state.sortOrder === 'asc'
           ? new Date(a.date).getTime() - new Date(b.date).getTime()
           : new Date(b.date).getTime() - new Date(a.date).getTime();
-      } else if (state.sortBy === 'totalAmount') {
-        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
       } else {
-        return state.sortOrder === 'asc'
-          ? priorityOrder[a.priority] - priorityOrder[b.priority]
-          : priorityOrder[b.priority] - priorityOrder[a.priority];
+        const totalA = calculateTotalQuantity(a);
+        const totalB = calculateTotalQuantity(b);
+        return state.sortOrder === 'asc' ? totalA - totalB : totalB - totalA;
       }
     });
-  }, [filteredOrders, state.sortBy, state.sortOrder]);
+  }, [filteredOrders, state.sortBy, state.sortOrder, calculateTotalQuantity]);
 
   const paginatedOrders = useMemo(
     () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
@@ -748,7 +558,7 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await ordersAPI.updateStatus(orderId, { status: newStatus });
+        await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
@@ -769,14 +579,14 @@ export const Orders: React.FC = () => {
   );
 
   const updateItemStatus = useCallback(
-    async (orderId: string, itemId: string, status: Order['items'][0]['status']) => {
+    async (orderId: string, itemId: string, status: FactoryOrder['items'][0]['status']) => {
       if (!user?.id) {
         toast.error(isRtl ? 'لا يوجد مستخدم مرتبط' : 'No user associated', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await ordersAPI.updateItemStatus(orderId, itemId, { status });
+        await factoryOrdersAPI.updateItemStatus(orderId, itemId, { status });
         dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
         if (socket && isConnected) {
           emit('itemStatusUpdated', { orderId, itemId, status });
@@ -806,18 +616,18 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
+        await factoryOrdersAPI.assignChef(orderId, { items: state.assignFormData.items });
         const items = state.assignFormData.items.map(item => ({
           _id: item.itemId,
           assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || {
             _id: item.assignedTo,
             name: isRtl ? 'غير معروف' : 'Unknown',
-            department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' }
+            department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
           },
           status: 'assigned',
         }));
         dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-        dispatch({ type: 'SET_MODAL', isOpen: false });
+        dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
         if (socket && isConnected) {
           emit('taskAssigned', { orderId, items });
@@ -837,8 +647,76 @@ export const Orders: React.FC = () => {
     [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
   );
 
+  const createOrder = useCallback(
+    async () => {
+      if (!user?.id || !state.createFormData.productId || !state.createFormData.quantity) {
+        toast.error(isRtl ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
+      try {
+        const response = await factoryOrdersAPI.create({
+          items: [
+            {
+              product: state.createFormData.productId,
+              quantity: Number(state.createFormData.quantity),
+            },
+          ],
+          notes: state.createFormData.notes,
+          priority: 'medium',
+        });
+        const newOrder: FactoryOrder = {
+          id: response._id,
+          orderNumber: response.orderNumber,
+          items: response.items.map((item: any) => ({
+            _id: item._id,
+            productId: item.product._id,
+            productName: item.product.name,
+            productNameEn: item.product.nameEn,
+            displayProductName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+            quantity: Number(item.quantity),
+            unit: item.product.unit,
+            unitEn: item.product.unitEn,
+            displayUnit: translateUnit(item.product.unit, isRtl),
+            department: {
+              _id: item.product.department._id,
+              name: item.product.department.name,
+              nameEn: item.product.department.nameEn,
+              displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+            },
+            status: item.status || 'pending',
+          })),
+          status: response.status || 'pending',
+          date: formatDate(new Date(response.createdAt), language),
+          notes: response.notes || '',
+          priority: response.priority || 'medium',
+          createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        };
+        dispatch({ type: 'ADD_ORDER', payload: newOrder });
+        dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+        dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '' } });
+        if (socket && isConnected) {
+          emit('newFactoryOrder', newOrder);
+        }
+        toast.success(isRtl ? 'تم إنشاء طلب الإنتاج بنجاح' : 'Production order created successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } catch (err: any) {
+        console.error('Create order error:', err.message);
+        toast.error(isRtl ? `فشل في إنشاء الطلب: ${err.message}` : `Failed to create order: ${err.message}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [user, state.createFormData, isRtl, socket, isConnected, emit, language]
+  );
+
   const openAssignModal = useCallback(
-    (order: Order) => {
+    (order: FactoryOrder) => {
       if (order.status !== 'approved') {
         toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
           position: isRtl ? 'top-left' : 'top-right',
@@ -860,7 +738,7 @@ export const Orders: React.FC = () => {
             })),
         },
       });
-      dispatch({ type: 'SET_MODAL', isOpen: true });
+      dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
     },
     [isRtl]
   );
@@ -882,33 +760,23 @@ export const Orders: React.FC = () => {
             <div className="w-full sm:w-auto text-center sm:text-start">
               <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
                 <ShoppingCart className="w-5 h-5 text-amber-700" />
-                {isRtl ? 'الطلبات' : 'Orders'}
+                {isRtl ? 'طلبات الإنتاج' : 'Production Orders'}
               </h1>
-              <p className="text-xs text-gray-600 mt-1">{isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders'}</p>
+              <p className="text-xs text-gray-600 mt-1">{isRtl ? 'إدارة طلبات إنتاج المخزون' : 'Manage inventory production orders'}</p>
             </div>
             <div className="flex gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
               <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToExcel(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
-                className={`flex items-center gap-1 ${state.orders.length > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
-                disabled={state.orders.length === 0}
+                variant="primary"
+                onClick={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: true })}
+                className="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
               >
-                <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
-              </Button>
-              <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToPDF(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.branches.find(b => b._id === state.filterBranch)?.displayName || '') : undefined}
-                className={`flex items-center gap-1 ${state.orders.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
-                disabled={state.orders.length === 0}
-              >
-                <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
+                <PlusCircle className="w-4 h-4" />
+                {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
               </Button>
             </div>
           </div>
           <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <ProductSearchInput
@@ -924,7 +792,7 @@ export const Orders: React.FC = () => {
                 <ProductDropdown
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : opt.label,
+                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', cancelled: 'ملغى' }[opt.value] : opt.label,
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
@@ -933,21 +801,11 @@ export const Orders: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
-                <ProductDropdown
-                  options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.displayName }))]}
-                  value={state.filterBranch}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  ariaLabel={isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}
-                  className="w-full"
-                />
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
                 <ProductDropdown
                   options={sortOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : opt.label,
+                    label: isRtl ? { date: 'التاريخ', totalQuantity: 'الكمية الإجمالية' }[opt.value] : opt.label,
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
@@ -1034,11 +892,11 @@ export const Orders: React.FC = () => {
                   className="space-y-3"
                 >
                   {paginatedOrders.length === 0 ? (
-                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
+                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-200">
                       <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                       <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
                       <p className="text-xs text-gray-500">
-                        {state.filterStatus || state.filterBranch || state.searchQuery
+                        {state.filterStatus || state.searchQuery
                           ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
                           : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
                       </p>
@@ -1048,7 +906,7 @@ export const Orders: React.FC = () => {
                       {state.viewMode === 'table' ? (
                         <OrderTable
                           orders={paginatedOrders}
-                          calculateAdjustedTotal={calculateAdjustedTotal}
+                          calculateAdjustedTotal={() => ''} // No total amount for factory orders
                           calculateTotalQuantity={calculateTotalQuantity}
                           translateUnit={translateUnit}
                           updateOrderStatus={updateOrderStatus}
@@ -1068,7 +926,7 @@ export const Orders: React.FC = () => {
                             >
                               <OrderCard
                                 order={order}
-                                calculateAdjustedTotal={calculateAdjustedTotal}
+                                calculateAdjustedTotal={() => ''} // No total amount for factory orders
                                 calculateTotalQuantity={calculateTotalQuantity}
                                 translateUnit={translateUnit}
                                 updateOrderStatus={updateOrderStatus}
@@ -1093,7 +951,7 @@ export const Orders: React.FC = () => {
                   <AssignChefsModal
                     isOpen={state.isAssignModalOpen}
                     onClose={() => {
-                      dispatch({ type: 'SET_MODAL', isOpen: false });
+                      dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false });
                       dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
                       dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
                     }}
@@ -1106,6 +964,103 @@ export const Orders: React.FC = () => {
                     submitting={state.submitting}
                     isRtl={isRtl}
                   />
+                  <Modal
+                    isOpen={state.isCreateModalOpen}
+                    onClose={() => {
+                      dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+                      dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '' } });
+                    }}
+                    title={isRtl ? 'إنشاء طلب إنتاج جديد' : 'Create New Production Order'}
+                    size="md"
+                    className="bg-white rounded-lg shadow-xl border border-gray-100"
+                  >
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        createOrder();
+                      }}
+                      className="space-y-6"
+                    >
+                      <div>
+                        <label className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                          {isRtl ? 'المنتج' : 'Product'}
+                        </label>
+                        <Select
+                          id="product-select"
+                          options={[
+                            { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
+                            ...state.products.map(product => ({
+                              value: product._id,
+                              label: isRtl ? product.name : product.nameEn || product.name,
+                            })),
+                          ]}
+                          value={state.createFormData.productId}
+                          onChange={(value) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, productId: value } })}
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                          aria-label={isRtl ? 'اختر منتج' : 'Select Product'}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                          {isRtl ? 'الكمية' : 'Quantity'}
+                        </label>
+                        <Input
+                          type="number"
+                          value={state.createFormData.quantity}
+                          onChange={(e) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, quantity: e.target.value } })}
+                          placeholder={isRtl ? 'أدخل الكمية' : 'Enter quantity'}
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                          aria-label={isRtl ? 'الكمية' : 'Quantity'}
+                          min="1"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                          {isRtl ? 'ملاحظات' : 'Notes'}
+                        </label>
+                        <Input
+                          type="text"
+                          value={state.createFormData.notes}
+                          onChange={(e) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, notes: e.target.value } })}
+                          placeholder={isRtl ? 'أدخل ملاحظات (اختياري)' : 'Enter notes (optional)'}
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                          aria-label={isRtl ? 'ملاحظات' : 'Notes'}
+                        />
+                      </div>
+                      {state.error && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+                        >
+                          <AlertCircle className="w-5 h-5 text-red-600" />
+                          <span className="text-red-600 text-sm">{state.error}</span>
+                        </motion.div>
+                      )}
+                      <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+                            dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '' } });
+                          }}
+                          className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2 text-sm shadow-sm"
+                          aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                        >
+                          {isRtl ? 'إلغاء' : 'Cancel'}
+                        </Button>
+                        <Button
+                          type="submit"
+                          variant="primary"
+                          disabled={state.submitting !== null}
+                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm"
+                          aria-label={isRtl ? 'إنشاء الطلب' : 'Create Order'}
+                        >
+                          {state.submitting ? (isRtl ? 'جارٍ التحميل' : 'Loading') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
+                        </Button>
+                      </div>
+                    </form>
+                  </Modal>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1116,4 +1071,4 @@ export const Orders: React.FC = () => {
   );
 };
 
-export default Orders;
+export default InventoryOrders;
