@@ -1135,143 +1135,73 @@ export const factoryInventoryAPI = {
     return response;
   },
 };
-export const inventoryOrdersAPI = {
-  create: async (data: { branchId: string; userId: string; items: { productId: string; quantity: number }[]; notes?: string; type: 'restock' | 'transfer'; destinationBranchId?: string }) => {
-    const isRtl = localStorage.getItem('language') === 'ar';
-    if (
-      !isValidObjectId(data.branchId) ||
-      !isValidObjectId(data.userId) ||
-      (data.destinationBranchId && !isValidObjectId(data.destinationBranchId)) ||
-      !['restock', 'transfer'].includes(data.type) ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(item => !isValidObjectId(item.productId) || item.quantity < 1)
-    ) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.create - Invalid data:`, data);
-      throw new Error(createErrorMessage('invalidItems', isRtl));
+
+export const factoryOrdersAPI = {
+  create: async (data: { orderNumber: string; items: { product: string; quantity: number; }[]; notes?: string; priority?: string }) => {
+    if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity < 1 )) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
+      throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
     }
-    try {
-      const response = await api.post('/inventory/orders', {
-        branchId: data.branchId,
-        userId: data.userId,
-        items: data.items.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
-        notes: data.notes?.trim(),
-        type: data.type,
-        destinationBranchId: data.destinationBranchId,
-      });
-      console.log(`[${new Date().toISOString()}] inventoryOrdersAPI.create - Response:`, response);
-      return response.inventoryOrder;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.create - Error:`, error.message);
-      throw new Error(isRtl ? `فشل في إنشاء طلب المخزون: ${error.message}` : `Failed to create inventory order: ${error.message}`);
-    }
+    const response = await api.post('/factoryOrders', {
+      orderNumber: data.orderNumber.trim(),
+      items: data.items.map(item => ({
+        product: item.product,
+        quantity: item.quantity,
+      })),
+      notes: data.notes?.trim(),
+      priority: data.priority?.trim() || 'medium',
+    });
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
+    return response;
   },
-  getAll: async (params: { branchId?: string; type?: 'restock' | 'transfer'; status?: 'pending' | 'approved' | 'rejected' | 'completed'; lang?: string } = {}) => {
-    const isRtl = params.lang === 'ar';
-    if (params.branchId && !isValidObjectId(params.branchId)) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.getAll - Invalid branch ID:`, params.branchId);
-      throw new Error(createErrorMessage('invalidBranchId', isRtl));
-    }
-    if (params.type && !['restock', 'transfer'].includes(params.type)) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.getAll - Invalid type:`, params.type);
-      throw new Error(createErrorMessage('invalidStatus', isRtl));
-    }
-    if (params.status && !['pending', 'approved', 'rejected', 'completed'].includes(params.status)) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.getAll - Invalid status:`, params.status);
-      throw new Error(createErrorMessage('invalidStatus', isRtl));
-    }
-    try {
-      const response = await api.get('/inventory/orders', { params });
-      console.log(`[${new Date().toISOString()}] inventoryOrdersAPI.getAll - Response:`, response);
-      return response.inventoryOrders;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.getAll - Error:`, error.message);
-      throw new Error(isRtl ? `فشل في جلب طلبات المخزون: ${error.message}` : `Failed to fetch inventory orders: ${error.message}`);
-    }
+  getAll: async () => {
+    const response = await api.get('/factoryOrders');
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
+    return response;
   },
   getById: async (id: string) => {
-    const isRtl = localStorage.getItem('language') === 'ar';
     if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.getById - Invalid inventory order ID:`, id);
-      throw new Error(createErrorMessage('invalidInventoryOrderId', isRtl));
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Invalid order ID:`, id);
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
-    try {
-      const response = await api.get(`/inventory/orders/${id}`);
-      console.log(`[${new Date().toISOString()}] inventoryOrdersAPI.getById - Response:`, response);
-      return response.inventoryOrder;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.getById - Error:`, error.message);
-      throw new Error(isRtl ? `فشل في جلب طلب المخزون: ${error.message}` : `Failed to fetch inventory order: ${error.message}`);
-    }
+    const response = await api.get(`/factoryOrders/${id}`);
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Response:`, response);
+    return response;
   },
-  updateStatus: async (id: string, data: { status: 'pending' | 'approved' | 'rejected' | 'completed'; notes?: string }) => {
-    const isRtl = localStorage.getItem('language') === 'ar';
+  assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
+    if (!isValidObjectId(id) || !Array.isArray(data.items) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Invalid data:`, { id, data });
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.patch(`/factoryOrders/${id}/assign`, {
+      items: data.items,
+    });
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Response:`, response);
+    return response;
+  },
+  updateStatus: async (id: string, data: { status: 'pending' | 'in_production' | 'completed' | 'cancelled' }) => {
     if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.updateStatus - Invalid inventory order ID:`, id);
-      throw new Error(createErrorMessage('invalidInventoryOrderId', isRtl));
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid order ID:`, id);
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
-    if (!['pending', 'approved', 'rejected', 'completed'].includes(data.status)) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.updateStatus - Invalid status:`, data.status);
-      throw new Error(createErrorMessage('invalidStatus', isRtl));
+    if (!['pending', 'in_production', 'completed', 'cancelled'].includes(data.status)) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid status:`, data.status);
+      throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
     }
-    try {
-      const response = await api.patch(`/inventory/orders/${id}/status`, {
-        status: data.status,
-        notes: data.notes?.trim(),
-      });
-      console.log(`[${new Date().toISOString()}] inventoryOrdersAPI.updateStatus - Response:`, response);
-      return response.inventoryOrder;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.updateStatus - Error:`, error.message);
-      throw new Error(isRtl ? `فشل في تحديث حالة طلب المخزون: ${error.message}` : `Failed to update inventory order status: ${error.message}`);
-    }
+    const response = await api.patch(`/factoryOrders/${id}/status`, {
+      status: data.status,
+    });
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Response:`, response);
+    return response;
   },
-  approveOrder: async (id: string, data: { userId: string; approvedItems: { productId: string; quantity: number }[] }) => {
-    const isRtl = localStorage.getItem('language') === 'ar';
-    if (
-      !isValidObjectId(id) ||
-      !isValidObjectId(data.userId) ||
-      !Array.isArray(data.approvedItems) ||
-      data.approvedItems.length === 0 ||
-      data.approvedItems.some(item => !isValidObjectId(item.productId) || item.quantity < 1)
-    ) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.approveOrder - Invalid data:`, { id, data });
-      throw new Error(createErrorMessage('invalidItems', isRtl));
+  confirmProduction: async (id: string) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Invalid order ID:`, id);
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
-    try {
-      const response = await api.patch(`/inventory/orders/${id}/approve`, {
-        userId: data.userId,
-        approvedItems: data.approvedItems.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
-      });
-      console.log(`[${new Date().toISOString()}] inventoryOrdersAPI.approveOrder - Response:`, response);
-      return response.inventoryOrder;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.approveOrder - Error:`, error.message);
-      throw new Error(isRtl ? `فشل في الموافقة على طلب المخزون: ${error.message}` : `Failed to approve inventory order: ${error.message}`);
-    }
-  },
-  confirmTransfer: async (id: string, data: { userId: string }) => {
-    const isRtl = localStorage.getItem('language') === 'ar';
-    if (!isValidObjectId(id) || !isValidObjectId(data.userId)) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.confirmTransfer - Invalid inventory order ID or user ID:`, { id, userId: data.userId });
-      throw new Error(createErrorMessage('invalidInventoryOrderId', isRtl));
-    }
-    try {
-      const response = await api.patch(`/inventory/orders/${id}/confirm-transfer`, {
-        userId: data.userId,
-      });
-      console.log(`[${new Date().toISOString()}] inventoryOrdersAPI.confirmTransfer - Response:`, response);
-      return response.inventoryOrder;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] inventoryOrdersAPI.confirmTransfer - Error:`, error.message);
-      throw new Error(isRtl ? `فشل في تأكيد نقل المخزون: ${error.message}` : `Failed to confirm inventory transfer: ${error.message}`);
-    }
+    const response = await api.patch(`/factoryOrders/${id}/confirm-production`, {});
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Response:`, response);
+    return response;
   },
 };
 
