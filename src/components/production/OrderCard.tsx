@@ -1,13 +1,11 @@
-// OrderCard.tsx
 import React, { useMemo } from 'react';
 import { Card } from '../UI/Card';
 import { Button } from '../UI/Button';
-import { UserCheck, CheckCircle } from 'lucide-react';
+import { UserCheck, CheckCircle, Clock } from 'lucide-react';
 import { FactoryOrder } from '../../types/types';
 
 interface OrderCardProps {
   order: FactoryOrder;
-  calculateAdjustedTotal: (order: FactoryOrder) => string;
   calculateTotalQuantity: (order: FactoryOrder) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
   updateOrderStatus: (orderId: string, status: FactoryOrder['status']) => void;
@@ -76,7 +74,6 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 }) => {
   const t = translations[isRtl ? 'ar' : 'en'];
 
-  // تحسين الأداء باستخدام useMemo لحساب حالة الطلب
   const statusStyles = useMemo(
     () => ({
       pending: 'bg-yellow-100 text-yellow-800',
@@ -88,14 +85,29 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     []
   );
 
+  const priorityStyles = useMemo(
+    () => ({
+      low: 'bg-gray-100 text-gray-800',
+      medium: 'bg-blue-100 text-blue-800',
+      high: 'bg-orange-100 text-orange-800',
+      urgent: 'bg-red-100 text-red-800',
+    }),
+    []
+  );
+
   return (
-    <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200">
+    <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className={isRtl ? 'text-right' : 'text-left'}>
           <h3 className="text-sm font-semibold text-gray-800">{t.orderNumber}: {order.orderNumber}</h3>
           <p className="text-xs text-gray-600">{t.date}: {order.date}</p>
           <p className="text-xs text-gray-600">{t.createdBy}: {order.createdBy}</p>
-          <p className="text-xs text-gray-600">{t.priority}: {t[order.priority]}</p>
+          <p className="text-xs text-gray-600">
+            {t.priority}:{' '}
+            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${priorityStyles[order.priority]}`}>
+              {t[order.priority]}
+            </span>
+          </p>
         </div>
         <div className={isRtl ? 'text-right' : 'text-left'}>
           <p className="text-xs text-gray-600">
@@ -112,11 +124,19 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         <h4 className="text-sm font-medium text-gray-700">{t.items}</h4>
         <ul className="mt-2 space-y-1">
           {order.items.map((item) => (
-            <li key={item._id} className="text-xs text-gray-600">
-              {item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})
-              {item.assignedTo && (
-                <span className="ml-2 text-xs text-gray-500">
-                  ({isRtl ? 'معين إلى' : 'Assigned to'}: {item.assignedTo.displayName})
+            <li key={item._id} className="text-xs text-gray-600 flex items-center justify-between">
+              <span>
+                {item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})
+                {item.assignedTo && (
+                  <span className="ml-2 text-xs text-gray-500">
+                    ({isRtl ? 'معين إلى' : 'Assigned to'}: {item.assignedTo.displayName})
+                  </span>
+                )}
+              </span>
+              {item.progress > 0 && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {item.progress}%
                 </span>
               )}
             </li>
