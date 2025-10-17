@@ -11,7 +11,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
+export const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
 
 api.interceptors.request.use(
   (config) => {
