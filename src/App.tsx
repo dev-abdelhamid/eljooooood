@@ -91,8 +91,7 @@ function AppContent() {
                   <Route path="/orders/review" element={<Orders />} />
                   <Route path="/returns" element={<BranchReturns />} />
                   <Route path="/production-report" element={<ProductionReport />} />
-                  <Route path="/production" element={<ProductionInventory />} />
-                  <Route path="/production-inventory" element={<FactoryInventory />} />
+                  <Route path="/FactoryInventory" element={<FactoryInventory />} />
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
                   <Route path="/branch-inventory" element={<BranchInventory />} />
