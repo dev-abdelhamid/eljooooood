@@ -763,6 +763,7 @@ export const FactoryInventory: React.FC = () => {
         payload: { index, field: 'product', value: productId },
       });
     
+    },
     [t, productionForm.items]
   );
 
