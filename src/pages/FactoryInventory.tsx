@@ -299,7 +299,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
 };
 
 export const FactoryInventory: React.FC = () => {
-  const { t: languageT, language } = useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
@@ -387,12 +387,7 @@ export const FactoryInventory: React.FC = () => {
               : item.currentStock >= item.maxStockLevel
               ? InventoryStatus.FULL
               : InventoryStatus.NORMAL,
-          inProduction:
-            factoryOrdersData?.some(
-              (order) =>
-                (order.status === 'pending' || order.status === 'in_production') &&
-                order.items.some((i) => i.productId === item.product?._id)
-            ) || false,
+          inProduction: false, // Will be calculated later
         }));
     },
     onError: (err) => {
@@ -653,7 +648,7 @@ export const FactoryInventory: React.FC = () => {
       })),
     ],
     [availableProducts, t]
-);
+  );
 
   // Filtered and paginated inventory
   const filteredInventory = useMemo(
@@ -740,10 +735,7 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-    setProductionErrors((prev) => ({
-      ...prev,
-      [`item_${index}_${field}`]: undefined,
-    }));
+ 
   }, [t]);
 
   const handleProductChange = useCallback(
@@ -766,10 +758,7 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-      setProductionErrors((prev) => ({
-        ...prev,
-        [`item_${index}_product`]: undefined,
-      }));
+  
     },
     [t, productionForm.items]
   );
@@ -961,8 +950,8 @@ export const FactoryInventory: React.FC = () => {
       )}
 
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="w-full lg:w-1/2">
             <ProductSearchInput
               value={searchInput}
               onChange={handleSearchChange}
@@ -971,7 +960,7 @@ export const FactoryInventory: React.FC = () => {
               className="w-full"
             />
           </div>
-          <div>
+          <div className="w-full lg:w-1/2 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <ProductDropdown
               value={filterStatus}
               onChange={(value) => {
@@ -982,8 +971,6 @@ export const FactoryInventory: React.FC = () => {
               ariaLabel={t.filterByStatus}
               className="w-full"
             />
-          </div>
-          <div>
             <ProductDropdown
               value={filterDepartment}
               onChange={(value) => {
@@ -1187,11 +1174,6 @@ export const FactoryInventory: React.FC = () => {
             </button>
           </div>
           <div className="space-y-4">
-            {selectedItem?.product && (
-              <p className="text-sm text-gray-600">
-                {t.items}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-              </p>
-            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
               <textarea
@@ -1208,16 +1190,14 @@ export const FactoryInventory: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
               {productionForm.items.map((item, index) => (
                 <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  {!selectedItem && (
-                    <ProductDropdown
-                      value={item.product}
-                      onChange={(value) => handleProductChange(index, value)}
-                      options={productOptions}
-                      ariaLabel={`${t.items} ${index + 1}`}
-                      placeholder={t.selectProduct}
-                      className="w-full"
-                    />
-                  )}
+                  <ProductDropdown
+                    value={item.product}
+                    onChange={(value) => handleProductChange(index, value)}
+                    options={productOptions}
+                    ariaLabel={`${t.items} ${index + 1}`}
+                    placeholder={t.selectProduct}
+                    className="w-full"
+                  />
                   {productionErrors[`item_${index}_product`] && (
                     <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
                   )}
@@ -1234,7 +1214,7 @@ export const FactoryInventory: React.FC = () => {
                         <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
                       )}
                     </div>
-                    {!selectedItem && productionForm.items.length > 1 && (
+                    {productionForm.items.length > 1 && (
                       <button
                         onClick={() => removeItemFromForm(index)}
                         className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
@@ -1246,16 +1226,14 @@ export const FactoryInventory: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {!selectedItem && (
-                <button
-                  onClick={addItemToForm}
-                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                  aria-label={t.addItem}
-                >
-                  <Plus className="w-4 h-4" />
-                  {t.addItem}
-                </button>
-              )}
+              <button
+                onClick={addItemToForm}
+                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                aria-label={t.addItem}
+              >
+                <Plus className="w-4 h-4" />
+                {t.addItem}
+              </button>
               {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
             </div>
             <div className="flex justify-end gap-3">
@@ -1460,4 +1438,3 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
-
