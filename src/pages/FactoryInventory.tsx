@@ -9,6 +9,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
+import { isValidObjectId } from '../services/api';
 
 // Enums for type safety
 enum InventoryStatus {
