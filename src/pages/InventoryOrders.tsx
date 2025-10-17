@@ -10,7 +10,7 @@ import { Input } from '../components/UI/Input';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI , ordersAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, OrderStatus } from '../types/types';
@@ -18,6 +18,9 @@ import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/Shared/AssignChefsModal';
 import OrderTable from '../components/Shared/OrderTable';
 import OrderCard from '../components/Shared/OrderCard';
+import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
+import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
+
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 
 const normalizeText = (text: string) => {
