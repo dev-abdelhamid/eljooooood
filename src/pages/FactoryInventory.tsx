@@ -1438,3 +1438,4 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
+
