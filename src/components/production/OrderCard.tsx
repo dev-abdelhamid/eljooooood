@@ -1,5 +1,5 @@
-// components/Shared/OrderCard.tsx
-import React from 'react';
+// OrderCard.tsx
+import React, { useMemo } from 'react';
 import { Card } from '../UI/Card';
 import { Button } from '../UI/Button';
 import { UserCheck, CheckCircle } from 'lucide-react';
@@ -76,6 +76,18 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 }) => {
   const t = translations[isRtl ? 'ar' : 'en'];
 
+  // تحسين الأداء باستخدام useMemo لحساب حالة الطلب
+  const statusStyles = useMemo(
+    () => ({
+      pending: 'bg-yellow-100 text-yellow-800',
+      approved: 'bg-blue-100 text-blue-800',
+      in_production: 'bg-purple-100 text-purple-800',
+      completed: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800',
+    }),
+    []
+  );
+
   return (
     <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -88,19 +100,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         <div className={isRtl ? 'text-right' : 'text-left'}>
           <p className="text-xs text-gray-600">
             {t.status}:{' '}
-            <span
-              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                order.status === 'pending'
-                  ? 'bg-yellow-100 text-yellow-800'
-                  : order.status === 'approved'
-                  ? 'bg-blue-100 text-blue-800'
-                  : order.status === 'in_production'
-                  ? 'bg-purple-100 text-purple-800'
-                  : order.status === 'completed'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-red-100 text-red-800'
-              }`}
-            >
+            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusStyles[order.status]}`}>
               {t[order.status]}
             </span>
           </p>
@@ -111,7 +111,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
       <div className="mt-3">
         <h4 className="text-sm font-medium text-gray-700">{t.items}</h4>
         <ul className="mt-2 space-y-1">
-          {order.items.map(item => (
+          {order.items.map((item) => (
             <li key={item._id} className="text-xs text-gray-600">
               {item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})
               {item.assignedTo && (

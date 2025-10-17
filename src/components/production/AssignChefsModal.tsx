@@ -1,10 +1,9 @@
-// components/Shared/AssignChefsModal.tsx
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Modal } from '../UI/Modal';
 import { Select } from '../UI/Select';
 import { Button } from '../UI/Button';
 import { AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
 
 interface AssignChefsModalProps {
@@ -63,10 +62,24 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const t = translations[isRtl ? 'ar' : 'en'];
 
+  // تحسين الأداء باستخدام useMemo لتجنب إعادة إنشاء الخيارات في كل عرض
+  const chefOptions = useMemo(
+    () => [
+      { value: '', label: t.selectChef },
+      ...chefs
+        .filter((chef) => chef.status === 'active')
+        .map((chef) => ({
+          value: chef.userId,
+          label: chef.displayName,
+        })),
+    ],
+    [chefs, t.selectChef]
+  );
+
   const handleChefChange = useCallback(
     (itemId: string, value: string) => {
       setAssignForm({
-        items: assignFormData.items.map(item =>
+        items: assignFormData.items.map((item) =>
           item.itemId === itemId ? { ...item, assignedTo: value } : item
         ),
       });
@@ -97,7 +110,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           <p className="text-gray-600 text-sm text-center">{t.noItems}</p>
         ) : (
           <div className="space-y-4 max-h-96 overflow-y-auto">
-            {assignFormData.items.map(item => (
+            {assignFormData.items.map((item) => (
               <div key={item.itemId} className={`flex flex-col gap-2 ${isRtl ? 'text-right' : 'text-left'}`}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
@@ -111,15 +124,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">{t.chef}</label>
                     <Select
-                      options={[
-                        { value: '', label: t.selectChef },
-                        ...chefs
-                          .filter(chef => chef.status === 'active')
-                          .map(chef => ({
-                            value: chef.userId,
-                            label: chef.displayName,
-                          }))
-                      ]}
+                      options={chefOptions}
                       value={item.assignedTo}
                       onChange={(value) => handleChefChange(item.itemId, value)}
                       className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
@@ -144,7 +149,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             <Button
               variant="primary"
               onClick={() => selectedOrder && assignChefs(selectedOrder.id)}
-              disabled={submitting !== null || assignFormData.items.every(item => !item.assignedTo)}
+              disabled={submitting !== null || assignFormData.items.every((item) => !item.assignedTo)}
               className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm disabled:opacity-50"
               aria-label={t.assign}
             >
