@@ -1,3 +1,4 @@
+// pages/InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,7 +11,7 @@ import { Input } from '../components/UI/Input';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, CheckCircle, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, factoryInventoryAPI, chefsAPI, productsAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, OrderStatus } from '../types/types';
@@ -22,7 +23,7 @@ import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 
-const normalizeText = (text: string = '') => {
+const normalizeText = (text: string) => {
   return text
     .normalize('NFD')
     .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '')
@@ -42,19 +43,8 @@ interface Product {
   department: { _id: string; name: string; nameEn?: string };
 }
 
-interface InventoryItem {
-  _id: string;
-  productId: string;
-  productName: string;
-  currentStock: number;
-  minStockLevel: number;
-  maxStockLevel: number;
-  unit: string;
-}
-
 interface State {
   orders: FactoryOrder[];
-  inventory: InventoryItem[];
   selectedOrder: FactoryOrder | null;
   chefs: Chef[];
   products: Product[];
@@ -88,7 +78,6 @@ interface Action {
 
 const initialState: State = {
   orders: [],
-  inventory: [],
   selectedOrder: null,
   chefs: [],
   products: [],
@@ -111,22 +100,21 @@ const initialState: State = {
 
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case 'SET_ORDERS': return { ...state, orders: action.payload || [], error: '', currentPage: 1 };
-    case 'SET_INVENTORY': return { ...state, inventory: action.payload || [] };
+    case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
     case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
-    case 'SET_CHEFS': return { ...state, chefs: action.payload || [] };
-    case 'SET_PRODUCTS': return { ...state, products: action.payload || [] };
+    case 'SET_CHEFS': return { ...state, chefs: action.payload };
+    case 'SET_PRODUCTS': return { ...state, products: action.payload };
     case 'SET_ASSIGN_MODAL': return { ...state, isAssignModalOpen: action.isOpen ?? false };
     case 'SET_CREATE_MODAL': return { ...state, isCreateModalOpen: action.isOpen ?? false };
-    case 'SET_ASSIGN_FORM': return { ...state, assignFormData: action.payload || { items: [] } };
-    case 'SET_CREATE_FORM': return { ...state, createFormData: action.payload || { productId: '', quantity: '', notes: '' } };
-    case 'SET_FILTER_STATUS': return { ...state, filterStatus: action.payload || '', currentPage: 1 };
-    case 'SET_SEARCH_QUERY': return { ...state, searchQuery: action.payload || '', currentPage: 1 };
+    case 'SET_ASSIGN_FORM': return { ...state, assignFormData: action.payload };
+    case 'SET_CREATE_FORM': return { ...state, createFormData: action.payload };
+    case 'SET_FILTER_STATUS': return { ...state, filterStatus: action.payload, currentPage: 1 };
+    case 'SET_SEARCH_QUERY': return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_SORT': return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
-    case 'SET_PAGE': return { ...state, currentPage: action.payload || 1 };
+    case 'SET_PAGE': return { ...state, currentPage: action.payload };
     case 'SET_LOADING': return { ...state, loading: action.payload };
-    case 'SET_ERROR': return { ...state, error: action.payload || '' };
+    case 'SET_ERROR': return { ...state, error: action.payload };
     case 'SET_SUBMITTING': return { ...state, submitting: action.payload };
     case 'SET_SOCKET_CONNECTED': return { ...state, socketConnected: action.payload };
     case 'SET_SOCKET_ERROR': return { ...state, socketError: action.payload };
@@ -208,7 +196,7 @@ const reducer = (state: State, action: Action): State => {
           }
         : state.selectedOrder,
     };
-    case 'SET_VIEW_MODE': return { ...state, viewMode: action.payload || 'card', currentPage: 1 };
+    case 'SET_VIEW_MODE': return { ...state, viewMode: action.payload, currentPage: 1 };
     default: return state;
   }
 };
@@ -219,6 +207,8 @@ const validTransitions: Record<OrderStatus, OrderStatus[]> = {
   approved: ['in_production', 'cancelled'],
   in_production: ['completed', 'cancelled'],
   completed: [],
+  in_transit: [],
+  delivered: [],
   cancelled: [],
 };
 const statusOptions = [
@@ -234,7 +224,7 @@ const sortOptions = [
   { value: 'totalQuantity', label: 'sort_total_quantity' },
 ];
 
-const translateUnit = (unit: string = 'unit', isRtl: boolean) => {
+const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
     'قطعة': { ar: 'قطعة', en: 'piece' },
@@ -305,7 +295,7 @@ export const InventoryOrders: React.FC = () => {
               productId: item.product?._id || 'unknown',
               productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
               productNameEn: item.product?.nameEn,
-              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name || 'Unknown',
+              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
               quantity: Number(item.quantity) || 1,
               unit: item.product?.unit || 'unit',
               unitEn: item.product?.unitEn,
@@ -314,7 +304,7 @@ export const InventoryOrders: React.FC = () => {
                 _id: item.product?.department?._id || 'unknown',
                 name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                 nameEn: item.product?.department?.nameEn,
-                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name || 'Unknown',
+                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
               },
               assignedTo: item.assignedTo
                 ? {
@@ -322,7 +312,7 @@ export const InventoryOrders: React.FC = () => {
                     username: item.assignedTo.username,
                     name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: item.assignedTo.nameEn,
-                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name || 'Unknown',
+                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
                     department: item.assignedTo.department,
                   }
                 : undefined,
@@ -398,13 +388,12 @@ export const InventoryOrders: React.FC = () => {
           sortOrder: state.sortOrder,
         };
         if (user.role === 'production' && user.department) query.department = user.department._id;
-        const [ordersResponse, inventoryResponse, chefsResponse, productsResponse] = await Promise.all([
+        const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
-          factoryInventoryAPI.getAll({ lang: language }),
           chefsAPI.getAll(),
           productsAPI.getAll(),
         ]);
-        const mappedOrders: FactoryOrder[] = (ordersResponse || [])
+        const mappedOrders: FactoryOrder[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
             id: order._id,
@@ -415,7 +404,7 @@ export const InventoryOrders: React.FC = () => {
                   productId: item.product?._id || 'unknown',
                   productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   productNameEn: item.product?.nameEn,
-                  displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name || 'Unknown',
+                  displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
                   quantity: Number(item.quantity) || 1,
                   unit: item.product?.unit || 'unit',
                   unitEn: item.product?.unitEn,
@@ -424,7 +413,7 @@ export const InventoryOrders: React.FC = () => {
                     _id: item.product?.department?._id || 'unknown',
                     name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: item.product?.department?.nameEn,
-                    displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name || 'Unknown',
+                    displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
                   },
                   assignedTo: item.assignedTo
                     ? {
@@ -432,7 +421,7 @@ export const InventoryOrders: React.FC = () => {
                         username: item.assignedTo.username,
                         name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                         nameEn: item.assignedTo.nameEn,
-                        displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name || 'Unknown',
+                        displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
                         department: item.assignedTo.department,
                       }
                     : undefined,
@@ -445,35 +434,23 @@ export const InventoryOrders: React.FC = () => {
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
           }));
-        const mappedInventory: InventoryItem[] = (inventoryResponse || [])
-          .filter((item: any) => item && item._id && item.productId)
-          .map((item: any) => ({
-            _id: item._id,
-            productId: item.productId,
-            productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            currentStock: Number(item.currentStock) || 0,
-            minStockLevel: Number(item.minStockLevel) || 0,
-            maxStockLevel: Number(item.maxStockLevel) || 1000,
-            unit: item.product?.unit || 'unit',
-          }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
-        dispatch({ type: 'SET_INVENTORY', payload: mappedInventory });
         dispatch({
           type: 'SET_CHEFS',
-          payload: (chefsResponse || [])
+          payload: chefsResponse
             .filter((chef: any) => chef && chef.user?._id)
             .map((chef: any) => ({
               _id: chef._id,
               userId: chef.user._id,
               name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
               nameEn: chef.user?.nameEn || chef.nameEn,
-              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name || 'Unknown'),
+              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
               department: chef.department
                 ? {
                     _id: chef.department._id,
                     name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: chef.department.nameEn,
-                    displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name || 'Unknown'),
+                    displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name),
                   }
                 : null,
               status: chef.status || 'active',
@@ -481,7 +458,7 @@ export const InventoryOrders: React.FC = () => {
         });
         dispatch({
           type: 'SET_PRODUCTS',
-          payload: (productsResponse.data || [])
+          payload: productsResponse
             .filter((product: any) => product && product._id)
             .map((product: any) => ({
               _id: product._id,
@@ -493,7 +470,7 @@ export const InventoryOrders: React.FC = () => {
                 _id: product.department?._id || 'unknown',
                 name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                 nameEn: product.department?.nameEn,
-                displayName: isRtl ? product.department?.name : product.department?.nameEn || product.department?.name || 'Unknown',
+                displayName: isRtl ? product.department?.name : product.department?.nameEn || product.department?.name,
               },
             }))
             .sort((a: Product, b: Product) => {
@@ -528,14 +505,16 @@ export const InventoryOrders: React.FC = () => {
   const filteredOrders = useMemo(
     () => {
       const normalizedQuery = normalizeText(state.searchQuery);
-      return (state.orders || [])
-        .filter(order => order && order.orderNumber)
+      return state.orders
+        .filter(order => order)
         .filter(
           order =>
-            normalizeText(order.orderNumber).includes(normalizedQuery) ||
-            normalizeText(order.notes).includes(normalizedQuery) ||
-            normalizeText(order.createdBy).includes(normalizedQuery) ||
-            order.items.some(item => normalizeText(item.displayProductName).includes(normalizedQuery))
+            normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
+            normalizeText(order.notes || '').includes(normalizedQuery) ||
+            normalizeText(order.createdBy || '').includes(normalizedQuery) ||
+            order.items.some(item =>
+              normalizeText(item.displayProductName || '').includes(normalizedQuery)
+            )
         )
         .filter(
           order =>
@@ -680,7 +659,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
       try {
-        const orderNumber = `ORD-${Date.now()}`;
+        const orderNumber = `ORD-${Date.now()}`; // Generate a unique order number
         const response = await factoryOrdersAPI.create({
           orderNumber,
           items: [
