@@ -1,0 +1,1046 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { chefsAPI, departmentAPI } from '../services/api';
+import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft, Eye, EyeOff, TrendingUp, Box, Calendar } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
+import { Bar, Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
+
+ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+
+interface ProductionItem {
+  id: string;
+  name: string;
+  date: string;
+  quantity: number;
+  departmentId?: string;
+}
+
+interface Department {
+  id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  description?: string;
+  displayName: string;
+}
+
+interface Chef {
+  id: string;
+  user: {
+    id: string;
+    name: string;
+    nameEn?: string;
+    username: string;
+    email?: string;
+    phone?: string;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  department: Department | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const translations = {
+  ar: {
+    chefDetails: 'تفاصيل الشيف',
+    infoTab: 'معلومات الشيف',
+    productionTab: 'إنتاج الشيف',
+    statsTab: 'إحصائيات الشيف',
+    back: 'رجوع',
+    name: 'اسم الشيف',
+    username: 'اسم المستخدم',
+    email: 'الإيميل',
+    phone: 'الهاتف',
+    department: 'القسم',
+    createdAt: 'تاريخ الإنشاء',
+    updatedAt: 'تاريخ التحديث',
+    edit: 'تعديل',
+    resetPassword: 'تغيير كلمة المرور',
+    delete: 'حذف',
+    nameRequired: 'اسم الشيف مطلوب',
+    nameEnRequired: 'اسم الشيف بالإنجليزية مطلوب',
+    usernameRequired: 'اسم المستخدم مطلوب',
+    departmentRequired: 'القسم مطلوب',
+    namePlaceholder: 'أدخل اسم الشيف',
+    nameEnPlaceholder: 'أدخل اسم الشيف بالإنجليزية',
+    usernamePlaceholder: 'أدخل اسم المستخدم',
+    emailPlaceholder: 'أدخل الإيميل',
+    phonePlaceholder: 'أدخل رقم الهاتف',
+    departmentPlaceholder: 'اختر القسم',
+    update: 'تحديث الشيف',
+    requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
+    usernameExists: 'اسم المستخدم مستخدم بالفعل',
+    emailExists: 'الإيميل مستخدم بالفعل',
+    unauthorized: 'غير مصرح لك',
+    fetchError: 'خطأ في جلب البيانات',
+    updateError: 'خطأ في تحديث الشيف',
+    updated: 'تم تحديث الشيف بنجاح',
+    passwordResetSuccess: 'تم تغيير كلمة المرور بنجاح',
+    passwordResetError: 'خطأ في تغيير كلمة المرور',
+    newPassword: 'كلمة المرور الجديدة',
+    confirmPassword: 'تأكيد كلمة المرور',
+    newPasswordPlaceholder: 'أدخل كلمة المرور الجديدة',
+    confirmPasswordPlaceholder: 'أدخل تأكيد كلمة المرور',
+    passwordMismatch: 'كلمات المرور غير متطابقة',
+    passwordTooShort: 'كلمة المرور قصيرة جدًا (6 أحرف على الأقل)',
+    reset: 'إعادة تعيين',
+    cancel: 'إلغاء',
+    confirmDelete: 'تأكيد الحذف',
+    deleteWarning: 'هل أنت متأكد من حذف هذا الشيف؟',
+    deleteError: 'خطأ في الحذف',
+    deleted: 'تم الحذف بنجاح',
+    noDepartments: 'لا توجد أقسام متاحة',
+    notFound: 'الشيف غير موجود',
+    noProduction: 'لا يوجد إنتاج متاح',
+    productionName: 'اسم المنتج',
+    productionDate: 'تاريخ الإنتاج',
+    productionQuantity: 'الكمية',
+    totalProducts: 'إجمالي المنتجات',
+    totalQuantity: 'إجمالي الكمية',
+    avgDailyProduction: 'متوسط الإنتاج اليومي',
+    productionByDepartment: 'الإنتاج حسب القسم',
+    productionOverTime: 'الإنتاج عبر الزمن',
+  },
+  en: {
+    chefDetails: 'Chef Details',
+    infoTab: 'Chef Information',
+    productionTab: 'Chef Production',
+    statsTab: 'Chef Statistics',
+    back: 'Back',
+    name: 'Chef Name',
+    username: 'Username',
+    email: 'Email',
+    phone: 'Phone',
+    department: 'Department',
+    createdAt: 'Created At',
+    updatedAt: 'Updated At',
+    edit: 'Edit',
+    resetPassword: 'Change Password',
+    delete: 'Delete',
+    nameRequired: 'Chef name is required',
+    nameEnRequired: 'Chef name in English is required',
+    usernameRequired: 'Username is required',
+    departmentRequired: 'Department is required',
+    namePlaceholder: 'Enter chef name',
+    nameEnPlaceholder: 'Enter chef name in English',
+    usernamePlaceholder: 'Enter username',
+    emailPlaceholder: 'Enter email',
+    phonePlaceholder: 'Enter phone number',
+    departmentPlaceholder: 'Select department',
+    update: 'Update Chef',
+    requiredFields: 'Please fill all required fields',
+    usernameExists: 'Username already in use',
+    emailExists: 'Email already in use',
+    unauthorized: 'Unauthorized access',
+    fetchError: 'Error fetching data',
+    updateError: 'Error updating chef',
+    updated: 'Chef updated successfully',
+    passwordResetSuccess: 'Password changed successfully',
+    passwordResetError: 'Error changing password',
+    newPassword: 'New Password',
+    confirmPassword: 'Confirm Password',
+    newPasswordPlaceholder: 'Enter new password',
+    confirmPasswordPlaceholder: 'Enter confirm password',
+    passwordMismatch: 'Passwords do not match',
+    passwordTooShort: 'Password too short (at least 6 characters)',
+    reset: 'Reset',
+    cancel: 'Cancel',
+    confirmDelete: 'Confirm Deletion',
+    deleteWarning: 'Are you sure you want to delete this chef?',
+    deleteError: 'Error deleting',
+    deleted: 'Deleted successfully',
+    noDepartments: 'No departments available',
+    notFound: 'Chef not found',
+    noProduction: 'No production available',
+    productionName: 'Product Name',
+    productionDate: 'Production Date',
+    productionQuantity: 'Quantity',
+    totalProducts: 'Total Products',
+    totalQuantity: 'Total Quantity',
+    avgDailyProduction: 'Average Daily Production',
+    productionByDepartment: 'Production by Department',
+    productionOverTime: 'Production Over Time',
+  },
+};
+
+export const FormInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  type = 'text',
+  showPasswordToggle = false,
+  showPassword = false,
+  togglePasswordVisibility,
+  error,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  type?: string;
+  showPasswordToggle?: boolean;
+  showPassword?: boolean;
+  togglePasswordVisibility?: () => void;
+  error?: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative">
+      <input
+        type={showPassword ? 'text' : type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full px-3 py-2.5 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      {showPasswordToggle && (
+        <button
+          type="button"
+          onClick={togglePasswordVisibility}
+          className={`absolute top-1/2 transform -translate-y-1/2 ${isRtl ? 'left-3' : 'right-3'} text-gray-400 hover:text-amber-500 transition-colors`}
+          aria-label={showPassword ? (isRtl ? 'إخفاء كلمة المرور' : 'Hide password') : (isRtl ? 'إظهار كلمة المرور' : 'Show password')}
+        >
+          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      )}
+    </div>
+  );
+};
+
+export function ChefDetails() {
+  const { id } = useParams<{ id: string }>();
+  const { language } = useLanguage();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const [chef, setChef] = useState<Chef | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [production, setProduction] = useState<ProductionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [productionLoading, setProductionLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('info');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    nameEn: '',
+    username: '',
+    email: '',
+    phone: '',
+    department: '',
+  });
+  const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const fetchChefData = useCallback(async () => {
+    if (!id) {
+      setError(t.notFound);
+      setLoading(false);
+      toast.error(t.notFound, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (!user || user.role !== 'admin') {
+      setError(t.unauthorized);
+      setLoading(false);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    setLoading(true);
+    try {
+      const [chefResponse, departmentsResponse] = await Promise.all([
+        chefsAPI.getById(id),
+        departmentAPI.getAll({ isRtl }),
+      ]);
+      const chefData = chefResponse;
+      if (!chefData || !chefData.user || !chefData.department) {
+        setError(t.notFound);
+        toast.error(t.notFound, { position: isRtl ? 'top-right' : 'top-left' });
+        setLoading(false);
+        return;
+      }
+      setChef({
+        id: chefData._id,
+        user: {
+          id: chefData.user._id,
+          name: chefData.user.name,
+          nameEn: chefData.user.nameEn,
+          username: chefData.user.username,
+          email: chefData.user.email,
+          phone: chefData.user.phone,
+          createdAt: chefData.user.createdAt,
+          updatedAt: chefData.user.updatedAt,
+        },
+        department: {
+          id: chefData.department._id,
+          name: chefData.department.name,
+          nameEn: chefData.department.nameEn,
+          code: chefData.department.code,
+          description: chefData.department.description,
+          displayName: isRtl ? chefData.department.name : (chefData.department.nameEn || chefData.department.name),
+        },
+        createdAt: chefData.createdAt,
+        updatedAt: chefData.updatedAt,
+      });
+      setDepartments(
+        Array.isArray(departmentsResponse.data) ? departmentsResponse.data.map((dept: any) => ({
+          id: dept._id,
+          name: dept.name,
+          nameEn: dept.nameEn,
+          code: dept.code,
+          description: dept.description,
+          displayName: isRtl ? dept.name : (dept.nameEn || dept.name),
+        })) : []
+      );
+      setError('');
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
+      setError(err.message || t.fetchError);
+      toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setLoading(false);
+    }
+  }, [id, user, t, isRtl]);
+
+  const fetchProduction = useCallback(async () => {
+    if (!id) return;
+    setProductionLoading(true);
+    try {
+      // بيانات وهمية للإنتاج (استبدلها بالـ API الحقيقي)
+      setProduction([
+        { id: '1', name: 'منتج 1', date: '2025-01-01', quantity: 100, departmentId: 'dept1' },
+        { id: '2', name: 'منتج 2', date: '2025-02-01', quantity: 150, departmentId: 'dept1' },
+        { id: '3', name: 'منتج 3', date: '2025-03-01', quantity: 200, departmentId: 'dept2' },
+        { id: '4', name: 'منتج 4', date: '2025-04-01', quantity: 80, departmentId: 'dept2' },
+      ]);
+    } catch (err: any) {
+      toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setProductionLoading(false);
+    }
+  }, [id, t, isRtl]);
+
+  useEffect(() => {
+    fetchChefData();
+    fetchProduction();
+  }, [fetchChefData, fetchProduction]);
+
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    if (!formData.name) errors.name = t.nameRequired;
+    if (!formData.nameEn) errors.nameEn = t.nameEnRequired;
+    if (!formData.username) errors.username = t.usernameRequired;
+    if (!formData.department) errors.department = t.departmentRequired;
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const openEditModal = () => {
+    if (departments.length === 0) {
+      setError(t.noDepartments);
+      toast.error(t.noDepartments, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    setFormData({
+      name: chef?.user?.name || '',
+      nameEn: chef?.user?.nameEn || '',
+      username: chef?.user?.username || '',
+      email: chef?.user?.email || '',
+      phone: chef?.user?.phone || '',
+      department: chef?.department?.id || departments[0].id,
+    });
+    setIsEditModalOpen(true);
+    setFormErrors({});
+    setError('');
+  };
+
+  const openResetPasswordModal = () => {
+    setResetPasswordData({ password: '', confirmPassword: '' });
+    setIsResetPasswordModalOpen(true);
+    setError('');
+  };
+
+  const openDeleteModal = () => {
+    setIsDeleteModalOpen(true);
+    setError('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) {
+      toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    try {
+      const chefData = {
+        user: {
+          name: formData.name.trim(),
+          nameEn: formData.nameEn.trim(),
+          username: formData.username.trim(),
+          email: formData.email.trim() || undefined,
+          phone: formData.phone.trim() || undefined,
+          role: 'chef',
+        },
+        department: formData.department,
+      };
+      const response = await chefsAPI.update(chef!.id, chefData);
+      const updatedChef = response;
+      setChef({
+        ...chef!,
+        user: {
+          ...chef!.user!,
+          name: updatedChef.user.name,
+          nameEn: updatedChef.user.nameEn,
+          username: updatedChef.user.username,
+          email: updatedChef.user.email,
+          phone: updatedChef.user.phone,
+          updatedAt: updatedChef.user.updatedAt,
+        },
+        department: {
+          id: updatedChef.department._id,
+          name: updatedChef.department.name,
+          nameEn: updatedChef.department.nameEn,
+          code: updatedChef.department.code,
+          description: updatedChef.department.description,
+          displayName: isRtl ? updatedChef.department.name : (updatedChef.department.nameEn || updatedChef.department.name),
+        },
+        updatedAt: updatedChef.updatedAt,
+      });
+      toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
+      setIsEditModalOpen(false);
+    } catch (err: any) {
+      const errorMessage = err.message.includes('Username') ? t.usernameExists : err.message.includes('email') ? t.emailExists : t.updateError;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordData.password || !resetPasswordData.confirmPassword) {
+      setError(t.passwordRequired);
+      toast.error(t.passwordRequired, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
+      setError(t.passwordMismatch);
+      toast.error(t.passwordMismatch, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (resetPasswordData.password.length < 6) {
+      setError(t.passwordTooShort);
+      toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    try {
+      await chefsAPI.resetPassword(chef!.id, resetPasswordData.password);
+      setIsResetPasswordModalOpen(false);
+      setResetPasswordData({ password: '', confirmPassword: '' });
+      toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
+    } catch (err: any) {
+      const errorMessage = err.message || t.passwordResetError;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await chefsAPI.delete(chef!.id);
+      toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
+      setIsDeleteModalOpen(false);
+      navigate('/chefs');
+    } catch (err: any) {
+      const errorMessage = err.message || t.deleteError;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
+
+  const statsData = useMemo(() => {
+    const totalProducts = production.length;
+    const totalQuantity = production.reduce((sum, item) => sum + item.quantity, 0);
+    const days = [...new Set(production.map(item => item.date))].length;
+    const avgDailyProduction = days > 0 ? (totalQuantity / days).toFixed(2) : '0';
+
+    const departmentCounts = production.reduce((acc, item) => {
+      const deptId = item.departmentId || 'unknown';
+      acc[deptId] = (acc[deptId] || 0) + item.quantity;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const barData = {
+      labels: production.map(item => item.name),
+      datasets: [{
+        label: t.productionQuantity,
+        data: production.map(item => item.quantity),
+        backgroundColor: 'rgba(245, 158, 11, 0.6)',
+        borderColor: 'rgba(245, 158, 11, 1)',
+        borderWidth: 1,
+      }],
+    };
+
+    const pieData = {
+      labels: Object.keys(departmentCounts).map(deptId => {
+        const dept = departments.find(d => d.id === deptId);
+        return dept ? dept.displayName : t.noDepartments;
+      }),
+      datasets: [{
+        data: Object.values(departmentCounts),
+        backgroundColor: ['rgba(245, 158, 11, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(239, 68, 68, 0.6)', 'rgba(34, 197, 94, 0.6)'],
+        borderColor: ['rgba(245, 158, 11, 1)', 'rgba(59, 130, 246, 1)', 'rgba(239, 68, 68, 1)', 'rgba(34, 197, 94, 1)'],
+        borderWidth: 1,
+      }],
+    };
+
+    return { totalProducts, totalQuantity, avgDailyProduction, barData, pieData };
+  }, [production, departments, t]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-5 bg-white rounded-xl shadow-sm max-w-md w-full">
+          <div className="space-y-3 animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!chef) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-5 bg-white rounded-xl shadow-sm max-w-md w-full text-center">
+          <AlertCircle className="w-10 h-10 text-red-600 mx-auto mb-3" />
+          <p className="text-gray-600 text-sm">{t.notFound}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="flex items-center justify-between mb-4 shadow-sm bg-white p-4 rounded-xl"
+      >
+        <div className="flex items-center gap-2">
+          <ChefHat className="w-6 h-6 text-amber-600" />
+          <h1 className="text-xl font-bold text-gray-900">{t.chefDetails}</h1>
+        </div>
+        <button
+          onClick={() => navigate('/chefs')}
+          className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+          aria-label={t.back}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          {t.back}
+        </button>
+      </motion.div>
+
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+            className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
+          >
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-red-600 text-xs">{error}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-xl shadow-sm p-5"
+      >
+        <div className="flex border-b border-gray-200 mb-4">
+          <button
+            onClick={() => setActiveTab('info')}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.infoTab}
+          >
+            {t.infoTab}
+          </button>
+          <button
+            onClick={() => setActiveTab('production')}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'production' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.productionTab}
+          >
+            {t.productionTab}
+          </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'stats' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.statsTab}
+          >
+            {t.statsTab}
+          </button>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {activeTab === 'info' ? (
+            <motion.div
+              key="info"
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-3"
+            >
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {isRtl ? chef.user?.name : (chef.user?.nameEn || chef.user?.name)}
+                </h2>
+                <ChefHat className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.name}</span>
+                  <span className="text-xs text-gray-600">{isRtl ? chef.user?.name : (chef.user?.nameEn || chef.user?.name) || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.username}</span>
+                  <span className="text-xs text-gray-600">{chef.user?.username || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.email}</span>
+                  <span className="text-xs text-gray-600">{chef.user?.email || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.phone}</span>
+                  <span className="text-xs text-gray-600">{chef.user?.phone || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.department}</span>
+                  <span className="text-xs text-gray-600">{chef.department?.displayName || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.createdAt}</span>
+                  <span className="text-xs text-gray-600">{new Date(chef.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.updatedAt}</span>
+                  <span className="text-xs text-xs text-gray-600">{new Date(chef.updatedAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
+                </div>
+              </div>
+            </motion.div>
+          ) : activeTab === 'production' ? (
+            <motion.div
+              key="production"
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-3"
+            >
+              <h2 className="text-lg font-semibold text-gray-900">{t.productionTab}</h2>
+              {productionLoading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : production.length === 0 ? (
+                <div className="text-center text-xs text-gray-600">{t.noProduction}</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionName}</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionDate}</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionQuantity}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {production.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{item.name}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(item.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{item.quantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="stats"
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-4"
+            >
+              <h2 className="text-lg font-semibold text-gray-900">{t.statsTab}</h2>
+              {productionLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                      <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : production.length === 0 ? (
+                <div className="text-center text-xs text-gray-600">{t.noProduction}</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <Box className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.totalProducts}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.totalProducts}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.totalQuantity}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.totalQuantity}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.avgDailyProduction}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.avgDailyProduction}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">{t.productionOverTime}</h3>
+                      <div className="h-64">
+                        <Bar
+                          data={statsData.barData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } },
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">{t.productionByDepartment}</h3>
+                      <div className="h-64">
+                        <Pie
+                          data={statsData.pieData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { position: 'bottom' } },
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {user?.role === 'admin' && (
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              onClick={openEditModal}
+              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.edit}
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+              {t.edit}
+            </button>
+            <button
+              onClick={openResetPasswordModal}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.resetPassword}
+            >
+              <Key className="w-3.5 h-3.5" />
+              {t.resetPassword}
+            </button>
+            <button
+              onClick={openDeleteModal}
+              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.delete}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t.delete}
+            </button>
+          </div>
+        )}
+      </motion.div>
+
+      <AnimatePresence>
+        {isEditModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsEditModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.edit}</h3>
+              <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
+                    <FormInput
+                      value={formData.name}
+                      onChange={(value) => setFormData({ ...formData, name: value })}
+                      placeholder={t.namePlaceholder}
+                      ariaLabel={t.name}
+                      error={formErrors.name}
+                    />
+                    {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
+                    <FormInput
+                      value={formData.nameEn}
+                      onChange={(value) => setFormData({ ...formData, nameEn: value })}
+                      placeholder={t.nameEnPlaceholder}
+                      ariaLabel={t.nameEn}
+                      error={formErrors.nameEn}
+                    />
+                    {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
+                    <FormInput
+                      value={formData.username}
+                      onChange={(value) => setFormData({ ...formData, username: value })}
+                      placeholder={t.usernamePlaceholder}
+                      ariaLabel={t.username}
+                      error={formErrors.username}
+                    />
+                    {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
+                    <FormInput
+                      value={formData.email}
+                      onChange={(value) => setFormData({ ...formData, email: value })}
+                      placeholder={t.emailPlaceholder}
+                      ariaLabel={t.email}
+                      type="email"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
+                    <FormInput
+                      value={formData.phone}
+                      onChange={(value) => setFormData({ ...formData, phone: value })}
+                      placeholder={t.phonePlaceholder}
+                      ariaLabel={t.phone}
+                      type="tel"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">{t.department}</label>
+                    <CustomDropdown
+                      value={formData.department}
+                      onChange={(value) => setFormData({ ...formData, department: value })}
+                      options={[
+                        { value: '', label: t.departmentPlaceholder },
+                        ...departments.map((dept) => ({
+                          value: dept.id,
+                          label: dept.displayName,
+                        })),
+                      ]}
+                      ariaLabel={t.department}
+                    />
+                    {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
+                  </div>
+                </div>
+                {error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600 text-xs">{error}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.cancel}
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.update}
+                  >
+                    {t.update}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isResetPasswordModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsResetPasswordModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
+              <form onSubmit={handleResetPassword} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+                <div>
+                  <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
+                  <FormInput
+                    value={resetPasswordData.password}
+                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+                    placeholder={t.newPasswordPlaceholder}
+                    ariaLabel={t.newPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showResetPassword}
+                    togglePasswordVisibility={() => setShowResetPassword(!showResetPassword)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
+                  <FormInput
+                    value={resetPasswordData.confirmPassword}
+                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+                    placeholder={t.confirmPasswordPlaceholder}
+                    ariaLabel={t.confirmPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showConfirmPassword}
+                    togglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
+                  />
+                </div>
+                {error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600 text-xs">{error}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsResetPasswordModalOpen(false)}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.cancel}
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.reset}
+                  >
+                    {t.reset}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isDeleteModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsDeleteModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
+              <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
+              {error && (
+                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-red-600 text-xs">{error}</span>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  aria-label={t.cancel}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  aria-label={t.delete}
+                >
+                  {t.delete}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
