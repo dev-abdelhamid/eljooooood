@@ -1135,7 +1135,7 @@ export const factoryInventoryAPI = {
     return response;
   },
 };
-export const factoryOrdersAPI = {
+export const inventoryOrdersAPI = {
   create: async (data: { branchId: string; userId: string; items: { productId: string; quantity: number }[]; notes?: string; type: 'restock' | 'transfer'; destinationBranchId?: string }) => {
     const isRtl = localStorage.getItem('language') === 'ar';
     if (
