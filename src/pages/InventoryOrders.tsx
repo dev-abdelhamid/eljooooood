@@ -1,3 +1,4 @@
+// pages/InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,7 +8,7 @@ import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
-import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid } from 'lucide-react';
+import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, CheckCircle, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { factoryOrdersAPI, chefsAPI, productsAPI } from '../services/api';
@@ -658,7 +659,9 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
       try {
+        const orderNumber = `ORD-${Date.now()}`; // Generate a unique order number
         const response = await factoryOrdersAPI.create({
+          orderNumber,
           items: [
             {
               product: state.createFormData.productId,
@@ -777,7 +780,7 @@ export const InventoryOrders: React.FC = () => {
             </div>
           </div>
           <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <ProductSearchInput
@@ -893,7 +896,7 @@ export const InventoryOrders: React.FC = () => {
                   className="space-y-3"
                 >
                   {paginatedOrders.length === 0 ? (
-                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
+                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-200">
                       <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                       <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
                       <p className="text-xs text-gray-500">
@@ -990,10 +993,12 @@ export const InventoryOrders: React.FC = () => {
                           id="product-select"
                           options={[
                             { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
-                            ...state.products.map(product => ({
-                              value: product._id,
-                              label: isRtl ? product.name : product.nameEn || product.name,
-                            })),
+                            ...state.products
+                              .filter(product => user?.role === 'production' && user?.department ? product.department._id === user.department._id : true)
+                              .map(product => ({
+                                value: product._id,
+                                label: isRtl ? product.name : product.nameEn || product.name,
+                              })),
                           ]}
                           value={state.createFormData.productId}
                           onChange={(value) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, productId: value } })}
@@ -1054,10 +1059,10 @@ export const InventoryOrders: React.FC = () => {
                           type="submit"
                           variant="primary"
                           disabled={state.submitting !== null}
-                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm"
+                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm disabled:opacity-50"
                           aria-label={isRtl ? 'إنشاء الطلب' : 'Create Order'}
                         >
-                          {state.submitting ? (isRtl ? 'جارٍ التحميل' : 'Loading') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
+                          {state.submitting === 'create' ? (isRtl ? 'جارٍ الإنشاء...' : 'Creating...') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
                         </Button>
                       </div>
                     </form>
