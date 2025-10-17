@@ -1,9 +1,9 @@
+// OrderCard.tsx
 import React, { useMemo } from 'react';
 import { Card } from '../UI/Card';
 import { Button } from '../UI/Button';
 import { UserCheck, CheckCircle, Clock } from 'lucide-react';
 import { FactoryOrder } from '../../types/types';
-
 interface OrderCardProps {
   order: FactoryOrder;
   calculateTotalQuantity: (order: FactoryOrder) => number;
@@ -13,7 +13,6 @@ interface OrderCardProps {
   submitting: string | null;
   isRtl: boolean;
 }
-
 const translations = {
   ar: {
     orderNumber: 'رقم الطلب',
@@ -28,6 +27,7 @@ const translations = {
     complete: 'إكمال',
     cancel: 'إلغاء',
     assignChefs: 'تعيين شيفات',
+    requested: 'مطلوب',
     pending: 'قيد الانتظار',
     approved: 'تم الموافقة',
     in_production: 'في الإنتاج',
@@ -51,6 +51,7 @@ const translations = {
     complete: 'Complete',
     cancel: 'Cancel',
     assignChefs: 'Assign Chefs',
+    requested: 'Requested',
     pending: 'Pending',
     approved: 'Approved',
     in_production: 'In Production',
@@ -62,7 +63,6 @@ const translations = {
     urgent: 'Urgent',
   },
 };
-
 export const OrderCard: React.FC<OrderCardProps> = ({
   order,
   calculateTotalQuantity,
@@ -73,18 +73,17 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   isRtl,
 }) => {
   const t = translations[isRtl ? 'ar' : 'en'];
-
   const statusStyles = useMemo(
     () => ({
+      requested: 'bg-blue-100 text-blue-800',
       pending: 'bg-yellow-100 text-yellow-800',
-      approved: 'bg-blue-100 text-blue-800',
+      approved: 'bg-indigo-100 text-indigo-800',
       in_production: 'bg-purple-100 text-purple-800',
       completed: 'bg-green-100 text-green-800',
       cancelled: 'bg-red-100 text-red-800',
     }),
     []
   );
-
   const priorityStyles = useMemo(
     () => ({
       low: 'bg-gray-100 text-gray-800',
@@ -94,7 +93,6 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     }),
     []
   );
-
   return (
     <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -144,7 +142,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         </ul>
       </div>
       <div className={`mt-4 flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        {order.status === 'pending' && (
+        {['requested', 'pending'].includes(order.status) && (
           <Button
             variant="primary"
             onClick={() => updateOrderStatus(order.id, 'approved')}
@@ -153,6 +151,17 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             aria-label={t.approve}
           >
             {submitting === order.id ? '...' : t.approve}
+          </Button>
+        )}
+        {order.status === 'approved' && (
+          <Button
+            variant="secondary"
+            onClick={() => openAssignModal(order)}
+            disabled={submitting === order.id}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
+            aria-label={t.assignChefs}
+          >
+            {t.assignChefs}
           </Button>
         )}
         {order.status === 'in_production' && (
@@ -166,7 +175,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             {submitting === order.id ? '...' : <CheckCircle className="w-4 h-4" />}
           </Button>
         )}
-        {['pending', 'approved', 'in_production'].includes(order.status) && (
+        {['requested', 'pending', 'approved', 'in_production'].includes(order.status) && (
           <Button
             variant="danger"
             onClick={() => updateOrderStatus(order.id, 'cancelled')}
@@ -177,20 +186,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             {submitting === order.id ? '...' : t.cancel}
           </Button>
         )}
-        {order.status === 'approved' && (
-          <Button
-            variant="secondary"
-            onClick={() => openAssignModal(order)}
-            disabled={submitting === order.id}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
-            aria-label={t.assignChefs}
-          >
-            <UserCheck className="w-4 h-4" />
-          </Button>
-        )}
       </div>
     </Card>
   );
 };
-
-export default OrderCard;

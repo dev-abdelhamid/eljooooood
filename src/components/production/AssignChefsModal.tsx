@@ -1,3 +1,4 @@
+// AssignChefsModal.tsx
 import React, { useCallback, useMemo } from 'react';
 import { Modal } from '../UI/Modal';
 import { Select } from '../UI/Select';
@@ -5,7 +6,6 @@ import { Button } from '../UI/Button';
 import { AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
-
 interface AssignChefsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,7 +18,6 @@ interface AssignChefsModalProps {
   submitting: string | null;
   isRtl: boolean;
 }
-
 const translations = {
   ar: {
     title: 'تعيين الشيفات',
@@ -47,7 +46,6 @@ const translations = {
     noItems: 'No items available for assignment',
   },
 };
-
 export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isOpen,
   onClose,
@@ -61,7 +59,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isRtl,
 }) => {
   const t = translations[isRtl ? 'ar' : 'en'];
-
   // تحسين الأداء باستخدام useMemo لتجنب إعادة إنشاء الخيارات في كل عرض
   const chefOptions = useMemo(
     () => [
@@ -75,7 +72,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     ],
     [chefs, t.selectChef]
   );
-
   const handleChefChange = useCallback(
     (itemId: string, value: string) => {
       setAssignForm({
@@ -86,7 +82,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     },
     [assignFormData, setAssignForm]
   );
-
   return (
     <Modal
       isOpen={isOpen}
@@ -161,5 +156,3 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     </Modal>
   );
 };
-
-export default AssignChefsModal;
