@@ -14,12 +14,11 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
-import { AssignChefsModal } from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
 import { OrderCard } from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-
+import AssignChefsModal from '../components/production/AssignChefsModal';
 const QuantityInput = ({
   value,
   onChange,
@@ -295,7 +294,8 @@ const reducer = (state: State, action: any): State => {
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]> = {
   requested: ['approved', 'cancelled'],
-  pending: ['in_production', 'cancelled'],
+  pending: ['approved', 'cancelled'],
+  approved: ['in_production', 'cancelled'],
   in_production: ['completed', 'cancelled'],
   completed: ['stocked'],
   stocked: [],
@@ -305,6 +305,7 @@ const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'requested', label: 'requested' },
   { value: 'pending', label: 'pending' },
+  { value: 'approved', label: 'approved' },
   { value: 'in_production', label: 'in_production' },
   { value: 'completed', label: 'completed' },
   { value: 'stocked', label: 'stocked' },
@@ -422,7 +423,7 @@ export const InventoryOrders: React.FC = () => {
                   status: item.status || 'pending',
                 }))
               : [],
-            status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'pending'),
+            status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             notes: order.notes || '',
             priority: order.priority || 'medium',
@@ -579,7 +580,7 @@ export const InventoryOrders: React.FC = () => {
               status: item.status || 'pending',
             }))
           : [],
-        status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'pending'),
+        status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
         notes: order.notes || '',
         priority: order.priority || 'medium',
@@ -759,16 +760,6 @@ export const InventoryOrders: React.FC = () => {
         toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
-      if (newStatus === 'in_production' && !['admin', 'production_manager'].includes(user.role)) {
-        toast.error(isRtl ? 'غير مصرح بالموافقة' : 'Not authorized to approve', { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      if (newStatus === 'stocked' && !['admin', 'production_manager'].includes(user.role)) {
-        toast.error(isRtl ? 'غير مصرح بتأكيد إضافة المخزون' : 'Not authorized to confirm inventory', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-        return;
-      }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
         await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
@@ -895,7 +886,7 @@ export const InventoryOrders: React.FC = () => {
         });
         return;
       }
-      if (order.status !== 'pending') {
+      if (order.status !== 'approved') {
         toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -1035,6 +1026,7 @@ export const InventoryOrders: React.FC = () => {
                           '': 'كل الحالات',
                           requested: 'مطلوب',
                           pending: 'قيد الانتظار',
+                          approved: 'تم الموافقة',
                           in_production: 'في الإنتاج',
                           completed: 'مكتمل',
                           stocked: 'مخزن',
