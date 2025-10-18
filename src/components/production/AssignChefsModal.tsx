@@ -54,7 +54,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   const { t } = useLanguage();
   const { user } = useAuth();
 
-  // بناء قائمة الشيفات المتاحة حسب القسم
   const availableChefsByDepartment = useMemo(() => {
     const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
@@ -64,11 +63,9 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       }
       map.get(departmentId)!.push(chef);
     });
-    console.log('Available Chefs by Department:', Object.fromEntries(map));
     return map;
   }, [chefs]);
 
-  // تحديث تعيين الشيف
   const updateAssignment = useCallback(
     (index: number, value: string) => {
       setAssignForm({
@@ -80,21 +77,18 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     [assignFormData.items, setAssignForm]
   );
 
-  // تحديث assignFormData بناءً على الطلب المختار
   useEffect(() => {
     if (!selectedOrder || !user) return;
 
-    // إذا كان المستخدم شيف، يتم تعيينه تلقائيًا للعناصر التابعة لقسمه
     const updatedItems = selectedOrder.items.map((item) => {
-      const orderItem = selectedOrder.items.find((i) => i._id === item._id);
-      const departmentId = orderItem?.department._id || 'no-department';
+      const departmentId = item.department._id || 'no-department';
       const availableChefs = availableChefsByDepartment.get(departmentId) || [];
 
       let assignedTo = item.assignedTo?._id || '';
       if (user.role === 'chef' && user.department?._id === departmentId) {
-        assignedTo = user.id; // تعيين الشيف تلقائيًا إذا كان هو من أنشأ الطلب
+        assignedTo = user.id;
       } else if (availableChefs.length === 1 && user.role !== 'chef') {
-        assignedTo = availableChefs[0].userId; // تعيين تلقائي إذا كان هناك شيف واحد فقط
+        assignedTo = availableChefs[0].userId;
       }
 
       return {
@@ -117,13 +111,11 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     }
   }, [assignFormData.items, availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user]);
 
-  // إذا كان المستخدم شيف، يتم إخفاء المودال إذا كانت جميع العناصر مؤتمتة
   const isFullyAutomated = useMemo(() => {
     if (user?.role !== 'chef') return false;
     return assignFormData.items.every((item) => item.assignedTo === user.id);
   }, [assignFormData.items, user]);
 
-  // إرسال التعيينات تلقائيًا إذا كانت مؤتمتة
   useEffect(() => {
     if (isFullyAutomated && selectedOrder?.id && isOpen) {
       assignChefs(selectedOrder.id);
@@ -132,7 +124,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   }, [isFullyAutomated, selectedOrder, assignChefs, onClose, isOpen]);
 
   if (isFullyAutomated) {
-    return null; // لا يتم عرض المودال إذا كان التعيين مؤتمتًا
+    return null;
   }
 
   return (
@@ -144,7 +136,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           ? `تعيين الشيفات لطلب ${selectedOrder?.orderNumber || ''}`
           : `Assign Chefs to Order #${selectedOrder?.orderNumber || ''}`
       }
-      size="md"
+      size="sm"
       className="bg-white rounded-lg shadow-xl border border-gray-100"
     >
       <form
@@ -154,16 +146,16 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             assignChefs(selectedOrder.id);
           }
         }}
-        className="space-y-6"
+        className="space-y-4"
       >
         {loading ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {assignFormData.items.map((_, index) => (
-              <Skeleton key={index} height={40} />
+              <Skeleton key={index} height={30} />
             ))}
           </div>
         ) : assignFormData.items.length === 0 ? (
-          <p className="text-gray-600 text-sm">
+          <p className="text-gray-600 text-xs">
             {isRtl ? 'لا توجد عناصر لتعيين الشيفات' : 'No items to assign chefs'}
           </p>
         ) : (
@@ -174,29 +166,21 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-              ...(availableChefs.length > 0
-                ? availableChefs.map((chef) => ({
-                    value: chef.userId,
-                    label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
-                  }))
-                : [
-                    {
-                      value: '',
-                      label: isRtl ? 'لا يوجد شيفات متاحة' : 'No chefs available',
-                      disabled: true,
-                    },
-                  ]),
+              ...availableChefs.map((chef) => ({
+                value: chef.userId,
+                label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+              })),
             ];
 
             return (
               <motion.div
                 key={item.itemId}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: index * 0.1 }}
+                transition={{ duration: 0.15, delay: index * 0.05 }}
               >
                 <label
-                  className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
                   htmlFor={`chef-select-${index}`}
                 >
                   {isRtl
@@ -208,12 +192,12 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                   options={chefOptions}
                   value={item.assignedTo}
                   onChange={(value) => updateAssignment(index, value)}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
                   aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
                   disabled={availableChefs.length === 0 || (user?.role === 'chef' && item.assignedTo === user.id)}
                 />
                 {availableChefs.length === 0 && (
-                  <p className="text-red-600 text-sm mt-1">
+                  <p className="text-red-600 text-xs mt-1">
                     {isRtl ? 'لا يوجد شيفات متاحة لهذا القسم' : 'No chefs available for this department'}
                   </p>
                 )}
@@ -225,17 +209,17 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+            className={`p-2 bg-red-50 border border-red-200 rounded-md flex items-center gap-1 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600 text-sm">{error}</span>
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-red-600 text-xs">{error}</span>
           </motion.div>
         )}
         <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <Button
             variant="secondary"
             onClick={onClose}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2 text-sm shadow-sm"
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
             aria-label={isRtl ? 'إلغاء' : 'Cancel'}
           >
             {isRtl ? 'إلغاء' : 'Cancel'}
@@ -244,7 +228,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             type="submit"
             variant="primary"
             disabled={submitting !== null || loading || assignFormData.items.some((item) => !item.assignedTo)}
-            className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm disabled:opacity-50"
+            className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm disabled:opacity-50"
             aria-label={isRtl ? 'تعيين الشيفات' : 'Assign Chefs'}
           >
             {submitting ? (isRtl ? 'جارٍ التعيين...' : 'Assigning...') : (isRtl ? 'تعيين الشيفات' : 'Assign Chefs')}
