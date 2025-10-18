@@ -7,7 +7,7 @@ import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api'
 import { toast } from 'react-toastify';
 import { Tooltip } from 'react-tooltip';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
+import jsPDF from 'jsPDF';
 import autoTable from 'jspdf-autotable';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
