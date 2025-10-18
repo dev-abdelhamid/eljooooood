@@ -1137,7 +1137,6 @@ export const factoryInventoryAPI = {
 };
 
 
-
 export const factoryOrdersAPI = {
   // Create a new factory order with status 'pending' by default
   create: async (data: { orderNumber: string; items: { product: string; quantity: number }[]; notes?: string; priority?: string }) => {

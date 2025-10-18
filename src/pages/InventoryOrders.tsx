@@ -369,7 +369,7 @@ export const InventoryOrders: React.FC = () => {
   // Fetch data
   const fetchData = useCallback(
     async (retryCount = 0) => {
-      if (!user || !['chef', 'production', 'admin'].includes(user.role)) {
+      if (!user || !['chef', 'production_manager', 'admin'].includes(user.role)) {
         dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -381,7 +381,7 @@ export const InventoryOrders: React.FC = () => {
           sortOrder: state.sortOrder,
           search: state.debouncedSearchQuery || undefined,
         };
-        if (user.role === 'production' && user.department) query.department = user.department._id;
+        if (user.role === 'production_manager' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll(),
@@ -434,7 +434,7 @@ export const InventoryOrders: React.FC = () => {
                   status: item.status || 'pending',
                 }))
               : [],
-            status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
+            status: order.status || (['admin', 'production_manager'].includes(order.createdBy?.role) ? 'in_production' : 'pending'),
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             notes: order.notes || '',
             priority: order.priority || 'medium',
@@ -523,7 +523,7 @@ export const InventoryOrders: React.FC = () => {
 
   // WebSocket events
   useEffect(() => {
-    if (!user || !['chef', 'production', 'admin'].includes(user.role) || !socket) {
+    if (!user || !['chef', 'production_manager', 'admin'].includes(user.role) || !socket) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
@@ -592,7 +592,7 @@ export const InventoryOrders: React.FC = () => {
               status: item.status || 'pending',
             }))
           : [],
-        status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
+        status: order.status || (['admin', 'production_manager'].includes(order.createdBy?.role) ? 'in_production' : 'pending'),
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
         notes: order.notes || '',
         priority: order.priority || 'medium',
@@ -678,8 +678,8 @@ export const InventoryOrders: React.FC = () => {
     dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
     try {
       const orderNumber = `ORD-${Date.now()}`;
-      const isAdminOrProduction = ['admin', 'production'].includes(user.role);
-      const initialStatus = isAdminOrProduction ? 'approved' : 'requested';
+      const isAdminOrProduction = ['admin', 'production_manager'].includes(user.role);
+      const initialStatus = isAdminOrProduction ? 'in_production' : 'pending';
       const items = state.createFormData.items.map((i) => ({
         product: i.productId,
         quantity: i.quantity,
@@ -769,11 +769,11 @@ export const InventoryOrders: React.FC = () => {
         toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
-      if (newStatus === 'approved' && !['admin', 'production'].includes(user.role)) {
+      if (newStatus === 'approved' && !['admin', 'production_manager'].includes(user.role)) {
         toast.error(isRtl ? 'غير مصرح بالموافقة' : 'Not authorized to approve', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
-      if (newStatus === 'stocked' && !['admin', 'production'].includes(user.role)) {
+      if (newStatus === 'stocked' && !['admin', 'production_manager'].includes(user.role)) {
         toast.error(isRtl ? 'غير مصرح بتأكيد إضافة المخزون' : 'Not authorized to confirm inventory', {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -966,7 +966,7 @@ export const InventoryOrders: React.FC = () => {
       .filter(
         (order) =>
           (!state.filterStatus || order.status === state.filterStatus) &&
-          (user?.role === 'production' && user?.department
+          (user?.role === 'production_manager' && user?.department
             ? order.items.some((item) => item.department._id === user.department._id)
             : true) &&
           (user?.role === 'chef' ? order.items.some((item) => item.assignedTo?._id === user.id) : true)
@@ -1279,7 +1279,7 @@ export const InventoryOrders: React.FC = () => {
                                     (product) =>
                                       user?.role === 'chef' && user?.department
                                         ? product.department._id === user.department._id
-                                        : user?.role === 'production' && user?.department
+                                        : user?.role === 'production_manager' && user?.department
                                         ? product.department._id === user.department._id
                                         : true
                                   )
