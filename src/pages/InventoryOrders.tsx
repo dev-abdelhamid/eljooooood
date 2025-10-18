@@ -1,3 +1,5 @@
+
+
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,10 +12,10 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI , } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
+import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem , User } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
@@ -154,7 +156,7 @@ const reducer = (state: State, action: any): State => {
       return { ...state, selectedOrder: action.payload };
     case 'SET_CHEFS':
       return { ...state, chefs: action.payload || [] };
-    case 'SET_PRODUCTS':
+    case 'SET_PRODUCT':
       return { ...state, products: action.payload || [] };
     case 'SET_DEPARTMENTS':
       return { ...state, departments: action.payload || [] };
@@ -386,12 +388,24 @@ export const InventoryOrders: React.FC = () => {
           search: state.debouncedSearchQuery || undefined,
           lang: language,
         };
-        const [ordersResponse, chefsResponse, productsResponse, departmentsResponse] = await Promise.all([
+
+        const [ordersResponse, chefsResponse, departmentsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll({ lang: language }),
-          productsAPI.getAll({ lang: language }),
           departmentAPI.getAll({ lang: language }),
         ]);
+
+        // Fetch all products by looping through pages
+        let allProducts = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const productsResponse = await productsAPI.getAll({ lang: language, page, limit: 50 });
+          allProducts = [...allProducts, ...productsResponse.data];
+          totalPages = productsResponse.totalPages;
+          page++;
+        } while (page <= totalPages);
+
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
           .filter((order: any) => order && order._id && order.orderNumber)
@@ -410,10 +424,10 @@ export const InventoryOrders: React.FC = () => {
                   unitEn: item.product?.unitEn,
                   displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
                   department: {
-                    _id: item.department?._id || item.product?.department?._id || 'no-department',
-                    name: item.department?.name || item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.department?.nameEn || item.product?.department?.nameEn,
-                    displayName: item.department?.displayName || item.product?.department?.displayName || (isRtl ? item.department?.name || item.product?.department?.name : item.department?.nameEn || item.product?.department?.nameEn || item.department?.name || item.product?.department?.name),
+                    _id: item.product?.department?._id || 'no-department',
+                    name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: item.product?.department?.nameEn,
+                    displayName: item.product?.department?.displayName || (isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name),
                   },
                   assignedTo: item.assignedTo
                     ? {
@@ -465,9 +479,9 @@ export const InventoryOrders: React.FC = () => {
             : [],
         });
         dispatch({
-          type: 'SET_PRODUCTS',
-          payload: Array.isArray(productsResponse.data)
-            ? productsResponse.data
+          type: 'SET_PRODUCT',
+          payload: Array.isArray(allProducts)
+            ? allProducts
                 .filter((product: any) => product && product._id)
                 .map((product: any) => ({
                   _id: product._id,
@@ -1404,9 +1418,7 @@ export const InventoryOrders: React.FC = () => {
                                         .filter(
                                           (chef) =>
                                             chef.department._id ===
-                                            (typeof state.products.find((p) => p._id === item.productId)?.department === 'object' 
-                                              ? state.products.find((p) => p._id === item.productId)?.department._id 
-                                              : state.products.find((p) => p._id === item.productId)?.department)
+                                            state.products.find((p) => p._id === item.productId)?.department._id
                                         )
                                         .map((chef) => ({
                                           value: chef.userId,
