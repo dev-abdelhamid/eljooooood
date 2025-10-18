@@ -7,13 +7,13 @@ import { Select } from '../components/UI/Select';
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
-import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
+import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle , CheckCircle} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { factoryOrdersAPI, chefsAPI, productsAPI, inventoryAPI, departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
+import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem  ,UserRole } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
 import OrderTable from '../components/production/OrderTable';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
@@ -1552,7 +1552,7 @@ export const InventoryOrders: React.FC = () => {
                   onChange={(value) => dispatch({ type: 'SET_FILTER_DEPARTMENT', payload: value })}
                   ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
                   className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                />              />
+                />              
             </div>
             <div>
               <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
@@ -1946,7 +1946,12 @@ export const InventoryOrders: React.FC = () => {
         setAssignForm={(formData) => dispatch({ type: 'SET_ASSIGN_FORM', payload: formData })}
         isRtl={isRtl}
       />
-    </div>
+ </Suspense>  
+ 
+   </div>
+   
+
+
   );
 };
 
