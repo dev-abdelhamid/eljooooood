@@ -522,250 +522,54 @@ export const InventoryOrders: React.FC = () => {
     },
     [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, isRtl, language]
   );
-
-  useEffect(() => {
-    if (!user || !['chef', 'production_manager', 'admin'].includes(user.role) || !socket) {
-      dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
-      dispatch({ type: 'SET_LOADING', payload: false });
-      return;
-    }
-    const reconnectInterval = setInterval(() => {
-      if (!isConnected && socket) {
-        console.log('Attempting to reconnect WebSocket...');
-        socket.connect();
-      }
-    }, 5000);
-    socket.on('connect', () => {
-      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-    });
-    socket.on('connect_error', (err) => {
-      console.error('Socket connect error:', err.message);
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
-      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-    });
-    socket.on('newFactoryOrder', (order: any) => {
-      if (!order || !order._id || !order.orderNumber) {
-        console.warn('Invalid new factory order data:', order);
-        return;
-      }
-      const mappedOrder: FactoryOrder = {
-        id: order._id,
-        orderNumber: order.orderNumber,
-        items: Array.isArray(order.items)
-          ? order.items.map((item: any) => ({
-              _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-              productId: item.product?._id || 'unknown',
-              productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              productNameEn: item.product?.nameEn,
-              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
-              quantity: Number(item.quantity) || 1,
-              unit: item.product?.unit || 'unit',
-              unitEn: item.product?.unitEn,
-              displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-              department: {
-                _id: item.product?.department?._id || 'no-department',
-                name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.product?.department?.nameEn,
-                displayName: isRtl
-                  ? item.product?.department?.name
-                  : item.product?.department?.nameEn || item.product?.department?.name,
-              },
-              assignedTo: item.assignedTo
-                ? {
-                    _id: item.assignedTo._id,
-                    username: item.assignedTo.username,
-                    name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.assignedTo.nameEn,
-                    displayName: isRtl
-                      ? item.assignedTo.name
-                      : item.assignedTo.nameEn || item.assignedTo.name,
-                    department: {
-                      _id: item.assignedTo.department?._id || 'no-department',
-                      name: item.assignedTo.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                      nameEn: item.assignedTo.department?.nameEn,
-                      displayName: isRtl
-                        ? item.assignedTo.department?.name
-                        : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
-                    },
-                  }
-                : undefined,
-              status: item.status || 'pending',
-            }))
-          : [],
-        status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
-        date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-        notes: order.notes || '',
-        priority: order.priority || 'medium',
-        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        createdByRole: order.createdBy?.role || 'unknown',
-      };
-      dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-      playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
-      toast.success(isRtl ? `طلب إنتاج جديد: ${order.orderNumber}` : `New production order: ${order.orderNumber}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-    socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: FactoryOrder['status'] }) => {
-      if (!orderId || !status) {
-        console.warn('Invalid order status update data:', { orderId, status });
-        return;
-      }
-      dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      toast.info(isRtl ? `تم تحديث حالة الطلب ${orderId} إلى ${status}` : `Order ${orderId} status updated to ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-    socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: FactoryOrderItem['status'] }) => {
-      if (!orderId || !itemId || !status) {
-        console.warn('Invalid item status update data:', { orderId, itemId, status });
-        return;
-      }
-      dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-      toast.info(isRtl ? `تم تحديث حالة العنصر في الطلب ${orderId}` : `Item status updated in order ${orderId}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-    socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
-      if (!orderId || !items) {
-        console.warn('Invalid task assigned data:', { orderId, items });
-        return;
-      }
-      dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', { position: isRtl ? 'top-left' : 'top-right' });
-    });
-    return () => {
-      clearInterval(reconnectInterval);
-      socket.off('connect');
-      socket.off('connect_error');
-      socket.off('newFactoryOrder');
-      socket.off('orderStatusUpdated');
-      socket.off('itemStatusUpdated');
-      socket.off('taskAssigned');
-    };
-  }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
-
-  const validateCreateForm = useCallback(() => {
-    const errors: Record<string, string> = {};
-    const t = isRtl
-      ? {
-          productRequired: 'المنتج مطلوب',
-          quantityRequired: 'الكمية مطلوبة',
-          quantityInvalid: 'الكمية يجب أن تكون أكبر من 0',
-          chefRequired: 'الشيف مطلوب',
-        }
-      : {
-          productRequired: 'Product is required',
-          quantityRequired: 'Quantity is required',
-          quantityInvalid: 'Quantity must be greater than 0',
-          chefRequired: 'Chef is required',
-        };
-    state.createFormData.items.forEach((item, index) => {
-      if (!item.productId) {
-        errors[`item_${index}_productId`] = t.productRequired;
-      }
-      if (!item.quantity || item.quantity < 1) {
-        errors[`item_${index}_quantity`] = item.quantity === 0 ? t.quantityRequired : t.quantityInvalid;
-      }
-      if (['admin', 'production_manager'].includes(user.role) && !item.assignedTo) {
-        errors[`item_${index}_assignedTo`] = t.chefRequired;
+  const handleSearchChange = useCallback((value: string) => {
+    dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+  }, []);
+  const filteredOrders = useMemo(() => {
+    const normalizedQuery = normalizeText(state.searchQuery);
+    return state.orders
+      .filter((order) => order)
+      .filter(
+        (order) =>
+          normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
+          normalizeText(order.notes || '').includes(normalizedQuery) ||
+          normalizeText(order.createdBy || '').includes(normalizedQuery) ||
+          order.items.some((item) => normalizeText(item.displayProductName || '').includes(normalizedQuery))
+      )
+      .filter(
+        (order) =>
+          (!state.filterStatus || order.status === state.filterStatus) &&
+          (user?.role === 'production_manager' && user?.department
+            ? order.items.some((item) => item.department._id === user.department._id)
+            : true) &&
+          (user?.role === 'chef' ? order.items.some((item) => item.assignedTo?._id === user.id) : true)
+      );
+  }, [state.orders, state.searchQuery, state.filterStatus, user]);
+  const sortedOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      if (state.sortBy === 'date') {
+        return state.sortOrder === 'asc'
+          ? new Date(a.date).getTime() - new Date(b.date).getTime()
+          : new Date(b.date).getTime() - new Date(a.date).getTime();
+      } else {
+        const totalA = calculateTotalQuantity(a);
+        const totalB = calculateTotalQuantity(b);
+        return state.sortOrder === 'asc' ? totalA - totalB : totalB - totalA;
       }
     });
-    dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
-    return Object.keys(errors).length === 0;
-  }, [state.createFormData, isRtl, user.role]);
-
-  const createOrder = useCallback(async () => {
-    if (!user?.id || !validateCreateForm()) {
-      return;
-    }
-    dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
-    try {
-      const orderNumber = `ORD-${Date.now()}`;
-      const isAdminOrManager = ['admin', 'production_manager'].includes(user.role);
-      const initialStatus = isAdminOrManager && state.createFormData.items.every(i => i.assignedTo) ? 'in_production' : isAdminOrManager ? 'pending' : 'requested';
-      const items = state.createFormData.items.map((i) => ({
-        product: i.productId,
-        quantity: i.quantity,
-        assignedTo: user.role === 'chef' ? user.id : i.assignedTo,
-      }));
-      const response = await factoryOrdersAPI.create({
-        orderNumber,
-        items,
-        notes: state.createFormData.notes,
-        priority: 'medium',
-      });
-      const newOrder: FactoryOrder = {
-        id: response.data._id,
-        orderNumber: response.data.orderNumber,
-        items: response.data.items.map((item: any) => ({
-          _id: item._id,
-          productId: item.product._id,
-          productName: item.product.name,
-          productNameEn: item.product.nameEn,
-          displayProductName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-          quantity: Number(item.quantity),
-          unit: item.product.unit,
-          unitEn: item.product.unitEn,
-          displayUnit: translateUnit(item.product.unit, isRtl),
-          department: {
-            _id: item.product.department._id,
-            name: item.product.department.name,
-            nameEn: item.product.department.nameEn,
-            displayName: isRtl
-              ? item.product.department.name
-              : item.product.department.nameEn || item.product.department.name,
-          },
-          assignedTo: item.assignedTo
-            ? {
-                _id: item.assignedTo._id,
-                username: item.assignedTo.username,
-                name: item.assignedTo.name,
-                nameEn: item.assignedTo.nameEn,
-                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
-                department: {
-                  _id: item.assignedTo.department._id,
-                  name: item.assignedTo.department.name,
-                  nameEn: item.assignedTo.department.nameEn,
-                  displayName: isRtl
-                    ? item.assignedTo.department.name
-                    : item.assignedTo.department.nameEn || item.assignedTo.department.name,
-                },
-              }
-            : undefined,
-          status: item.status || 'pending',
-        })),
-        status: response.data.status || initialStatus,
-        date: formatDate(new Date(response.data.createdAt), language),
-        notes: response.data.notes || '',
-        priority: response.data.priority || 'medium',
-        createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        createdByRole: user.role,
-      };
-      dispatch({ type: 'ADD_ORDER', payload: newOrder });
-      dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-      dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }] } });
-      dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
-      if (socket && isConnected) {
-        emit('newFactoryOrder', newOrder);
-      }
-      toast.success(isRtl ? 'تم إنشاء طلب الإنتاج بنجاح' : 'Production order created successfully', {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-      if (isAdminOrManager && state.createFormData.items.some(i => !i.assignedTo)) {
-        dispatch({ type: 'SET_SELECTED_ORDER', payload: newOrder });
-        dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
-      }
-    } catch (err: any) {
-      console.error('Create order error:', err.message);
-      const errorMessage = isRtl ? `فشل في إنشاء الطلب: ${err.message}` : `Failed to create order: ${err.message}`;
-      dispatch({ type: 'SET_FORM_ERRORS', payload: { form: errorMessage } });
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
-    } finally {
-      dispatch({ type: 'SET_SUBMITTING', payload: null });
-    }
-  }, [user, state.createFormData, isRtl, socket, isConnected, emit, language, validateCreateForm]);
-
+  }, [filteredOrders, state.sortBy, state.sortOrder, calculateTotalQuantity]);
+  const paginatedOrders = useMemo(
+    () =>
+      sortedOrders.slice(
+        (state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode],
+        state.currentPage * ORDERS_PER_PAGE[state.viewMode]
+      ),
+    [sortedOrders, state.currentPage, state.viewMode]
+  );
+  const totalPages = useMemo(
+    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
+    [sortedOrders, state.viewMode]
+  );
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: FactoryOrder['status']) => {
       const order = state.orders.find((o) => o.id === orderId);
@@ -1154,7 +958,7 @@ export const InventoryOrders: React.FC = () => {
                         {isRtl ? 'لا توجد طلبات' : 'No Orders'}
                       </h3>
                       <p className="text-sm text-gray-500">
-                        {state.filterStatus || state.debouncedSearchQuery
+                        {state.filterStatus || state.departmentFilter || state.searchQuery
                           ? isRtl
                             ? 'لا توجد طلبات مطابقة'
                             : 'No matching orders'
