@@ -1,3 +1,4 @@
+// components/FactoryInventory.tsx
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
@@ -71,8 +72,8 @@ interface AvailableProduct {
 interface FactoryOrder {
   _id: string;
   orderNumber: string;
-  items: { productId: string; quantity: number; status: string }[];
-  status: 'pending' | 'in_production' | 'completed' | 'cancelled';
+  items: { _id: string; productId: string; quantity: number; status: string; assignedTo: string; department: string }[];
+  status: 'requested' | 'pending' | 'approved' | 'in_production' | 'completed' | 'cancelled';
 }
 
 // Translations
@@ -306,7 +307,7 @@ export const FactoryInventory: React.FC = () => {
   const { socket, isConnected } = useSocket();
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState('', 300);
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
@@ -333,8 +334,6 @@ export const FactoryInventory: React.FC = () => {
     }, [value, delay]);
     return [value, setValue, debouncedValue] as const;
   };
-
-  const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
   // Inventory Query
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
@@ -391,7 +390,7 @@ export const FactoryInventory: React.FC = () => {
             factoryOrdersData?.some(
               (order) =>
                 (order.status === 'pending' || order.status === 'in_production') &&
-                order.items.some((i) => i.productId === item.product?._id)
+                order.items.some(i => i.productId === item.product?._id)
             ) || false,
         }));
     },
@@ -441,7 +440,7 @@ export const FactoryInventory: React.FC = () => {
       }
       return data;
     },
-    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
+    enabled: !!user?.role && ['production', 'admin', 'chef'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
@@ -454,9 +453,13 @@ export const FactoryInventory: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await factoryInventoryAPI.getAvailableProducts();
+        const params = { limit: 1000 };
+        if (user.role === 'chef' && user.department?._id) {
+          params.department = user.department._id;
+        }
+        const response = await factoryInventoryAPI.getAvailableProducts(params);
         console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
-        const products = Array.isArray(response) ? response : response?.data || response?.products || [];
+        const products = response.data || response || [];
         if (!Array.isArray(products)) {
           console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
           setAvailableProducts([]);
@@ -480,7 +483,7 @@ export const FactoryInventory: React.FC = () => {
       }
     };
     fetchProducts();
-  }, [isRtl, t]);
+  }, [isRtl, t, user.role, user.department]);
 
   // Socket Events
   useEffect(() => {
@@ -684,6 +687,7 @@ export const FactoryInventory: React.FC = () => {
   }, []);
 
   const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
+    setSelectedItem(item || null);
     dispatchProductionForm({ type: 'RESET' });
     if (item?.product) {
       dispatchProductionForm({
@@ -739,7 +743,7 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-  
+
   }, [t]);
 
   const handleProductChange = useCallback(
@@ -762,7 +766,7 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-   
+    
     },
     [t, productionForm.items]
   );
@@ -844,6 +848,7 @@ export const FactoryInventory: React.FC = () => {
       setIsProductionModalOpen(false);
       dispatchProductionForm({ type: 'RESET' });
       setProductionErrors({});
+      setSelectedItem(null);
       toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
       if (socket && isConnected) {
         socket.emit('factoryOrderCreated', {
@@ -964,26 +969,30 @@ export const FactoryInventory: React.FC = () => {
             />
           </div>
           <div className="w-full lg:w-1/2 flex flex-col sm:flex-row gap-4">
-            <ProductDropdown
-              value={filterStatus}
-              onChange={(value) => {
-                setFilterStatus(value as InventoryStatus | '');
-                setCurrentPage(1);
-              }}
-              options={statusOptions}
-              ariaLabel={t.filterByStatus}
-              className="w-full"
-            />
-            <ProductDropdown
-              value={filterDepartment}
-              onChange={(value) => {
-                setFilterDepartment(value);
-                setCurrentPage(1);
-              }}
-              options={departmentOptions}
-              ariaLabel={t.filterByDepartment}
-              className="w-full"
-            />
+            <div className="w-full sm:w-1/2">
+              <ProductDropdown
+                value={filterStatus}
+                onChange={(value) => {
+                  setFilterStatus(value as InventoryStatus | '');
+                  setCurrentPage(1);
+                }}
+                options={statusOptions}
+                ariaLabel={t.filterByStatus}
+                className="w-full"
+              />
+            </div>
+            <div className="w-full sm:w-1/2">
+              <ProductDropdown
+                value={filterDepartment}
+                onChange={(value) => {
+                  setFilterDepartment(value);
+                  setCurrentPage(1);
+                }}
+                options={departmentOptions}
+                ariaLabel={t.filterByDepartment}
+                className="w-full"
+              />
+            </div>
           </div>
         </div>
         <div className="mt-4 text-center text-sm text-gray-600 font-medium">
@@ -1168,6 +1177,7 @@ export const FactoryInventory: React.FC = () => {
                 setIsProductionModalOpen(false);
                 dispatchProductionForm({ type: 'RESET' });
                 setProductionErrors({});
+                setSelectedItem(null);
               }}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
               aria-label={t.cancel}
@@ -1244,6 +1254,7 @@ export const FactoryInventory: React.FC = () => {
                   setIsProductionModalOpen(false);
                   dispatchProductionForm({ type: 'RESET' });
                   setProductionErrors({});
+                  setSelectedItem(null);
                 }}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
@@ -1439,5 +1450,4 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
-
 export default FactoryInventory ;
