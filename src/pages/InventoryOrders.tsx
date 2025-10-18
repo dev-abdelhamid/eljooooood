@@ -343,20 +343,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// Retry logic with exponential backoff
-const withRetry = async <T>(fn: () => Promise<T>, maxRetries: number = 3, baseDelay: number = 1000): Promise<T> => {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error: any) {
-      if (attempt === maxRetries) throw error;
-      const delay = baseDelay * Math.pow(2, attempt - 1);
-      console.warn(`Retry ${attempt}/${maxRetries} after ${delay}ms due to error: ${error.message}`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-  throw new Error('Max retries reached');
-};
+
 
 export const InventoryOrders: React.FC = () => {
   const { t, language } = useLanguage();
@@ -810,13 +797,13 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await withRetry(() => factoryOrdersAPI.updateStatus(orderId, { status: newStatus }));
+        await (() => factoryOrdersAPI.updateStatus(orderId, { status: newStatus }));
         if (newStatus === 'stocked') {
           const items = order.items.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
           }));
-          await withRetry(() => inventoryAPI.addToInventory({ orderId, items }));
+          await (() => inventoryAPI.addToInventory({ orderId, items }));
         }
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
         if (socket && isConnected) {
@@ -926,7 +913,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await withRetry(() => factoryOrdersAPI.assignChefs(orderId, state.assignFormData));
+        const response = await (() => factoryOrdersAPI.assignChefs(orderId, state.assignFormData));
         const items = state.assignFormData.items.map((item) => ({
           _id: item.itemId,
           assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
