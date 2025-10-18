@@ -4,14 +4,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { Card } from '../components/UI/Card';
 import { Select } from '../components/UI/Select';
-
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, inventoryAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, inventoryAPI, departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
@@ -250,7 +249,7 @@ const reducer = (state: State, action: any): State => {
                           : undefined,
                         status: assignment.status || i.status,
                       }
-                    : i;
+                    : i
                 }),
                 status: order.items.every((i) => i.status === 'assigned') ? 'in_production' : order.status,
               }
@@ -279,7 +278,7 @@ const reducer = (state: State, action: any): State => {
                           : undefined,
                         status: assignment.status || i.status,
                       }
-                    : i;
+                    : i
                 }),
                 status: state.selectedOrder.items.every((i) => i.status === 'assigned')
                   ? 'in_production'
@@ -295,6 +294,7 @@ const reducer = (state: State, action: any): State => {
 };
 
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
+
 const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]> = {
   requested: ['approved', 'cancelled'],
   pending: ['approved', 'cancelled'],
@@ -304,6 +304,7 @@ const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]>
   stocked: [],
   cancelled: [],
 };
+
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'requested', label: 'requested' },
@@ -314,6 +315,7 @@ const statusOptions = [
   { value: 'stocked', label: 'stocked' },
   { value: 'cancelled', label: 'cancelled' },
 ];
+
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalQuantity', label: 'sort_total_quantity' },
@@ -342,8 +344,8 @@ export const InventoryOrders: React.FC = () => {
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
-
   const [searchInput, setSearchInput] = useState('');
+
   useEffect(() => {
     const handler = setTimeout(() => {
       dispatch({ type: 'SET_DEBOUNCED_SEARCH', payload: searchInput });
@@ -374,10 +376,11 @@ export const InventoryOrders: React.FC = () => {
           search: state.debouncedSearchQuery || undefined,
         };
         if (user.role === 'production_manager' && user.department) query.department = user.department._id;
-        const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
+        const [ordersResponse, chefsResponse, productsResponse, departmentsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll(),
           productsAPI.getAll(),
+          departmentAPI.getAll(),
         ]);
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
