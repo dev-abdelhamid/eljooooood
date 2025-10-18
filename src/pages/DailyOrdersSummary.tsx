@@ -38,21 +38,19 @@ const Button: React.FC<{
   disabled?: boolean;
   className?: string;
   children: React.ReactNode;
-}> = ({ variant, onClick, disabled, className, children }) => {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-        variant === 'primary' && !disabled
-          ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
-          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-      } ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
+}> = ({ variant, onClick, disabled, className, children }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+      variant === 'primary' && !disabled
+        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-md hover:shadow-lg'
+        : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+    } ${className}`}
+  >
+    {children}
+  </button>
+);
 
 // ProductSearchInput component
 const ProductSearchInput: React.FC<{
@@ -84,7 +82,7 @@ const ProductSearchInput: React.FC<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -124,26 +122,22 @@ const ProductDropdown: React.FC<{
         setIsOpen(false);
       }
     };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isRtl]);
 
   return (
     <div className={`relative group w-full ${className}`} ref={dropdownRef}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && !disabled && (
-        <div className={`absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto ${isRtl ? 'text-right' : 'text-left'}`}>
+        <div className={`absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}>
           {options.map((option) => (
             <button
               key={option.value}
@@ -151,7 +145,7 @@ const ProductDropdown: React.FC<{
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className="w-full px-3 py-2 text-xs hover:bg-amber-100 transition-colors text-left"
+              className="w-full px-3 py-2 text-xs hover:bg-amber-50 transition-colors text-left"
             >
               {option.label}
             </button>
@@ -170,23 +164,14 @@ const toArabicNumerals = (number: string | number): string => {
 
 const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
-  let formatted: string;
+  let formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
   if (isStats) {
-    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
     formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
   } else {
-    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    if (isRtl) {
-      formatted = formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d)));
-    }
+    formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
   }
   return formatted;
 };
@@ -195,7 +180,199 @@ const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
-// Main BranchOrdersSummary component
+const generateFileName = (prefix: string, monthName: string, isRtl: boolean, extension: string): string => {
+  const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, isRtl ? '٢٠٢٥' : '2025');
+  return `${prefix}_${monthName}_${dateStr}.${extension}`;
+};
+
+// Export functions
+const exportToExcel = (dataRows: any[], headers: string[], monthName: string, isRtl: boolean) => {
+  toast.info(isRtl ? 'جارٍ إنشاء ملف Excel...' : 'Generating Excel...', {
+    position: isRtl ? 'top-left' : 'top-right',
+    autoClose: false,
+    toastId: 'excel-export',
+  });
+  try {
+    const sheetData = isRtl ? dataRows.map(row => row.reverse()) : dataRows;
+    const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
+    const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
+    if (isRtl) ws['!views'] = [{ RTL: true }];
+    ws['!cols'] = [
+      { wch: 12 },
+      { wch: 12 },
+      ...Array(headers.length - 4).fill({ wch: 12 }),
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 25 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `DailyOrdersSummary_${monthName}`);
+    XLSX.writeFile(wb, generateFileName('DailyOrdersSummary', monthName, isRtl, 'xlsx'));
+    toast.update('excel-export', {
+      render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
+      type: 'success',
+      autoClose: 3000,
+    });
+  } catch (error) {
+    console.error('Error exporting Excel:', error);
+    toast.update('excel-export', {
+      render: isRtl ? 'فشل في تصدير ملف Excel' : 'Failed to export Excel',
+      type: 'error',
+      autoClose: 3000,
+    });
+  }
+};
+
+const exportToPDF = async (dataRows: any[], title: string, monthName: string, headers: string[], isRtl: boolean, totalItems: number, totalQuantity: number, totalPrice: number) => {
+  toast.info(isRtl ? 'جارٍ إنشاء ملف PDF...' : 'Generating PDF...', {
+    position: isRtl ? 'top-left' : 'top-right',
+    autoClose: false,
+    toastId: 'pdf-export',
+  });
+  try {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const fontName = 'Amiri';
+    const fontLoaded = await loadFont(doc, fontName);
+
+    const pageWidth = doc.internal.pageSize.width;
+    doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+    doc.setFontSize(18);
+    doc.setTextColor(33, 33, 33);
+    doc.text(title, isRtl ? pageWidth - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    const currentDate = new Date().toLocaleString('ar-EG', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).replace(/am|pm/i, match => match === 'am' ? 'ص' : 'م');
+    doc.text(`${isRtl ? 'تاريخ الإنشاء: ' : 'Generated on: '}${currentDate}`, isRtl ? pageWidth - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
+
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(245, 158, 11);
+    doc.line(20, 30, pageWidth - 20, 30);
+
+    const tableData = isRtl ? dataRows.map(row => row.reverse()) : dataRows;
+    const tableHeaders = isRtl ? headers.slice().reverse() : headers;
+
+    autoTable(doc, {
+      head: [tableHeaders],
+      body: tableData,
+      startY: 40,
+      theme: 'grid',
+      margin: { top: 10, bottom: 20, left: 20, right: 20 },
+      tableWidth: 'auto',
+      headStyles: {
+        fillColor: [245, 158, 11],
+        textColor: [255, 255, 255],
+        fontSize: 10,
+        font: fontLoaded ? fontName : 'helvetica',
+        fontStyle: 'bold',
+        halign: 'center',
+        cellPadding: 3,
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [33, 33, 33],
+        font: fontLoaded ? fontName : 'helvetica',
+        halign: 'center',
+        lineColor: [200, 200, 200],
+        fillColor: [255, 255, 255],
+        cellPadding: 2,
+      },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 4)) {
+          data.cell.styles.fontStyle = 'bold';
+        }
+        if (isRtl) {
+          data.cell.text = data.cell.text.map(text => String(text).replace(/[0-9]/g, d => toArabicNumerals(d)));
+        }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+        const footerText = isRtl
+          ? `تم الإنشاء بواسطة نظام إدارة متقدم - ${toArabicNumerals(new Date().toLocaleDateString('ar-EG'))}`
+          : `Generated by Advanced Management System - ${new Date().toLocaleDateString('en-US')}`;
+        doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+
+        if (data.pageNumber === doc.getNumberOfPages()) {
+          doc.setFontSize(10);
+          doc.setTextColor(33, 33, 33);
+          const summaryY = data.cursor.y + 10;
+          doc.text(
+            isRtl ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)}` : `Total Products: ${totalItems}`,
+            20,
+            summaryY,
+            { align: isRtl ? 'right' : 'left' }
+          );
+          doc.text(
+            isRtl ? `إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة` : `Total Quantity: ${totalQuantity} units`,
+            20,
+            summaryY + 5,
+            { align: isRtl ? 'right' : 'left' }
+          );
+          doc.text(
+            isRtl ? `إجمالي المبلغ: ${formatPrice(totalPrice, isRtl, true)}` : `Total Amount: ${formatPrice(totalPrice, isRtl, true)}`,
+            20,
+            summaryY + 10,
+            { align: isRtl ? 'right' : 'left' }
+          );
+        }
+      },
+    });
+
+    const fileName = generateFileName('DailyOrdersSummary', monthName, isRtl, 'pdf');
+    doc.save(fileName);
+    toast.update('pdf-export', {
+      render: isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully',
+      type: 'success',
+      autoClose: 3000,
+    });
+  } catch (error) {
+    console.error('Error exporting PDF:', error);
+    toast.update('pdf-export', {
+      render: isRtl ? 'فشل في تصدير ملف PDF' : 'Failed to export PDF',
+      type: 'error',
+      autoClose: 3000,
+    });
+  }
+};
+
+const loadFont = async (doc: jsPDF, fontName: string) => {
+  try {
+    const fontUrls = {
+      regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
+      bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
+    };
+    const regularFontBytes = await fetch(fontUrls.regular).then((res) => res.arrayBuffer());
+    doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
+    doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
+    const boldFontBytes = await fetch(fontUrls.bold).then((res) => res.arrayBuffer());
+    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
+    doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
+    doc.setFont(fontName, 'normal');
+    return true;
+  } catch (error) {
+    console.error('Font loading error:', error);
+    return false;
+  }
+};
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return window.btoa(binary);
+};
+
+// Main DailyOrdersSummary component
 const DailyOrdersSummary: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -265,33 +442,27 @@ const DailyOrdersSummary: React.FC = () => {
         toast.warn(isRtl ? 'لا توجد طلبات، استخدام بيانات احتياطية' : 'No orders found, using fallback data');
         orders = inventory
           .filter((item: any) => item?.product?._id)
-          .flatMap((item: any) => {
-            return (item.movements || []).map((movement: any) => ({
-              status: 'completed',
-              createdAt: movement.createdAt || new Date().toISOString(),
-              branch: {
-                _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id,
+          .flatMap((item: any) => (item.movements || []).map((movement: any) => ({
+            status: 'completed',
+            createdAt: movement.createdAt || new Date().toISOString(),
+            branch: { _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id },
+            items: [{
+              product: {
+                _id: item.product._id,
+                name: item.product.name,
+                nameEn: item.product.nameEn,
+                code: item.product.code,
+                unit: item.product.unit,
+                unitEn: item.product.unitEn,
+                price: item.product.price,
               },
-              items: [
-                {
-                  product: {
-                    _id: item.product._id,
-                    name: item.product.name,
-                    nameEn: item.product.nameEn,
-                    code: item.product.code,
-                    unit: item.product.unit,
-                    unitEn: item.product.unitEn,
-                    price: item.product.price,
-                  },
-                  quantity: Math.abs(Number(movement.quantity) || 0),
-                  price: Number(item.product?.price) || 0,
-                  productId: item.product._id,
-                  unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
-                  sales: Number(item.product?.sales) || (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
-                },
-              ],
-            }));
-          });
+              quantity: Math.abs(Number(movement.quantity) || 0),
+              price: Number(item.product?.price) || 0,
+              productId: item.product._id,
+              unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
+              sales: Number(item.product?.sales) || (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
+            }],
+          })));
       }
       const orderMap = new Map<string, OrderRow>();
       orders.forEach((order: any) => {
@@ -337,9 +508,7 @@ const DailyOrdersSummary: React.FC = () => {
 
       for (const row of orderMap.values()) {
         const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id);
-        if (salesItem) {
-          row.actualSales = Number(salesItem.totalQuantity) || 0;
-        }
+        if (salesItem) row.actualSales = Number(salesItem.totalQuantity) || 0;
       }
 
       setOrderData(Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity));
@@ -358,17 +527,12 @@ const DailyOrdersSummary: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const filteredData = useMemo(() => {
-    return orderData.filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [orderData, searchTerm]);
-
+  const filteredData = useMemo(() => orderData.filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase())), [orderData, searchTerm]);
   const grandTotalQuantity = useMemo(() => filteredData.reduce((sum, row) => sum + row.totalQuantity, 0), [filteredData]);
   const grandTotalPrice = useMemo(() => filteredData.reduce((sum, row) => sum + row.totalPrice, 0), [filteredData]);
   const grandActualSales = useMemo(() => filteredData.reduce((sum, row) => sum + row.actualSales, 0), [filteredData]);
 
-  const getTooltipContent = (qty: number, isRtl: boolean) => {
-    return `${isRtl ? 'الكمية' : 'Quantity'}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`;
-  };
+  const getTooltipContent = (qty: number, isRtl: boolean) => `${isRtl ? 'الكمية: ' : 'Quantity: '}${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`;
 
   const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
@@ -380,100 +544,51 @@ const DailyOrdersSummary: React.FC = () => {
       isRtl ? 'الاسم' : 'Name',
     ];
     const rows = [
-      ...filteredData.map((row, index) => ({
-        unit: row.unit,
-        total: row.totalQuantity,
-        ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
-        code: row.code,
-        price: formatPrice(row.price, isRtl),
-        name: row.product,
-      })),
-      {
-        unit: '',
-        total: grandTotalQuantity,
-        ...Object.fromEntries(allBranches.map(branch => [branch, filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0)])),
-        code: '',
-        price: formatPrice(grandTotalPrice / grandTotalQuantity || 0, isRtl),
-        name: isRtl ? 'الإجمالي' : 'Total',
-      },
+      ...filteredData.map((row) => [
+        row.unit,
+        formatNumber(row.totalQuantity, isRtl),
+        ...allBranches.map(branch => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
+        row.code,
+        formatPrice(row.price, isRtl),
+        row.product,
+      ]),
+      [
+        '',
+        formatNumber(grandTotalQuantity, isRtl),
+        ...allBranches.map(branch => formatNumber(filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0), isRtl)),
+        '',
+        formatPrice(grandTotalPrice, isRtl, true),
+        isRtl ? 'الإجمالي' : 'Total',
+      ],
     ];
-    const dataRows = rows.map(row => [
-      row.unit,
-      row.total,
-      ...allBranches.map(branch => row[branch]),
-      row.code,
-      row.price,
-      row.name,
-    ]);
-    if (format === 'excel') {
-      toast.info(isRtl ? 'جارٍ إنشاء ملف Excel...' : 'Generating Excel...', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: false,
-        toastId: 'excel-export',
-      });
-      try {
-        const sheetData = isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows;
-        const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
-        const ws = XLSX.utils.json_to_sheet(sheetData, { header: sheetHeaders });
-        if (isRtl) {
-          ws['!views'] = [{ RTL: true }];
-        }
-        ws['!cols'] = [
-          { wch: 10 },
-          { wch: 10 },
-          ...allBranches.map(() => ({ wch: 10 })),
-          { wch: 10 },
-          { wch: 10 },
-          { wch: 25 },
-        ];
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, `Branch_Orders_${monthName}`);
-        XLSX.writeFile(wb, generateFileName('Branch_Orders', monthName, isRtl, 'xlsx'));
-        toast.update('excel-export', {
-          render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
-          type: 'success',
-          autoClose: 3000,
-        });
-      } catch (error) {
-        console.error('Error exporting Excel:', error);
-        toast.update('excel-export', {
-          render: isRtl ? 'فشل في تصدير ملف Excel' : 'Failed to export Excel',
-          type: 'error',
-          autoClose: 3000,
-        });
-      }
-    } else if (format === 'pdf') {
-      exportToPDF(dataRows, isRtl ? 'ملخص الطلبات لكل فرع' : 'Branch Orders Summary', monthName, headers, isRtl, filteredData.length, grandTotalQuantity, grandTotalPrice);
-    }
+    if (format === 'excel') exportToExcel(rows, headers, monthName, isRtl);
+    else if (format === 'pdf') exportToPDF(rows, isRtl ? 'ملخص الطلبات اليومية' : 'Daily Orders Summary', monthName, headers, isRtl, filteredData.length, grandTotalQuantity, grandTotalPrice);
   };
 
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
-    return (
-      <div className="text-center py-12 text-sm font-medium text-gray-700">
-        {isRtl ? 'لا يوجد صلاحية' : 'No access'}
-      </div>
-    );
+    return <div className="text-center py-12 text-sm font-medium text-gray-700">{isRtl ? 'لا يوجد صلاحية' : 'No access'}</div>;
   }
 
   return (
-    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
-      <div className="mb-8 bg-white shadow-md rounded-xl p-4">
-        <div className="flex flex-wrap gap-2 mb-4 justify-center">
-          {months.map(month => (
+    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
+      <div className="mb-8 bg-white shadow-lg rounded-xl p-6">
+        <div className={`flex flex-wrap gap-3 mb-6 justify-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+          {months.map((month) => (
             <Button
               key={month.value}
               variant={selectedMonth === month.value ? 'primary' : 'secondary'}
               onClick={() => setSelectedMonth(month.value)}
+              className="capitalize"
             >
               {month.label}
             </Button>
           ))}
         </div>
       </div>
-      <div className="mb-8">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `ملخص الطلبات لكل فرع - ${monthName}` : `Branch Orders Summary - ${monthName}`}</h2>
-          <div className="flex gap-2">
+      <div className={`mb-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
+          <h2 className="text-xl font-bold text-gray-900">{isRtl ? `ملخص الطلبات اليومية - ${monthName}` : `Daily Orders Summary - ${monthName}`}</h2>
+          <div className="flex gap-3">
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
@@ -495,9 +610,9 @@ const DailyOrdersSummary: React.FC = () => {
         <ProductSearchInput
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
+          placeholder={isRtl ? 'ابحث عن منتج...' : 'Search for product...'}
           ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
-          className="mt-4"
+          className="mt-6 w-full sm:w-1/2"
         />
       </div>
       {loading ? (
@@ -507,25 +622,25 @@ const DailyOrdersSummary: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+          className="overflow-x-auto rounded-xl shadow-lg border border-gray-200 bg-white"
         >
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-amber-50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة' : 'Unit'}</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'وحدة' : 'Unit'}</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
                 {allBranches.map((branch) => (
-                  <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                  <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[110px]">
                     {branch}
                   </th>
                 ))}
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'السعر' : 'Price'}</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[150px]">{isRtl ? 'الاسم' : 'Name'}</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'السعر' : 'Price'}</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[160px]">{isRtl ? 'الاسم' : 'Name'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredData.map((row, index) => (
+              {filteredData.map((row) => (
                 <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-700 text-center">{row.unit}</td>
                   <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
