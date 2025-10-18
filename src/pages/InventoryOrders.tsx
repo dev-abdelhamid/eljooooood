@@ -15,9 +15,7 @@ const normalizeText = (text: string) => {
     .replace(/ة/g, 'ه')
     .toLowerCase()
     .trim();
-}; 
-
-
+};
 interface Product {
   _id: string;
   name: string;
@@ -116,14 +114,14 @@ const QuantityInput = ({
     onChange(val);
   };
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       <button
         onClick={onDecrement}
-        className="w-7 h-7 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center disabled:opacity-50"
+        className="w-6 h-6 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
         </svg>
       </button>
@@ -133,16 +131,16 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-10 h-7 text-center border border-gray-200 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+        className="w-8 h-6 text-center border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-amber-500 focus:border-transparent bg-white"
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
         onClick={onIncrement}
-        className="w-7 h-7 bg-amber-600 hover:bg-amber-700 rounded-full flex items-center justify-center disabled:opacity-50"
+        className="w-6 h-6 bg-amber-500 hover:bg-amber-600 rounded-full flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
         disabled={max !== undefined && value >= max}
       >
-        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
         </svg>
       </button>
@@ -260,11 +258,11 @@ const InventoryOrders: React.FC = () => {
             .map((chef: any) => ({
               _id: chef._id,
               userId: chef.user._id,
-              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: chef.user?.nameEn || chef.nameEn,
+              name: chef.user?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: chef.user?.nameEn,
               displayName: isRtl
-                ? chef.user?.name || chef.name
-                : chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name,
+                ? chef.user?.name
+                : chef.user?.nameEn || chef.user?.name,
               department: chef.department
                 ? {
                     _id: chef.department._id || 'no-department',
@@ -277,6 +275,7 @@ const InventoryOrders: React.FC = () => {
                 : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
               status: chef.status || 'active',
             }))
+            .sort((a: Chef, b: Chef) => a.displayName.localeCompare(b.displayName, language))
         : []);
       setProducts(Array.isArray(productsResponse.data)
         ? productsResponse.data
@@ -669,18 +668,28 @@ const InventoryOrders: React.FC = () => {
   );
   const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE[viewMode]);
 
+  // Debug: Log chefs data
+  useEffect(() => {
+    if (chefs.length === 0 && !loading) {
+      console.warn('No chefs loaded:', chefs);
+      setError(isRtl ? 'لم يتم تحميل الشيفات' : 'No chefs loaded');
+    } else {
+      console.log('Chefs loaded:', chefs);
+    }
+  }, [chefs, loading, isRtl]);
+
   // Render
   if (loading) {
-    return <div className="text-center py-4">{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>;
+    return <div className="text-center py-4 text-xs">{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>;
   }
 
   if (error) {
     return (
-      <div className="max-w-md mx-auto text-center p-6 bg-red-50 rounded-xl border border-red-100">
-        <p className="text-red-600 text-sm mb-4">{error}</p>
+      <div className="max-w-md mx-auto text-center p-4 bg-red-50 rounded-lg border border-red-100">
+        <p className="text-red-600 text-xs mb-2">{error}</p>
         <button
           onClick={() => fetchData()}
-          className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm"
+          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
           aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
         >
           {isRtl ? 'إعادة المحاولة' : 'Retry'}
@@ -690,23 +699,23 @@ const InventoryOrders: React.FC = () => {
   }
 
   return (
-    <div className={`px-4 py-6 max-w-7xl mx-auto ${isRtl ? 'dir-rtl' : ''}`}>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div className={`px-3 py-4 max-w-6xl mx-auto ${isRtl ? 'dir-rtl' : ''}`}>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
         <div className="w-full sm:w-auto text-center sm:text-start">
-          <h1 className="text-2xl font-bold text-gray-900">{isRtl ? 'طلبات الإنتاج' : 'Production Orders'}</h1>
-          <p className="text-sm text-gray-600 mt-1">{isRtl ? 'إدارة طلبات إنتاج المخزون' : 'Manage inventory production orders'}</p>
+          <h1 className="text-base font-semibold text-gray-900">{isRtl ? 'طلبات الإنتاج' : 'Production Orders'}</h1>
+          <p className="text-xs text-gray-500 mt-1">{isRtl ? 'إدارة طلبات إنتاج المخزون' : 'Manage inventory production orders'}</p>
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
         >
           {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
         </button>
       </div>
-      <div className="p-6 bg-white shadow-md rounded-xl border border-gray-200">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="p-4 bg-white shadow-sm rounded-lg border border-gray-100">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
           <div>
-            <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+            <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
               {isRtl ? 'بحث' : 'Search'}
             </label>
             <input
@@ -714,17 +723,17 @@ const InventoryOrders: React.FC = () => {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-              className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm p-2"
+              className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs p-2"
             />
           </div>
           <div>
-            <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+            <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
               {isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
             </label>
             <select
               value={filterStatus}
               onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-              className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm p-2"
+              className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs p-2"
             >
               <option value="">{isRtl ? 'كل الحالات' : 'All Statuses'}</option>
               <option value="requested">{isRtl ? 'مطلوب' : 'Requested'}</option>
@@ -738,13 +747,13 @@ const InventoryOrders: React.FC = () => {
           </div>
           {['admin', 'production_manager'].includes(user.role) && (
             <div>
-              <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+              <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                 {isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
               </label>
               <select
                 value={filterDepartment}
                 onChange={e => { setFilterDepartment(e.target.value); setCurrentPage(1); }}
-                className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm p-2"
+                className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs p-2"
               >
                 <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
                 {departments.map(dept => (
@@ -754,28 +763,28 @@ const InventoryOrders: React.FC = () => {
             </div>
           )}
           <div>
-            <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+            <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
               {isRtl ? 'عرض' : 'View'}
             </label>
             <select
               value={viewMode}
               onChange={e => { setViewMode(e.target.value as 'card' | 'table'); setCurrentPage(1); }}
-              className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm p-2"
+              className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs p-2"
             >
               <option value="table">{isRtl ? 'جدول' : 'Table'}</option>
               <option value="card">{isRtl ? 'بطاقات' : 'Cards'}</option>
             </select>
           </div>
         </div>
-        <div className="mt-4 text-sm text-gray-600">
+        <div className="mt-2 text-xs text-gray-500">
           {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
         </div>
       </div>
-      <div className="mt-8">
+      <div className="mt-4">
         {paginatedOrders.length === 0 ? (
-          <div className="p-8 text-center bg-white shadow-md rounded-xl border border-gray-200">
-            <p className="text-lg font-medium text-gray-700 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</p>
-            <p className="text-sm text-gray-500">
+          <div className="p-6 text-center bg-white shadow-sm rounded-lg border border-gray-100">
+            <p className="text-sm font-medium text-gray-600 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</p>
+            <p className="text-xs text-gray-400">
               {filterStatus || filterDepartment || debouncedSearchQuery
                 ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
                 : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
@@ -783,21 +792,21 @@ const InventoryOrders: React.FC = () => {
           </div>
         ) : viewMode === 'table' ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-gray-300">
+            <table className="min-w-full bg-white border border-gray-100">
               <thead>
-                <tr className="bg-gray-100">
-                  <th className={`py-2 px-4 border-b ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
-                  <th className={`py-2 px-4 border-b ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'المنتجات' : 'Products'}</th>
-                  <th className={`py-2 px-4 border-b ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'الحالة' : 'Status'}</th>
-                  <th className={`py-2 px-4 border-b ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'إنشاء بواسطة' : 'Created By'}</th>
-                  <th className={`py-2 px-4 border-b ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'الإجراءات' : 'Actions'}</th>
+                <tr className="bg-gray-50">
+                  <th className={`py-2 px-3 border-b text-xs ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
+                  <th className={`py-2 px-3 border-b text-xs ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'المنتجات' : 'Products'}</th>
+                  <th className={`py-2 px-3 border-b text-xs ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'الحالة' : 'Status'}</th>
+                  <th className={`py-2 px-3 border-b text-xs ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'إنشاء بواسطة' : 'Created By'}</th>
+                  <th className={`py-2 px-3 border-b text-xs ${isRtl ? 'text-right' : 'text-left'}`}>{isRtl ? 'الإجراءات' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedOrders.map(order => (
                   <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="py-2 px-4 border-b">{order.orderNumber}</td>
-                    <td className="py-2 px-4 border-b">
+                    <td className="py-2 px-3 border-b text-xs">{order.orderNumber}</td>
+                    <td className="py-2 px-3 border-b text-xs">
                       <ul className="list-disc pr-4">
                         {order.items.map(item => (
                           <li key={item._id}>
@@ -806,7 +815,7 @@ const InventoryOrders: React.FC = () => {
                             {isRtl ? 'الشيف: ' : 'Chef: '}
                             {item.assignedTo ? item.assignedTo.displayName : (
                               <button
-                                className="text-blue-500 hover:underline text-sm"
+                                className="text-blue-500 hover:underline text-xs"
                                 onClick={() => {
                                   if (order.createdByRole === 'chef') {
                                     setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
@@ -837,7 +846,7 @@ const InventoryOrders: React.FC = () => {
                         ))}
                       </ul>
                     </td>
-                    <td className="py-2 px-4 border-b">
+                    <td className="py-2 px-3 border-b text-xs">
                       {isRtl
                         ? order.status === 'requested' ? 'مطلوب' :
                           order.status === 'pending' ? 'قيد الانتظار' :
@@ -848,11 +857,11 @@ const InventoryOrders: React.FC = () => {
                         : order.status
                       }
                     </td>
-                    <td className="py-2 px-4 border-b">{order.createdBy}</td>
-                    <td className="py-2 px-4 border-b">
+                    <td className="py-2 px-3 border-b text-xs">{order.createdBy}</td>
+                    <td className="py-2 px-3 border-b text-xs">
                       {order.items.some(item => !item.assignedTo) && (
                         <button
-                          className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm"
+                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
                           onClick={() => {
                             if (order.createdByRole === 'chef') {
                               setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
@@ -886,12 +895,12 @@ const InventoryOrders: React.FC = () => {
             </table>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {paginatedOrders.map(order => (
-              <div key={order.id} className="p-4 bg-white shadow-md rounded-xl border border-gray-200">
-                <h3 className="text-lg font-medium">{order.orderNumber}</h3>
-                <p className="text-sm text-gray-600">{isRtl ? 'التاريخ: ' : 'Date: '}{order.date}</p>
-                <p className="text-sm text-gray-600">
+              <div key={order.id} className="p-3 bg-white shadow-sm rounded-lg border border-gray-100">
+                <h3 className="text-sm font-medium">{order.orderNumber}</h3>
+                <p className="text-xs text-gray-500">{isRtl ? 'التاريخ: ' : 'Date: '}{order.date}</p>
+                <p className="text-xs text-gray-500">
                   {isRtl ? 'الحالة: ' : 'Status: '}
                   {isRtl
                     ? order.status === 'requested' ? 'مطلوب' :
@@ -903,15 +912,15 @@ const InventoryOrders: React.FC = () => {
                     : order.status
                   }
                 </p>
-                <ul className="list-disc pr-4 mt-2">
+                <ul className="list-disc pr-4 mt-1 text-xs">
                   {order.items.map(item => (
-                    <li key={item._id} className="text-sm">
+                    <li key={item._id}>
                       {item.displayProductName} ({item.quantity} {item.displayUnit})
                       <br />
                       {isRtl ? 'الشيف: ' : 'Chef: '}
                       {item.assignedTo ? item.assignedTo.displayName : (
                         <button
-                          className="text-blue-500 hover:underline text-sm"
+                          className="text-blue-500 hover:underline text-xs"
                           onClick={() => {
                             if (order.createdByRole === 'chef') {
                               setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
@@ -935,7 +944,7 @@ const InventoryOrders: React.FC = () => {
                 </ul>
                 {order.items.some(item => !item.assignedTo) && (
                   <button
-                    className="mt-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm"
+                    className="mt-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
                     onClick={() => {
                       if (order.createdByRole === 'chef') {
                         setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
@@ -967,12 +976,12 @@ const InventoryOrders: React.FC = () => {
           </div>
         )}
         {totalPages > 1 && (
-          <div className="mt-4 flex justify-center gap-2">
+          <div className="mt-3 flex justify-center gap-1">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
               <button
                 key={page}
                 onClick={() => setCurrentPage(page)}
-                className={`px-3 py-1 rounded-md ${page === currentPage ? 'bg-amber-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}
+                className={`px-2 py-1 rounded-md text-xs ${page === currentPage ? 'bg-amber-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
               >
                 {page}
               </button>
@@ -984,30 +993,38 @@ const InventoryOrders: React.FC = () => {
       {/* Assign Chefs Modal */}
       {isAssignModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">{isRtl ? 'تعيين شيفات' : 'Assign Chefs'}</h2>
-            {assignFormData.items.map((item, index) => (
-              <div key={index} className="mb-4">
-                <p className="text-sm">{item.product} ({item.quantity} {item.unit})</p>
-                <select
-                  value={item.assignedTo}
-                  onChange={e => {
-                    const newItems = [...assignFormData.items];
-                    newItems[index].assignedTo = e.target.value;
-                    setAssignFormData({ items: newItems });
-                  }}
-                  className="w-full p-2 border rounded-md mt-2 text-sm"
-                >
-                  <option value="">{isRtl ? 'اختر شيف' : 'Select Chef'}</option>
-                  {chefs
-                    .filter(c => c.department._id === orders.find(o => o.items.some(i => i._id === item.itemId))?.items.find(i => i._id === item.itemId)?.department._id)
-                    .map(chef => (
-                      <option key={chef.userId} value={chef.userId}>{chef.displayName}</option>
-                    ))}
-                </select>
-              </div>
-            ))}
-            {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
+          <div className="bg-white p-4 rounded-lg max-w-sm w-full max-h-[80vh] overflow-y-auto">
+            <h2 className="text-base font-semibold mb-3">{isRtl ? 'تعيين شيفات' : 'Assign Chefs'}</h2>
+            {assignFormData.items.map((item, index) => {
+              const order = orders.find(o => o.items.some(i => i._id === item.itemId));
+              const product = order?.items.find(i => i._id === item.itemId);
+              const departmentId = product?.department._id;
+              return (
+                <div key={index} className="mb-3">
+                  <p className="text-xs">{item.product} ({item.quantity} {item.unit})</p>
+                  <select
+                    value={item.assignedTo}
+                    onChange={e => {
+                      const newItems = [...assignFormData.items];
+                      newItems[index].assignedTo = e.target.value;
+                      setAssignFormData({ items: newItems });
+                    }}
+                    className="w-full p-2 border rounded-md mt-1 text-xs"
+                  >
+                    <option value="">{isRtl ? 'اختر شيف' : 'Select Chef'}</option>
+                    {chefs
+                      .filter(c => !departmentId || c.department._id === departmentId)
+                      .map(chef => (
+                        <option key={chef.userId} value={chef.userId}>{chef.displayName}</option>
+                      ))}
+                  </select>
+                  {chefs.filter(c => !departmentId || c.department._id === departmentId).length === 0 && (
+                    <p className="text-red-600 text-xs mt-1">{isRtl ? 'لا يوجد شيفات متاحة لهذا القسم' : 'No chefs available for this department'}</p>
+                  )}
+                </div>
+              );
+            })}
+            {error && <p className="text-red-600 text-xs mb-3">{error}</p>}
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => {
@@ -1015,14 +1032,14 @@ const InventoryOrders: React.FC = () => {
                   setAssignFormData({ items: [] });
                   setError('');
                 }}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2 text-sm"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-3 py-1 text-xs"
               >
                 {isRtl ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 onClick={() => assignChefs(assignFormData.items[0].itemId.split('-')[0])}
                 disabled={submitting || assignFormData.items.some(item => !item.assignedTo)}
-                className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm disabled:opacity-50"
+                className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs disabled:opacity-50"
               >
                 {submitting ? (isRtl ? 'جاري التعيين...' : 'Assigning...') : (isRtl ? 'تعيين' : 'Assign')}
               </button>
@@ -1034,26 +1051,26 @@ const InventoryOrders: React.FC = () => {
       {/* Create Order Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">{isRtl ? 'إنشاء طلب إنتاج جديد' : 'Create New Production Order'}</h2>
-            <div className="mb-4">
-              <label className={`block text-sm font-medium text-gray-700 mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+          <div className="bg-white p-4 rounded-lg max-w-sm w-full max-h-[80vh] overflow-y-auto">
+            <h2 className="text-base font-semibold mb-3">{isRtl ? 'إنشاء طلب إنتاج جديد' : 'Create New Production Order'}</h2>
+            <div className="mb-3">
+              <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                 {isRtl ? 'ملاحظات' : 'Notes'}
               </label>
               <textarea
                 value={createFormData.notes}
                 onChange={e => setCreateFormData({ ...createFormData, notes: e.target.value })}
                 placeholder={isRtl ? 'أدخل ملاحظات (اختياري)' : 'Enter notes (optional)'}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
-                rows={3}
+                className="w-full p-2 border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-amber-500"
+                rows={2}
               />
             </div>
             <div>
-              <label className={`block text-sm font-medium text-gray-700 mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+              <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                 {isRtl ? 'العناصر' : 'Items'}
               </label>
               {createFormData.items.map((item, index) => (
-                <div key={index} className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <div key={index} className="mb-3 p-3 bg-gray-50 rounded-md border border-gray-100">
                   <select
                     value={item.productId}
                     onChange={e => {
@@ -1062,11 +1079,11 @@ const InventoryOrders: React.FC = () => {
                       setCreateFormData({ ...createFormData, items: newItems });
                       setFormErrors({ ...formErrors, [`item_${index}_productId`]: undefined });
                     }}
-                    className="w-full p-2 border rounded-md mb-2 text-sm"
+                    className="w-full p-2 border rounded-md mb-1 text-xs"
                   >
                     <option value="">{isRtl ? 'اختر منتج' : 'Select Product'}</option>
                     {products
-                      .filter(p => user?.role === 'chef' ? p.department._id === user.department?._id : true)
+                      .filter(p => user?.role === 'chef' && user.department ? p.department._id === user.department._id : true)
                       .map(p => (
                         <option key={p._id} value={p._id}>
                           {isRtl ? p.name : p.nameEn || p.name} ({translateUnit(p.unit, isRtl)})
@@ -1074,11 +1091,11 @@ const InventoryOrders: React.FC = () => {
                       ))}
                   </select>
                   {formErrors[`item_${index}_productId`] && (
-                    <p className="text-red-600 text-xs mb-2">{formErrors[`item_${index}_productId`]}</p>
+                    <p className="text-red-600 text-xs mb-1">{formErrors[`item_${index}_productId`]}</p>
                   )}
-                  <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <div className="flex-1">
-                      <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                      <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                         {isRtl ? 'الكمية' : 'Quantity'}
                       </label>
                       <QuantityInput
@@ -1108,7 +1125,7 @@ const InventoryOrders: React.FC = () => {
                     </div>
                     {['admin', 'production_manager'].includes(user.role) && item.productId && (
                       <div className="flex-1">
-                        <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <label className={`block text-xs font-medium text-gray-600 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                           {isRtl ? 'تعيين شيف' : 'Assign Chef'}
                         </label>
                         <select
@@ -1119,7 +1136,7 @@ const InventoryOrders: React.FC = () => {
                             setCreateFormData({ ...createFormData, items: newItems });
                             setFormErrors({ ...formErrors, [`item_${index}_assignedTo`]: undefined });
                           }}
-                          className="w-full p-2 border rounded-md text-sm"
+                          className="w-full p-2 border rounded-md text-xs"
                         >
                           <option value="">{isRtl ? 'اختر شيف' : 'Select Chef'}</option>
                           {chefs
@@ -1131,6 +1148,9 @@ const InventoryOrders: React.FC = () => {
                         {formErrors[`item_${index}_assignedTo`] && (
                           <p className="text-red-600 text-xs mt-1">{formErrors[`item_${index}_assignedTo`]}</p>
                         )}
+                        {chefs.filter(c => c.department._id === products.find(p => p._id === item.productId)?.department._id).length === 0 && (
+                          <p className="text-red-600 text-xs mt-1">{isRtl ? 'لا يوجد شيفات متاحة لهذا القسم' : 'No chefs available for this department'}</p>
+                        )}
                       </div>
                     )}
                     {createFormData.items.length > 1 && (
@@ -1139,9 +1159,9 @@ const InventoryOrders: React.FC = () => {
                           const newItems = createFormData.items.filter((_, i) => i !== index);
                           setCreateFormData({ ...createFormData, items: newItems });
                         }}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg self-start sm:self-end"
+                        className="p-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-md self-start sm:self-end"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
                         </svg>
                       </button>
@@ -1151,34 +1171,34 @@ const InventoryOrders: React.FC = () => {
               ))}
               <button
                 onClick={() => setCreateFormData({ ...createFormData, items: [...createFormData.items, { productId: '', quantity: 1 }] })}
-                className={`flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm ${isRtl ? 'justify-end' : 'justify-start'}`}
+                className={`flex items-center gap-1 text-amber-500 hover:text-amber-600 text-xs ${isRtl ? 'justify-end' : 'justify-start'}`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                 </svg>
                 {isRtl ? 'إضافة عنصر' : 'Add Item'}
               </button>
             </div>
             {formErrors.form && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-600 text-sm">
+              <div className="p-2 bg-red-50 border border-red-100 rounded-md text-red-600 text-xs">
                 {formErrors.form}
               </div>
             )}
-            <div className="flex justify-end gap-2 mt-4">
+            <div className="flex justify-end gap-2 mt-3">
               <button
                 onClick={() => {
                   setIsCreateModalOpen(false);
                   setCreateFormData({ notes: '', items: [{ productId: '', quantity: 1 }] });
                   setFormErrors({});
                 }}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2 text-sm"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-3 py-1 text-xs"
               >
                 {isRtl ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 onClick={createOrder}
                 disabled={submitting === 'create' || createFormData.items.length === 0}
-                className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm disabled:opacity-50"
+                className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs disabled:opacity-50"
               >
                 {submitting === 'create' ? (isRtl ? 'جارٍ الإنشاء...' : 'Creating...') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
               </button>
