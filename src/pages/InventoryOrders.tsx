@@ -780,19 +780,6 @@ export const InventoryOrders: React.FC = () => {
     });
   }, [filteredOrders, state.sortBy, state.sortOrder, calculateTotalQuantity]);
 
-  const paginatedOrders = useMemo(
-    () =>
-      sortedOrders.slice(
-        (state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode],
-        state.currentPage * ORDERS_PER_PAGE[state.viewMode]
-      ),
-    [sortedOrders, state.currentPage, state.viewMode]
-  );
-
-  const totalPages = useMemo(
-    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.viewMode]
-  );
 
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
