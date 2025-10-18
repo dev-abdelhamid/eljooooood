@@ -1161,7 +1161,7 @@ export const InventoryOrders: React.FC = () => {
                     <Button
                       variant="primary"
                       onClick={() => fetchData()}
-                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm font-medium shadow transition-all duration-200"
+                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
                       aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                     >
                       {isRtl ? 'إعادة المحاولة' : 'Retry'}
