@@ -46,6 +46,8 @@ export interface FactoryOrderItem {
   status: 'pending' | 'assigned' | 'completed';
 }
 
+
+
 export interface FactoryOrder {
   id: string;
   orderNumber: string;
