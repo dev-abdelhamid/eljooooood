@@ -79,7 +79,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     if (!selectedOrder || !user) return;
 
     const updatedItems = selectedOrder.items.filter(item => !item.assignedTo).map((item) => {
-      const departmentId = item.department._id || 'no-department';
+      const departmentId = typeof item.department === 'object' ? item.department?._id : item.department || 'no-department';
       const availableChefs = availableChefsByDepartment.get(departmentId) || [];
       let assignedTo = '';
       if (availableChefs.length === 1) {
@@ -126,7 +126,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         ) : (
           assignFormData.items.map((item, index) => {
             const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
-            const departmentId = orderItem?.department._id || 'no-department';
+            const departmentId = typeof orderItem?.department === 'object' ? orderItem?.department?._id : orderItem?.department || 'no-department';
             const availableChefs = availableChefsByDepartment.get(departmentId) || [];
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
