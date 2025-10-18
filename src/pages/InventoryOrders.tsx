@@ -9,7 +9,7 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, inventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
@@ -20,7 +20,7 @@ import { OrderCard } from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
-// مكون QuantityInput
+// QuantityInput component
 const QuantityInput = ({
   value,
   onChange,
@@ -79,7 +79,7 @@ const QuantityInput = ({
   );
 };
 
-// دالة normalizeText
+// normalizeText function
 const normalizeText = (text: string) => {
   return text
     .normalize('NFD')
@@ -91,7 +91,7 @@ const normalizeText = (text: string) => {
     .trim();
 };
 
-// واجهة الحالة
+// State interface
 interface State {
   orders: FactoryOrder[];
   selectedOrder: FactoryOrder | null;
@@ -116,7 +116,7 @@ interface State {
   formErrors: Record<string, string>;
 }
 
-// الـ initialState
+// initialState
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -141,7 +141,7 @@ const initialState: State = {
   formErrors: {},
 };
 
-// دالة reducer
+// Reducer function
 const reducer = (state: State, action: any): State => {
   switch (action.type) {
     case 'SET_ORDERS':
@@ -245,7 +245,7 @@ const reducer = (state: State, action: any): State => {
                               username: assignment.assignedTo.username,
                               name: assignment.assignedTo.name,
                               nameEn: assignment.assignedTo.nameEn,
-                              displayName: isRtl
+                              displayName: state.isRtl
                                 ? assignment.assignedTo.name
                                 : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                               department: assignment.assignedTo.department,
@@ -274,7 +274,7 @@ const reducer = (state: State, action: any): State => {
                               username: assignment.assignedTo.username,
                               name: assignment.assignedTo.name,
                               nameEn: assignment.assignedTo.nameEn,
-                              displayName: isRtl
+                              displayName: state.isRtl
                                 ? assignment.assignedTo.name
                                 : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                               department: assignment.assignedTo.department,
@@ -297,14 +297,15 @@ const reducer = (state: State, action: any): State => {
   }
 };
 
-// الثوابت
+// Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]> = {
   requested: ['approved', 'cancelled'],
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
   in_production: ['completed', 'cancelled'],
-  completed: [],
+  completed: ['stocked'],
+  stocked: [],
   cancelled: [],
 };
 const statusOptions = [
@@ -314,6 +315,7 @@ const statusOptions = [
   { value: 'approved', label: 'approved' },
   { value: 'in_production', label: 'in_production' },
   { value: 'completed', label: 'completed' },
+  { value: 'stocked', label: 'stocked' },
   { value: 'cancelled', label: 'cancelled' },
 ];
 const sortOptions = [
@@ -321,7 +323,7 @@ const sortOptions = [
   { value: 'totalQuantity', label: 'sort_total_quantity' },
 ];
 
-// ترجمة الوحدات
+// Translate unit function
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -336,7 +338,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// مكون InventoryOrders
+// InventoryOrders component
 export const InventoryOrders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -347,7 +349,7 @@ export const InventoryOrders: React.FC = () => {
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
 
-  // Debounce للبحث
+  // Debounce for search
   const [searchInput, setSearchInput] = useState('');
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -364,7 +366,7 @@ export const InventoryOrders: React.FC = () => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
-  // جلب البيانات
+  // Fetch data
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user || !['chef', 'production', 'admin'].includes(user.role)) {
@@ -385,7 +387,6 @@ export const InventoryOrders: React.FC = () => {
           chefsAPI.getAll(),
           productsAPI.getAll(),
         ]);
-        console.log('Chefs Response:', chefsResponse.data); // تسجيل استجابة الشيفات
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
           .filter((order: any) => order && order._id && order.orderNumber)
@@ -433,11 +434,12 @@ export const InventoryOrders: React.FC = () => {
                   status: item.status || 'pending',
                 }))
               : [],
-            status: order.status || 'pending',
+            status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            createdByRole: order.createdBy?.role || 'unknown',
           }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -519,7 +521,7 @@ export const InventoryOrders: React.FC = () => {
     [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, isRtl, language]
   );
 
-  // أحداث WebSocket
+  // WebSocket events
   useEffect(() => {
     if (!user || !['chef', 'production', 'admin'].includes(user.role) || !socket) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
@@ -590,11 +592,12 @@ export const InventoryOrders: React.FC = () => {
               status: item.status || 'pending',
             }))
           : [],
-        status: order.status || 'pending',
+        status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
         notes: order.notes || '',
         priority: order.priority || 'medium',
         createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        createdByRole: order.createdBy?.role || 'unknown',
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
@@ -641,7 +644,7 @@ export const InventoryOrders: React.FC = () => {
     };
   }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
 
-  // تحقق من صحة النموذج
+  // Validate create form
   const validateCreateForm = useCallback(() => {
     const errors: Record<string, string> = {};
     const t = isRtl
@@ -667,7 +670,7 @@ export const InventoryOrders: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [state.createFormData, isRtl]);
 
-  // إنشاء طلب جديد
+  // Create new order
   const createOrder = useCallback(async () => {
     if (!user?.id || !validateCreateForm()) {
       return;
@@ -675,11 +678,21 @@ export const InventoryOrders: React.FC = () => {
     dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
     try {
       const orderNumber = `ORD-${Date.now()}`;
+      const isAdminOrProduction = ['admin', 'production'].includes(user.role);
+      const initialStatus = isAdminOrProduction ? 'approved' : 'requested';
+      const items = state.createFormData.items.map((i) => ({
+        product: i.productId,
+        quantity: i.quantity,
+        assignedTo: user.role === 'chef' ? user.id : undefined,
+        status: user.role === 'chef' ? 'assigned' : 'pending',
+      }));
       const response = await factoryOrdersAPI.create({
         orderNumber,
-        items: state.createFormData.items.map((i) => ({ product: i.productId, quantity: i.quantity })),
+        items,
         notes: state.createFormData.notes,
         priority: 'medium',
+        status: initialStatus,
+        createdBy: user.id,
       });
       const newOrder: FactoryOrder = {
         id: response.data._id,
@@ -702,13 +715,31 @@ export const InventoryOrders: React.FC = () => {
               ? item.product.department.name
               : item.product.department.nameEn || item.product.department.name,
           },
-          status: item.status || 'pending',
+          assignedTo: item.assignedTo
+            ? {
+                _id: item.assignedTo._id,
+                username: item.assignedTo.username,
+                name: item.assignedTo.name,
+                nameEn: item.assignedTo.nameEn,
+                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                department: {
+                  _id: item.assignedTo.department._id,
+                  name: item.assignedTo.department.name,
+                  nameEn: item.assignedTo.department.nameEn,
+                  displayName: isRtl
+                    ? item.assignedTo.department.name
+                    : item.assignedTo.department.nameEn || item.assignedTo.department.name,
+                },
+              }
+            : undefined,
+          status: item.status || (user.role === 'chef' ? 'assigned' : 'pending'),
         })),
-        status: response.data.status || 'pending',
+        status: response.data.status || initialStatus,
         date: formatDate(new Date(response.data.createdAt), language),
         notes: response.data.notes || '',
         priority: response.data.priority || 'medium',
         createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        createdByRole: user.role,
       };
       dispatch({ type: 'ADD_ORDER', payload: newOrder });
       dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
@@ -730,7 +761,7 @@ export const InventoryOrders: React.FC = () => {
     }
   }, [user, state.createFormData, isRtl, socket, isConnected, emit, language, validateCreateForm]);
 
-  // معالجات أخرى
+  // Update order status
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: FactoryOrder['status']) => {
       const order = state.orders.find((o) => o.id === orderId);
@@ -738,9 +769,26 @@ export const InventoryOrders: React.FC = () => {
         toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
+      if (newStatus === 'approved' && !['admin', 'production'].includes(user.role)) {
+        toast.error(isRtl ? 'غير مصرح بالموافقة' : 'Not authorized to approve', { position: isRtl ? 'top-left' : 'top-right' });
+        return;
+      }
+      if (newStatus === 'stocked' && !['admin', 'production'].includes(user.role)) {
+        toast.error(isRtl ? 'غير مصرح بتأكيد إضافة المخزون' : 'Not authorized to confirm inventory', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
         await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
+        if (newStatus === 'stocked') {
+          const items = order.items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          }));
+          await inventoryAPI.addToInventory({ orderId, items });
+        }
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
@@ -757,9 +805,53 @@ export const InventoryOrders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [state.orders, isRtl, socket, isConnected, emit]
+    [user, state.orders, isRtl, socket, isConnected, emit]
   );
 
+  // Confirm item production completion
+  const confirmItemCompletion = useCallback(
+    async (orderId: string, itemId: string) => {
+      if (!user?.id || user.role !== 'chef') {
+        toast.error(isRtl ? 'غير مصرح بتأكيد الإنتاج' : 'Not authorized to confirm production', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+      const order = state.orders.find((o) => o.id === orderId);
+      if (!order) {
+        toast.error(isRtl ? 'الطلب غير موجود' : 'Order not found', { position: isRtl ? 'top-left' : 'top-right' });
+        return;
+      }
+      const item = order.items.find((i) => i._id === itemId);
+      if (!item || item.assignedTo?._id !== user.id) {
+        toast.error(isRtl ? 'غير مصرح بتأكيد هذا العنصر' : 'Not authorized to confirm this item', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: itemId });
+      try {
+        await factoryOrdersAPI.updateItemStatus(orderId, itemId, { status: 'completed' });
+        dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status: 'completed' } });
+        if (socket && isConnected) {
+          emit('itemStatusUpdated', { orderId, itemId, status: 'completed' });
+        }
+        toast.success(isRtl ? 'تم تأكيد إكمال الإنتاج' : 'Production completion confirmed', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } catch (err: any) {
+        console.error('Confirm item completion error:', err.message);
+        toast.error(isRtl ? `فشل في تأكيد الإنتاج: ${err.message}` : `Failed to confirm production: ${err.message}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [user, state.orders, isRtl, socket, isConnected, emit]
+  );
+
+  // Assign chefs
   const assignChefs = useCallback(
     async (orderId: string) => {
       if (!user?.id || state.assignFormData.items.some((item) => !item.assignedTo)) {
@@ -771,7 +863,6 @@ export const InventoryOrders: React.FC = () => {
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
         const response = await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
-        console.log('Assign Chefs API Response:', response.data);
         const items = state.assignFormData.items.map((item) => ({
           _id: item.itemId,
           assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
@@ -808,8 +899,15 @@ export const InventoryOrders: React.FC = () => {
     [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
   );
 
+  // Open assign modal
   const openAssignModal = useCallback(
     (order: FactoryOrder) => {
+      if (order.createdByRole === 'chef') {
+        toast.info(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
       if (order.status !== 'approved') {
         toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
           position: isRtl ? 'top-left' : 'top-right',
@@ -845,7 +943,7 @@ export const InventoryOrders: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  // التحقق من تحميل الشيفات
+  // Check for chefs loading
   useEffect(() => {
     if (!state.chefs.length && !state.loading && state.isAssignModalOpen) {
       console.warn('No chefs loaded, retrying fetch...');
@@ -853,7 +951,7 @@ export const InventoryOrders: React.FC = () => {
     }
   }, [state.chefs, state.loading, state.isAssignModalOpen, fetchData]);
 
-  // تصفية وترتيب الطلبات
+  // Filter and sort orders
   const filteredOrders = useMemo(() => {
     const normalizedQuery = normalizeText(state.debouncedSearchQuery);
     return state.orders
@@ -955,6 +1053,7 @@ export const InventoryOrders: React.FC = () => {
                           approved: 'تم الموافقة',
                           in_production: 'في الإنتاج',
                           completed: 'مكتمل',
+                          stocked: 'مخزن',
                           cancelled: 'ملغى',
                         }[opt.value]
                       : opt.label,
@@ -1079,11 +1178,12 @@ export const InventoryOrders: React.FC = () => {
                       {state.viewMode === 'table' ? (
                         <OrderTable
                           orders={paginatedOrders}
-                          calculateAdjustedTotal={() => ''} // لا يوجد إجمالي للطلبات
+                          calculateAdjustedTotal={() => ''} // No total for orders
                           calculateTotalQuantity={calculateTotalQuantity}
                           translateUnit={translateUnit}
                           updateOrderStatus={updateOrderStatus}
                           openAssignModal={openAssignModal}
+                          confirmItemCompletion={confirmItemCompletion}
                           submitting={state.submitting}
                           isRtl={isRtl}
                           startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
@@ -1103,6 +1203,7 @@ export const InventoryOrders: React.FC = () => {
                                 translateUnit={translateUnit}
                                 updateOrderStatus={updateOrderStatus}
                                 openAssignModal={openAssignModal}
+                                confirmItemCompletion={confirmItemCompletion}
                                 submitting={state.submitting}
                                 isRtl={isRtl}
                               />
@@ -1176,7 +1277,9 @@ export const InventoryOrders: React.FC = () => {
                                 ...state.products
                                   .filter(
                                     (product) =>
-                                      user?.role === 'production' && user?.department
+                                      user?.role === 'chef' && user?.department
+                                        ? product.department._id === user.department._id
+                                        : user?.role === 'production' && user?.department
                                         ? product.department._id === user.department._id
                                         : true
                                   )
@@ -1289,7 +1392,7 @@ export const InventoryOrders: React.FC = () => {
                             dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
                           }}
                           className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium shadow transition-all duration-200"
-                          aria-label={isRtl ? 'إلغاء' : '                        Cancel'}
+                          aria-label={isRtl ? 'إلغاء' : 'Cancel'}
                         >
                           {isRtl ? 'إلغاء' : 'Cancel'}
                         </Button>
