@@ -34,7 +34,7 @@ const QuantityInput = ({
   onDecrement: () => void;
   max?: number;
 }) => {
-  const { language } = useLanguage();
+  const { language } from useLanguage();
   const isRtl = language === 'ar';
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
@@ -49,14 +49,14 @@ const QuantityInput = ({
     onChange(val);
   };
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       <button
         onClick={onDecrement}
-        className="w-7 h-7 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
-        <MinusCircle className="w-4 h-4" />
+        <MinusCircle className="w-3 h-3" />
       </button>
       <input
         type="number"
@@ -64,16 +64,16 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-10 h-7 text-center border border-gray-200 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+        className="w-8 h-6 text-center border border-gray-200 rounded-md text-xxs focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
         onClick={onIncrement}
-        className="w-7 h-7 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-6 h-6 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
         disabled={max !== undefined && value >= max}
       >
-        <Plus className="w-4 h-4 text-white" />
+        <Plus className="w-3 h-3 text-white" />
       </button>
     </div>
   );
@@ -300,19 +300,15 @@ const reducer = (state: State, action: any): State => {
 // Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]> = {
-  requested: ['approved', 'cancelled'],
-  pending: ['approved', 'cancelled'],
-  approved: ['in_production', 'cancelled'],
+  pending: ['in_production', 'cancelled'],
   in_production: ['completed', 'cancelled'],
-  completed: ['stocked'],
+  completed: ['stocked', 'cancelled'],
   stocked: [],
   cancelled: [],
 };
 const statusOptions = [
   { value: '', label: 'all_statuses' },
-  { value: 'requested', label: 'requested' },
   { value: 'pending', label: 'pending' },
-  { value: 'approved', label: 'approved' },
   { value: 'in_production', label: 'in_production' },
   { value: 'completed', label: 'completed' },
   { value: 'stocked', label: 'stocked' },
@@ -344,7 +340,7 @@ export const InventoryOrders: React.FC = () => {
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
-  const [state, dispatch] = useReducer(reducer, { ...initialState, isRtl });
+  const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
@@ -385,7 +381,7 @@ export const InventoryOrders: React.FC = () => {
         const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll(),
-          productsAPI.getAll(),
+          productsAPI.getAll(user.role === 'chef' ? { department: user.department._id } : {}),
         ]);
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
@@ -434,7 +430,7 @@ export const InventoryOrders: React.FC = () => {
                   status: item.status || 'pending',
                 }))
               : [],
-            status: order.status || (['admin', 'production_manager'].includes(order.createdBy?.role) ? 'in_production' : 'pending'),
+            status: order.status || (['admin', 'production_manager'].includes(order.createdBy?.role) ? 'pending' : 'pending'),
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             notes: order.notes || '',
             priority: order.priority || 'medium',
@@ -592,7 +588,7 @@ export const InventoryOrders: React.FC = () => {
               status: item.status || 'pending',
             }))
           : [],
-        status: order.status || (['admin', 'production_manager'].includes(order.createdBy?.role) ? 'in_production' : 'pending'),
+        status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
         notes: order.notes || '',
         priority: order.priority || 'medium',
@@ -679,7 +675,7 @@ export const InventoryOrders: React.FC = () => {
     try {
       const orderNumber = `ORD-${Date.now()}`;
       const isAdminOrProduction = ['admin', 'production_manager'].includes(user.role);
-      const initialStatus = isAdminOrProduction ? 'in_production' : 'pending';
+      const initialStatus = isAdminOrProduction ? 'pending' : 'requested';
       const items = state.createFormData.items.map((i) => ({
         product: i.productId,
         quantity: i.quantity,
@@ -691,8 +687,6 @@ export const InventoryOrders: React.FC = () => {
         items,
         notes: state.createFormData.notes,
         priority: 'medium',
-        status: initialStatus,
-        createdBy: user.id,
       });
       const newOrder: FactoryOrder = {
         id: response.data._id,
@@ -734,7 +728,7 @@ export const InventoryOrders: React.FC = () => {
             : undefined,
           status: item.status || (user.role === 'chef' ? 'assigned' : 'pending'),
         })),
-        status: response.data.status || initialStatus,
+        status: 'pending',
         date: formatDate(new Date(response.data.createdAt), language),
         notes: response.data.notes || '',
         priority: response.data.priority || 'medium',
@@ -751,6 +745,24 @@ export const InventoryOrders: React.FC = () => {
       toast.success(isRtl ? 'تم إنشاء طلب الإنتاج بنجاح' : 'Production order created successfully', {
         position: isRtl ? 'top-left' : 'top-right',
       });
+      if (isAdminOrProduction) {
+        dispatch({ type: 'SET_SELECTED_ORDER', payload: newOrder });
+        dispatch({
+          type: 'SET_ASSIGN_FORM',
+          payload: {
+            items: newOrder.items.map((item) => ({
+              itemId: item._id,
+              assignedTo: '',
+              product: item.displayProductName,
+              quantity: item.quantity,
+              unit: item.displayUnit,
+            })),
+          },
+        });
+        dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
+      } else {
+        // For chef, auto assign and set to requested, no need for further action here
+      }
     } catch (err: any) {
       console.error('Create order error:', err.message);
       const errorMessage = isRtl ? `فشل في إنشاء الطلب: ${err.message}` : `Failed to create order: ${err.message}`;
@@ -769,7 +781,7 @@ export const InventoryOrders: React.FC = () => {
         toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
-      if (newStatus === 'approved' && !['admin', 'production_manager'].includes(user.role)) {
+      if (newStatus === 'in_production' && !['admin', 'production_manager'].includes(user.role)) {
         toast.error(isRtl ? 'غير مصرح بالموافقة' : 'Not authorized to approve', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
@@ -902,14 +914,8 @@ export const InventoryOrders: React.FC = () => {
   // Open assign modal
   const openAssignModal = useCallback(
     (order: FactoryOrder) => {
-      if (order.createdByRole === 'chef') {
-        toast.info(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-        return;
-      }
-      if (order.status !== 'approved') {
-        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
+      if (order.status !== 'pending') {
+        toast.error(isRtl ? 'الطلب لم يكن في حالة قيد الانتظار' : 'Order not in pending status', {
           position: isRtl ? 'top-left' : 'top-right',
         });
         return;
@@ -918,15 +924,13 @@ export const InventoryOrders: React.FC = () => {
       dispatch({
         type: 'SET_ASSIGN_FORM',
         payload: {
-          items: order.items
-            .filter((item) => !item.assignedTo)
-            .map((item) => ({
-              itemId: item._id,
-              assignedTo: '',
-              product: item.displayProductName,
-              quantity: item.quantity,
-              unit: translateUnit(item.unit, isRtl),
-            })),
+          items: order.items.map((item) => ({
+            itemId: item._id,
+            assignedTo: item.assignedTo?._id || '',
+            product: item.displayProductName,
+            quantity: item.quantity,
+            unit: item.displayUnit,
+          })),
         },
       });
       dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
@@ -1007,27 +1011,27 @@ export const InventoryOrders: React.FC = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div className="w-full sm:w-auto text-center sm:text-start">
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
-                <ShoppingCart className="w-6 h-6 text-amber-600" />
+              <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
+                <ShoppingCart className="w-5 h-5 text-amber-600" />
                 {isRtl ? 'طلبات الإنتاج' : 'Production Orders'}
               </h1>
-              <p className="text-sm text-gray-600 mt-1">{isRtl ? 'إدارة طلبات إنتاج المخزون' : 'Manage inventory production orders'}</p>
+              <p className="text-xs text-gray-600 mt-1">{isRtl ? 'إدارة طلبات إنتاج المخزون' : 'Manage inventory production orders'}</p>
             </div>
-            <div className="flex gap-3 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
+            <div className="flex gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
               <Button
                 variant="primary"
                 onClick={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: true })}
-                className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-300"
+                className="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-1 text-xs font-medium shadow transition-all duration-300"
               >
-                <PlusCircle className="w-5 h-5" />
+                <PlusCircle className="w-4 h-4" />
                 {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
               </Button>
             </div>
           </div>
-          <Card className="p-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card className="p-4 bg-white shadow-md rounded-xl border border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                   {isRtl ? 'بحث' : 'Search'}
                 </label>
                 <ProductSearchInput
@@ -1035,11 +1039,11 @@ export const InventoryOrders: React.FC = () => {
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                   ariaLabel={isRtl ? 'بحث' : 'Search'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                   {isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
                 </label>
                 <ProductDropdown
@@ -1061,11 +1065,11 @@ export const InventoryOrders: React.FC = () => {
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
                   ariaLabel={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                   {isRtl ? 'ترتيب حسب' : 'Sort By'}
                 </label>
                 <ProductDropdown
@@ -1076,25 +1080,25 @@ export const InventoryOrders: React.FC = () => {
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
                   ariaLabel={isRtl ? 'ترتيب حسب' : 'Sort By'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
                 />
               </div>
             </div>
-            <div className={`flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <div className="text-sm text-gray-600 font-medium">
+            <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 mt-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <div className="text-xs text-gray-600 font-medium">
                 {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
               </div>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
+                className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-3 py-1 text-xs font-medium shadow transition-all duration-200"
               >
-                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
+                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
                 {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
               </Button>
             </div>
           </Card>
-          <div ref={listRef} className="mt-8 min-h-[400px]">
+          <div ref={listRef} className="mt-6 min-h-[400px]">
             <AnimatePresence>
               {state.loading ? (
                 <motion.div
@@ -1102,10 +1106,10 @@ export const InventoryOrders: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
-                  className="space-y-4"
+                  className="space-y-3"
                 >
                   {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-3">
                       {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
                         <motion.div
                           key={i}
@@ -1133,17 +1137,17 @@ export const InventoryOrders: React.FC = () => {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.4 }}
-                  className="mt-8"
+                  className="mt-6"
                 >
-                  <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
-                    <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                      <p className="text-sm font-medium text-red-600">{state.error}</p>
+                  <Card className="p-4 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
+                    <div className={`flex items-center justify-center gap-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <AlertCircle className="w-4 h-4 text-red-600" />
+                      <p className="text-xs font-medium text-red-600">{state.error}</p>
                     </div>
                     <Button
                       variant="primary"
                       onClick={() => fetchData()}
-                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
+                      className="mt-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-1 text-xs font-medium shadow transition-all duration-200"
                     >
                       {isRtl ? 'إعادة المحاولة' : 'Retry'}
                     </Button>
@@ -1155,15 +1159,15 @@ export const InventoryOrders: React.FC = () => {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.4 }}
-                  className="space-y-4"
+                  className="space-y-3"
                 >
                   {paginatedOrders.length === 0 ? (
-                    <Card className="p-8 text-center bg-white shadow-md rounded-xl border border-gray-200">
-                      <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-800 mb-2">
+                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-200">
+                      <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                      <h3 className="text-sm font-medium text-gray-800 mb-1">
                         {isRtl ? 'لا توجد طلبات' : 'No Orders'}
                       </h3>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-xs text-gray-500">
                         {state.filterStatus || state.debouncedSearchQuery
                           ? isRtl
                             ? 'لا توجد طلبات مطابقة'
@@ -1178,7 +1182,6 @@ export const InventoryOrders: React.FC = () => {
                       {state.viewMode === 'table' ? (
                         <OrderTable
                           orders={paginatedOrders}
-                          calculateAdjustedTotal={() => ''} // No total for orders
                           calculateTotalQuantity={calculateTotalQuantity}
                           translateUnit={translateUnit}
                           updateOrderStatus={updateOrderStatus}
@@ -1187,9 +1190,10 @@ export const InventoryOrders: React.FC = () => {
                           submitting={state.submitting}
                           isRtl={isRtl}
                           startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                          currentUserRole={user.role}
                         />
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-3">
                           {paginatedOrders.map((order) => (
                             <motion.div
                               key={order.id}
@@ -1206,6 +1210,7 @@ export const InventoryOrders: React.FC = () => {
                                 confirmItemCompletion={confirmItemCompletion}
                                 submitting={state.submitting}
                                 isRtl={isRtl}
+                                currentUserRole={user.role}
                               />
                             </motion.div>
                           ))}
@@ -1249,9 +1254,9 @@ export const InventoryOrders: React.FC = () => {
                     size="md"
                     className="bg-white rounded-xl shadow-xl border border-gray-100 max-h-[90vh] overflow-y-auto"
                   >
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <label className={`block text-sm font-medium text-gray-700 mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                           {isRtl ? 'ملاحظات' : 'Notes'}
                         </label>
                         <textarea
@@ -1260,36 +1265,27 @@ export const InventoryOrders: React.FC = () => {
                             dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, notes: e.target.value } })
                           }
                           placeholder={isRtl ? 'أدخل ملاحظات (اختياري)' : 'Enter notes (optional)'}
-                          className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                          rows={3}
+                          className="w-full p-2 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+                          rows={2}
                           aria-label={isRtl ? 'ملاحظات' : 'Notes'}
                         />
                       </div>
                       <div>
-                        <label className={`block text-sm font-medium text-gray-700 mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                           {isRtl ? 'العناصر' : 'Items'}
                         </label>
                         {state.createFormData.items.map((item, index) => (
-                          <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                          <div key={index} className="flex flex-col gap-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
                             <ProductDropdown
                               options={[
                                 { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
-                                ...state.products
-                                  .filter(
-                                    (product) =>
-                                      user?.role === 'chef' && user?.department
-                                        ? product.department._id === user.department._id
-                                        : user?.role === 'production_manager' && user?.department
-                                        ? product.department._id === user.department._id
-                                        : true
-                                  )
-                                  .map((product) => ({
-                                    value: product._id,
-                                    label: `${isRtl ? product.name : product.nameEn || product.name} (${translateUnit(
-                                      product.unit,
-                                      isRtl
-                                    )})`,
-                                  })),
+                                ...state.products.map((product) => ({
+                                  value: product._id,
+                                  label: `${isRtl ? product.name : product.nameEn || product.name} (${translateUnit(
+                                    product.unit,
+                                    isRtl
+                                  )})`,
+                                })),
                               ]}
                               value={item.productId}
                               onChange={(value) => {
@@ -1302,15 +1298,15 @@ export const InventoryOrders: React.FC = () => {
                                 });
                               }}
                               ariaLabel={isRtl ? 'اختر منتج' : 'Select Product'}
-                              className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                              className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
                             />
                             {state.formErrors[`item_${index}_productId`] && (
-                              <p className="text-red-600 text-xs">{state.formErrors[`item_${index}_productId`]}</p>
+                              <p className="text-red-600 text-xxs">{state.formErrors[`item_${index}_productId`]}</p>
                             )}
-                            <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="flex flex-col sm:flex-row gap-3">
                               <div className="flex-1">
                                 <label
-                                  className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                                  className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
                                 >
                                   {isRtl ? 'الكمية' : 'Quantity'}
                                 </label>
@@ -1339,7 +1335,7 @@ export const InventoryOrders: React.FC = () => {
                                   max={state.products.find((p) => p._id === item.productId)?.maxStockLevel}
                                 />
                                 {state.formErrors[`item_${index}_quantity`] && (
-                                  <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
+                                  <p className="text-red-600 text-xxs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
                                 )}
                               </div>
                               {state.createFormData.items.length > 1 && (
@@ -1349,10 +1345,10 @@ export const InventoryOrders: React.FC = () => {
                                     const newItems = state.createFormData.items.filter((_, i) => i !== index);
                                     dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
                                   }}
-                                  className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
+                                  className="p-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
                                   aria-label={isRtl ? 'إزالة العنصر' : 'Remove Item'}
                                 >
-                                  <MinusCircle className="w-4 h-4" />
+                                  <MinusCircle className="w-3 h-3" />
                                 </button>
                               )}
                             </div>
@@ -1364,12 +1360,12 @@ export const InventoryOrders: React.FC = () => {
                             const newItems = [...state.createFormData.items, { productId: '', quantity: 1 }];
                             dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
                           }}
-                          className={`flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium ${
+                          className={`flex items-center gap-1 text-amber-600 hover:text-amber-800 text-xs font-medium ${
                             isRtl ? 'justify-end' : 'justify-start'
                           }`}
                           aria-label={isRtl ? 'إضافة عنصر' : 'Add Item'}
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-3 h-3" />
                           {isRtl ? 'إضافة عنصر' : 'Add Item'}
                         </button>
                       </div>
@@ -1377,13 +1373,13 @@ export const InventoryOrders: React.FC = () => {
                         <motion.div
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          className={`p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+                          className={`p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-1 ${isRtl ? 'flex-row-reverse' : ''}`}
                         >
-                          <AlertCircle className="w-5 h-5 text-red-600" />
-                          <span className="text-red-600 text-sm">{state.formErrors.form}</span>
+                          <AlertCircle className="w-4 h-4 text-red-600" />
+                          <span className="text-red-600 text-xs">{state.formErrors.form}</span>
                         </motion.div>
                       )}
-                      <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                         <Button
                           variant="secondary"
                           onClick={() => {
@@ -1391,7 +1387,7 @@ export const InventoryOrders: React.FC = () => {
                             dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }] } });
                             dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
                           }}
-                          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium shadow transition-all duration-200"
+                          className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs font-medium shadow transition-all duration-200"
                           aria-label={isRtl ? 'إلغاء' : 'Cancel'}
                         >
                           {isRtl ? 'إلغاء' : 'Cancel'}
@@ -1401,7 +1397,7 @@ export const InventoryOrders: React.FC = () => {
                           variant="primary"
                           onClick={createOrder}
                           disabled={state.submitting === 'create' || state.createFormData.items.length === 0}
-                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium shadow transition-all duration-200 disabled:opacity-50"
+                          className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium shadow transition-all duration-200 disabled:opacity-50"
                           aria-label={isRtl ? 'إنشاء الطلب' : 'Create Order'}
                         >
                           {state.submitting === 'create' ? (isRtl ? 'جارٍ الإنشاء...' : 'Creating...') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
