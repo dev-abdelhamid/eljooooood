@@ -1,4 +1,3 @@
-
 // OrderCard.tsx
 import React, { useMemo } from 'react';
 import { Card } from '../UI/Card';
@@ -192,3 +191,5 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     </Card>
   );
 };
+
+export default OrderCard;
