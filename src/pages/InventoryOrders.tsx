@@ -64,7 +64,7 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-10 h-7 text-center border border-gray-200 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+        className="w-12 h-8 text-center border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
@@ -343,12 +343,27 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
+// Retry logic with exponential backoff
+const withRetry = async <T>(fn: () => Promise<T>, maxRetries: number = 3, baseDelay: number = 1000): Promise<T> => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      if (attempt === maxRetries) throw error;
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.warn(`Retry ${attempt}/${maxRetries} after ${delay}ms due to error: ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error('Max retries reached');
+};
+
 export const InventoryOrders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
-  const [state, dispatch] = useReducer(reducer, { ...initialState, isRtl });
+  const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
@@ -371,7 +386,7 @@ export const InventoryOrders: React.FC = () => {
 
   const fetchData = useCallback(
     async (retryCount = 0) => {
-      if (!user || !['chef', 'production_manager', 'admin'].includes(user.role)) {
+      if (!user || !['chef', 'production', 'admin'].includes(user.role)) {
         dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -383,14 +398,14 @@ export const InventoryOrders: React.FC = () => {
           sortOrder: state.sortOrder,
           search: state.debouncedSearchQuery || undefined,
         };
-        if (user.role === 'production_manager' && user.department) query.department = user.department._id;
+        if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, productsResponse, departmentsResponse] = await Promise.all([
-          factoryOrdersAPI.getAll(query),
-          chefsAPI.getAll(),
-          productsAPI.getAll(),
-          departmentAPI.getAll(),
+          withRetry(() => factoryOrdersAPI.getAll(query)),
+          withRetry(() => chefsAPI.getAll()),
+          withRetry(() => productsAPI.getAll()),
+          withRetry(() => departmentAPI.getAll()),
         ]);
-        const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+        const ordersData = Array.isArray(ordersResponse.data.data) ? ordersResponse.data.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -438,7 +453,7 @@ export const InventoryOrders: React.FC = () => {
                 }))
               : [],
             status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
-            date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
+            date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language, { timeZone: 'Europe/Athens' }),
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
@@ -447,8 +462,8 @@ export const InventoryOrders: React.FC = () => {
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
           type: 'SET_CHEFS',
-          payload: Array.isArray(chefsResponse.data)
-            ? chefsResponse.data
+          payload: Array.isArray(chefsResponse.data.data)
+            ? chefsResponse.data.data
                 .filter((chef: any) => chef && chef.user?._id)
                 .map((chef: any) => ({
                   _id: chef._id,
@@ -474,9 +489,9 @@ export const InventoryOrders: React.FC = () => {
         });
         dispatch({
           type: 'SET_PRODUCTS',
-          payload: Array.isArray(productsResponse.data)
-            ? productsResponse.data
-                .filter((product: any) => product && product._id)
+          payload: Array.isArray(productsResponse.data.data)
+            ? productsResponse.data.data
+                .filter((product: any) => product && product._id && product.isActive)
                 .map((product: any) => ({
                   _id: product._id,
                   name: product.name || (isRtl ? 'غير معروف' : 'Unknown'),
@@ -502,8 +517,8 @@ export const InventoryOrders: React.FC = () => {
         });
         dispatch({
           type: 'SET_DEPARTMENTS',
-          payload: Array.isArray(departmentsResponse.data)
-            ? departmentsResponse.data.map((d: any) => ({
+          payload: Array.isArray(departmentsResponse.data.data)
+            ? departmentsResponse.data.data.map((d: any) => ({
                 _id: d._id,
                 displayName: isRtl ? d.name : d.nameEn || d.name,
               }))
@@ -512,18 +527,14 @@ export const InventoryOrders: React.FC = () => {
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
         console.error('Fetch data error:', err.message);
-        if (retryCount < 3) {
-          setTimeout(() => fetchData(retryCount + 1), 2000);
-          return;
-        }
         const errorMessage =
           err.response?.status === 404
             ? isRtl
               ? 'لم يتم العثور على طلبات'
               : 'No orders found'
             : isRtl
-            ? `خطأ في جلب الطلبات: ${err.message}`
-            : `Error fetching orders: ${err.message}`;
+            ? `خطأ في جلب البيانات: ${err.message}`
+            : `Error fetching data: ${err.message}`;
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
       } finally {
@@ -534,7 +545,7 @@ export const InventoryOrders: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!user || !['chef', 'production_manager', 'admin'].includes(user.role) || !socket) {
+    if (!user || !['chef', 'production', 'admin'].includes(user.role) || !socket) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
@@ -548,6 +559,7 @@ export const InventoryOrders: React.FC = () => {
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
+      console.log('WebSocket connected');
     });
     socket.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
@@ -604,7 +616,7 @@ export const InventoryOrders: React.FC = () => {
             }))
           : [],
         status: order.status || (order.createdBy?.role === 'chef' ? 'requested' : 'approved'),
-        date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
+        date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language, { timeZone: 'Europe/Athens' }),
         notes: order.notes || '',
         priority: order.priority || 'medium',
         createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
@@ -644,6 +656,16 @@ export const InventoryOrders: React.FC = () => {
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
       toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', { position: isRtl ? 'top-left' : 'top-right' });
     });
+    socket.on('factoryOrderCompleted', ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
+      if (!factoryOrderId || !orderNumber) {
+        console.warn('Invalid factory order completed data:', { factoryOrderId, orderNumber });
+        return;
+      }
+      dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: factoryOrderId, status: 'stocked' });
+      toast.success(isRtl ? `تم تأكيد إنتاج الطلب ${orderNumber}` : `Order ${orderNumber} production confirmed`, {
+        position: isRtl ? 'top-left' : 'top-right',
+      });
+    });
     return () => {
       clearInterval(reconnectInterval);
       socket.off('connect');
@@ -652,8 +674,10 @@ export const InventoryOrders: React.FC = () => {
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
       socket.off('taskAssigned');
+      socket.off('factoryOrderCompleted');
     };
   }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
+
   const validateCreateForm = useCallback(() => {
     const errors: Record<string, string> = {};
     const t = isRtl
@@ -676,13 +700,14 @@ export const InventoryOrders: React.FC = () => {
       if (!item.quantity || item.quantity < 1) {
         errors[`item_${index}_quantity`] = item.quantity === 0 ? t.quantityRequired : t.quantityInvalid;
       }
-      if (['admin', 'production_manager'].includes(user.role) && !item.assignedTo) {
+      if (['admin', 'production'].includes(user.role) && !item.assignedTo) {
         errors[`item_${index}_assignedTo`] = t.chefRequired;
       }
     });
     dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
     return Object.keys(errors).length === 0;
   }, [state.createFormData, isRtl, user.role]);
+
   const createOrder = useCallback(async () => {
     if (!user?.id || !validateCreateForm()) {
       return;
@@ -690,23 +715,25 @@ export const InventoryOrders: React.FC = () => {
     dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
     try {
       const orderNumber = `ORD-${Date.now()}`;
-      const isAdminOrManager = ['admin', 'production_manager'].includes(user.role);
+      const isAdminOrManager = ['admin', 'production'].includes(user.role);
       const initialStatus = isAdminOrManager && state.createFormData.items.every(i => i.assignedTo) ? 'in_production' : isAdminOrManager ? 'pending' : 'requested';
       const items = state.createFormData.items.map((i) => ({
         product: i.productId,
         quantity: i.quantity,
         assignedTo: user.role === 'chef' ? user.id : i.assignedTo,
       }));
-      const response = await factoryOrdersAPI.create({
-        orderNumber,
-        items,
-        notes: state.createFormData.notes,
-        priority: 'medium',
-      });
+      const response = await withRetry(() =>
+        factoryOrdersAPI.create({
+          orderNumber,
+          items,
+          notes: state.createFormData.notes,
+          priority: 'medium',
+        })
+      );
       const newOrder: FactoryOrder = {
-        id: response.data._id,
-        orderNumber: response.data.orderNumber,
-        items: response.data.items.map((item: any) => ({
+        id: response.data.data._id,
+        orderNumber: response.data.data.orderNumber,
+        items: response.data.data.items.map((item: any) => ({
           _id: item._id,
           productId: item.product._id,
           productName: item.product.name,
@@ -743,10 +770,10 @@ export const InventoryOrders: React.FC = () => {
             : undefined,
           status: item.status || 'pending',
         })),
-        status: response.data.status || initialStatus,
-        date: formatDate(new Date(response.data.createdAt), language),
-        notes: response.data.notes || '',
-        priority: response.data.priority || 'medium',
+        status: response.data.data.status || initialStatus,
+        date: formatDate(new Date(response.data.data.createdAt), language, { timeZone: 'Europe/Athens' }),
+        notes: response.data.data.notes || '',
+        priority: response.data.data.priority || 'medium',
         createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
         createdByRole: user.role,
       };
@@ -783,13 +810,13 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
+        await withRetry(() => factoryOrdersAPI.updateStatus(orderId, { status: newStatus }));
         if (newStatus === 'stocked') {
           const items = order.items.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
           }));
-          await inventoryAPI.addToInventory({ orderId, items });
+          await withRetry(() => inventoryAPI.addToInventory({ orderId, items }));
         }
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
         if (socket && isConnected) {
@@ -832,7 +859,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: itemId });
       try {
-        await factoryOrdersAPI.updateItemStatus(orderId, itemId, { status: 'completed' });
+        await withRetry(() => factoryOrdersAPI.updateItemStatus(orderId, itemId, { status: 'completed' }));
         dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status: 'completed' } });
         if (socket && isConnected) {
           emit('itemStatusUpdated', { orderId, itemId, status: 'completed' });
@@ -842,6 +869,43 @@ export const InventoryOrders: React.FC = () => {
         });
       } catch (err: any) {
         console.error('Confirm item completion error:', err.message);
+        toast.error(isRtl ? `فشل في تأكيد الإنتاج: ${err.message}` : `Failed to confirm production: ${err.message}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [user, state.orders, isRtl, socket, isConnected, emit]
+  );
+
+  const confirmProduction = useCallback(
+    async (orderId: string) => {
+      if (!user?.id || !['production', 'admin'].includes(user.role)) {
+        toast.error(isRtl ? 'غير مصرح بتأكيد الإنتاج' : 'Not authorized to confirm production', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+      const order = state.orders.find((o) => o.id === orderId);
+      if (!order || order.status !== 'completed') {
+        toast.error(isRtl ? 'الطلب ليس في حالة مكتمل' : 'Order is not in completed status', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await withRetry(() => factoryOrdersAPI.confirmProduction(orderId));
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: 'stocked' });
+        if (socket && isConnected) {
+          emit('factoryOrderCompleted', { factoryOrderId: orderId, orderNumber: order.orderNumber });
+        }
+        toast.success(isRtl ? 'تم تأكيد الإنتاج' : 'Production confirmed', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } catch (err: any) {
+        console.error('Confirm production error:', err.message);
         toast.error(isRtl ? `فشل في تأكيد الإنتاج: ${err.message}` : `Failed to confirm production: ${err.message}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -862,7 +926,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
+        const response = await withRetry(() => factoryOrdersAPI.assignChefs(orderId, state.assignFormData));
         const items = state.assignFormData.items.map((item) => ({
           _id: item.itemId,
           assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
@@ -897,7 +961,7 @@ export const InventoryOrders: React.FC = () => {
       }
     },
     [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
-  );
+);
 
   const openAssignModal = useCallback(
     (order: FactoryOrder) => {
@@ -943,11 +1007,15 @@ export const InventoryOrders: React.FC = () => {
   }, [fetchData]);
 
   useEffect(() => {
+    if (!state.products.length && !state.loading && state.isCreateModalOpen) {
+      console.warn('No products loaded, retrying fetch...');
+      fetchData();
+    }
     if (!state.chefs.length && !state.loading && state.isAssignModalOpen) {
       console.warn('No chefs loaded, retrying fetch...');
       fetchData();
     }
-  }, [state.chefs, state.loading, state.isAssignModalOpen, fetchData]);
+  }, [state.products, state.chefs, state.loading, state.isCreateModalOpen, state.isAssignModalOpen, fetchData]);
 
   const filteredOrders = useMemo(() => {
     const normalizedQuery = normalizeText(state.debouncedSearchQuery);
@@ -964,7 +1032,7 @@ export const InventoryOrders: React.FC = () => {
         (order) =>
           (!state.filterStatus || order.status === state.filterStatus) &&
           (!state.filterDepartment || order.items.some(item => item.department._id === state.filterDepartment)) &&
-          (user?.role === 'production_manager' && user?.department
+          (user?.role === 'production' && user?.department
             ? order.items.some((item) => item.department._id === user.department._id)
             : true) &&
           (user?.role === 'chef' ? order.items.some((item) => item.assignedTo?._id === user.id) : true)
@@ -1062,26 +1130,24 @@ export const InventoryOrders: React.FC = () => {
                   className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
-              {['admin', 'production_manager'].includes(user.role) && (
-                <div>
-                  <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
-                  </label>
-                  <ProductDropdown
-                    options={[
-                      { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
-                      ...state.departments.map((dept) => ({
-                        value: dept._id,
-                        label: dept.displayName,
-                      })),
-                    ]}
-                    value={state.filterDepartment}
-                    onChange={(value) => dispatch({ type: 'SET_FILTER_DEPARTMENT', payload: value })}
-                    ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
-                    className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                  />
-                </div>
-              )}
+              <div>
+                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
+                </label>
+                <ProductDropdown
+                  options={[
+                    { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                    ...state.departments.map((dept) => ({
+                      value: dept._id,
+                      label: dept.displayName,
+                    })),
+                  ]}
+                  value={state.filterDepartment}
+                  onChange={(value) => dispatch({ type: 'SET_FILTER_DEPARTMENT', payload: value })}
+                  ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                />
+              </div>
               <div>
                 <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                   {isRtl ? 'ترتيب حسب' : 'Sort By'}
@@ -1123,7 +1189,7 @@ export const InventoryOrders: React.FC = () => {
                   className="space-y-4"
                 >
                   {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
                         <motion.div
                           key={i}
@@ -1161,7 +1227,7 @@ export const InventoryOrders: React.FC = () => {
                     <Button
                       variant="primary"
                       onClick={() => fetchData()}
-                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm font-medium shadow transition-all duration-200"
+                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
                       aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                     >
                       {isRtl ? 'إعادة المحاولة' : 'Retry'}
@@ -1183,7 +1249,7 @@ export const InventoryOrders: React.FC = () => {
                         {isRtl ? 'لا توجد طلبات' : 'No Orders'}
                       </h3>
                       <p className="text-sm text-gray-500">
-                        {state.filterStatus || state.filterDepartment || state.debouncedSearchQuery
+                        {state.filterStatus || state.debouncedSearchQuery
                           ? isRtl
                             ? 'لا توجد طلبات مطابقة'
                             : 'No matching orders'
@@ -1201,6 +1267,7 @@ export const InventoryOrders: React.FC = () => {
                           translateUnit={translateUnit}
                           updateOrderStatus={updateOrderStatus}
                           confirmItemCompletion={confirmItemCompletion}
+                          confirmProduction={confirmProduction}
                           openAssignModal={openAssignModal}
                           submitting={state.submitting}
                           isRtl={isRtl}
@@ -1208,7 +1275,7 @@ export const InventoryOrders: React.FC = () => {
                           currentUserRole={user.role}
                         />
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                           {paginatedOrders.map((order) => (
                             <motion.div
                               key={order.id}
@@ -1222,6 +1289,7 @@ export const InventoryOrders: React.FC = () => {
                                 translateUnit={translateUnit}
                                 updateOrderStatus={updateOrderStatus}
                                 confirmItemCompletion={confirmItemCompletion}
+                                confirmProduction={confirmProduction}
                                 openAssignModal={openAssignModal}
                                 submitting={state.submitting}
                                 isRtl={isRtl}
@@ -1320,11 +1388,12 @@ export const InventoryOrders: React.FC = () => {
                               }}
                               ariaLabel={isRtl ? 'اختر منتج' : 'Select Product'}
                               className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                              disabled={state.loading}
                             />
                             {state.formErrors[`item_${index}_productId`] && (
                               <p className="text-red-600 text-xs">{state.formErrors[`item_${index}_productId`]}</p>
                             )}
-                            <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="flex flex-col sm:flex-row gap-4 items-start">
                               <div className="flex-1">
                                 <label
                                   className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
@@ -1359,7 +1428,7 @@ export const InventoryOrders: React.FC = () => {
                                   <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
                                 )}
                               </div>
-                              {['admin', 'production_manager'].includes(user.role) && item.productId && (
+                              {['admin', 'production'].includes(user.role) && item.productId && (
                                 <div className="flex-1">
                                   <label
                                     className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
@@ -1388,6 +1457,7 @@ export const InventoryOrders: React.FC = () => {
                                     }}
                                     className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                                     aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
+                                    disabled={state.loading}
                                   />
                                   {state.formErrors[`item_${index}_assignedTo`] && (
                                     <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_assignedTo`]}</p>
@@ -1447,14 +1517,13 @@ export const InventoryOrders: React.FC = () => {
                           {isRtl ? 'إلغاء' : 'Cancel'}
                         </Button>
                         <Button
-                          type="button"
                           variant="primary"
                           onClick={createOrder}
-                          disabled={state.submitting === 'create' || state.createFormData.items.length === 0}
-                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm disabled:opacity-50"
+                          disabled={state.submitting === 'create' || state.loading}
+                          className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm shadow-sm disabled:opacity-50"
                           aria-label={isRtl ? 'إنشاء الطلب' : 'Create Order'}
                         >
-                          {state.submitting === 'create' ? (isRtl ? 'جارٍ الإنشاء...' : 'Creating...') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
+                          {state.submitting === 'create' ? (isRtl ? 'جاري الإنشاء...' : 'Creating...') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
                         </Button>
                       </div>
                     </div>
