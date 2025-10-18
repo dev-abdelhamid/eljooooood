@@ -1139,7 +1139,7 @@ export const factoryInventoryAPI = {
 
 export const factoryOrdersAPI = {
   // Create a new factory order with status 'pending' by default
-  create: async (data: { orderNumber: string; items: { product: string; quantity: number }[]; notes?: string; priority?: string }) => {
+create: async (data: { orderNumber: string; items: { product: string; quantity: number; assignedTo?: string }[]; notes?: string; priority?: string }) => {
     if (
       !data.orderNumber ||
       !data.orderNumber.trim() ||
@@ -1156,10 +1156,11 @@ export const factoryOrdersAPI = {
         items: data.items.map((item) => ({
           product: item.product,
           quantity: item.quantity,
+          assignedTo: item.assignedTo,
         })),
         notes: data.notes?.trim() || '',
         priority: data.priority?.trim() || 'medium',
-        status: 'pending', // Start directly in 'pending' state
+        status: 'pending',
       });
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
       return response;
