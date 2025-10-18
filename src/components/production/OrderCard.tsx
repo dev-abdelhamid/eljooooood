@@ -1,10 +1,9 @@
-
-// OrderCard.tsx
 import React, { useMemo } from 'react';
 import { Card } from '../UI/Card';
 import { Button } from '../UI/Button';
 import { UserCheck, CheckCircle, Clock } from 'lucide-react';
 import { FactoryOrder } from '../../types/types';
+
 interface OrderCardProps {
   order: FactoryOrder;
   calculateTotalQuantity: (order: FactoryOrder) => number;
@@ -14,6 +13,7 @@ interface OrderCardProps {
   submitting: string | null;
   isRtl: boolean;
 }
+
 const translations = {
   ar: {
     orderNumber: 'رقم الطلب',
@@ -64,7 +64,8 @@ const translations = {
     urgent: 'Urgent',
   },
 };
-export const OrderCard: React.FC<OrderCardProps> = ({
+
+export const OrderCard = ({
   order,
   calculateTotalQuantity,
   translateUnit,
