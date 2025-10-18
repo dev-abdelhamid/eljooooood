@@ -1,28 +1,32 @@
 import { useEffect } from 'react';
 import { useSocket } from '../contexts/SocketContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Order } from '../types/types';
+import { Order, FactoryOrder } from '../types/types';
 import { formatDate } from '../utils/formatDate';
-import { ordersAPI } from '../services/api';
+import { ordersAPI, factoryOrdersAPI } from '../services/api';
 
 interface SocketEventData {
-  orderId: string;
-  orderNumber: string;
+  orderId?: string;
+  factoryOrderId?: string;
+  orderNumber?: string;
+  factoryOrderNumber?: string;
   branchName?: string;
   branchId?: string;
   items?: Array<{
     _id: string;
-    product?: { _id: string; name: string; unit?: string; department?: { _id: string; name: string } };
+    product?: { _id: string; name: string; nameEn?: string; unit?: string; unitEn?: string; department?: { _id: string; name: string; nameEn?: string } };
     quantity?: number;
     price?: number;
     status?: string;
-    assignedTo?: { _id: string; name?: string };
+    assignedTo?: { _id: string; name?: string; nameEn?: string };
   }>;
   eventId?: string;
   status?: string;
   returnId?: string;
   itemId?: string;
+  taskId?: string;
   productName?: string;
+  chefId?: string;
 }
 
 export const useOrderNotifications = (
@@ -57,25 +61,26 @@ export const useOrderNotifications = (
     });
 
     const events = [
+      // Existing branch order events
       {
         name: 'orderCreated',
-        handler: (data: any) => {
-          if (!data._id || !data.orderNumber || !data.branch?.name || !Array.isArray(data.items)) return;
+        handler: (data: SocketEventData) => {
+          if (!data.orderId || !data.orderNumber || !data.branchName || !Array.isArray(data.items)) return;
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (user.role === 'branch' && data.branch?._id !== user.branchId) return;
+          if (user.role === 'branch' && data.branchId !== user.branchId) return;
           if (user.role === 'production' && !data.items.some((item: any) => item.product?.department?._id === user.department?._id)) return;
           if (stateRef.current.filterStatus && data.status !== stateRef.current.filterStatus) return;
-          if (stateRef.current.filterBranch && data.branch?._id !== stateRef.current.filterBranch) return;
+          if (stateRef.current.filterBranch && data.branchId !== stateRef.current.filterBranch) return;
 
           const mappedOrder: Order = {
-            id: data._id,
+            id: data.orderId,
             orderNumber: data.orderNumber,
-            branchId: data.branch?._id || 'unknown',
+            branchId: data.branchId || 'unknown',
             branch: {
-              _id: data.branch?._id || 'unknown',
-              name: data.branch?.name || t('branches.unknown'),
-              nameEn: data.branch?.nameEn,
-              displayName: isRtl ? data.branch?.name : data.branch?.nameEn || data.branch?.name,
+              _id: data.branchId || 'unknown',
+              name: data.branchName || t('branches.unknown'),
+              nameEn: data.branchName,
+              displayName: isRtl ? data.branchName : data.branchName || data.branchName,
             },
             items: data.items.map((item: any) => ({
               _id: item._id || crypto.randomUUID(),
@@ -114,8 +119,8 @@ export const useOrderNotifications = (
           addNotification({
             _id: data.eventId || crypto.randomUUID(),
             type: 'success',
-            message: t('notifications.order_created', { orderNumber: data.orderNumber, branchName: data.branch?.name }),
-            data: { orderId: data._id, eventId: data.eventId },
+            message: t('notifications.order_created', { orderNumber: data.orderNumber, branchName: data.branchName }),
+            data: { orderId: data.orderId, eventId: data.eventId },
             read: false,
             createdAt: new Date().toISOString(),
           });
@@ -321,6 +326,146 @@ export const useOrderNotifications = (
               branchName: data.branchName,
             }),
             data: { orderId: data.orderId, itemId: data.itemId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        },
+      },
+      // New factory order events
+      {
+        name: 'factoryOrderCreated',
+        handler: (data: SocketEventData) => {
+          if (!data.factoryOrderId || !data.factoryOrderNumber || !Array.isArray(data.items)) return;
+          if (!['admin', 'production'].includes(user.role)) return;
+          if (user.role === 'production' && !data.items.some((item: any) => item.product?.department?._id === user.department?._id)) return;
+          if (stateRef.current.filterStatus && data.status !== stateRef.current.filterStatus) return;
+
+          const mappedOrder: FactoryOrder = {
+            id: data.factoryOrderId,
+            orderNumber: data.factoryOrderNumber,
+            items: data.items.map((item: any) => ({
+              _id: item._id || crypto.randomUUID(),
+              productId: item.product?._id || 'unknown',
+              productName: item.product?.name || t('products.unknown'),
+              productNameEn: item.product?.nameEn,
+              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
+              quantity: Number(item.quantity) || 1,
+              unit: translateUnit(item.unit || item.product?.unit),
+              unitEn: item.product?.unitEn,
+              displayUnit: translateUnit(item.unit || item.product?.unit),
+              department: {
+                _id: item.product?.department?._id || 'unknown',
+                name: item.product?.department?.name || t('departments.unknown'),
+                nameEn: item.product?.department?.nameEn,
+                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
+              },
+              status: item.status || 'pending',
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('chefs.unknown'), nameEn: item.assignedTo.nameEn } : undefined,
+            })),
+            status: data.status || 'pending',
+            date: formatDate(data.createdAt || new Date(), language),
+            notes: data.notes || '',
+            priority: data.priority || 'medium',
+            createdBy: data.createdBy?.name || t('orders.unknown'),
+            statusHistory: data.statusHistory || [],
+          };
+
+          dispatch({ type: 'ADD_FACTORY_ORDER', payload: mappedOrder });
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: 'success',
+            message: t('notifications.factory_order_created', { orderNumber: data.factoryOrderNumber }),
+            data: { factoryOrderId: data.factoryOrderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        },
+      },
+      {
+        name: 'factoryTaskAssigned',
+        handler: (data: SocketEventData) => {
+          if (!data.factoryOrderId || !data.factoryOrderNumber || !Array.isArray(data.items)) return;
+          if (!['admin', 'production', 'chef'].includes(user.role)) return;
+          if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user.id)) return;
+
+          const mappedItems = data.items
+            .filter((item: any) => item._id && item.product?.name && item.quantity && item.assignedTo?._id)
+            .map((item: any) => ({
+              _id: item._id,
+              productId: item.product?._id || 'unknown',
+              productName: item.product?.name || t('products.unknown'),
+              productNameEn: item.product?.nameEn,
+              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
+              quantity: Number(item.quantity) || 1,
+              unit: translateUnit(item.unit || item.product?.unit),
+              unitEn: item.product?.unitEn,
+              displayUnit: translateUnit(item.unit || item.product?.unit),
+              department: item.product?.department || { _id: 'unknown', name: t('departments.unknown'), nameEn: item.product?.department?.nameEn },
+              status: item.status || 'pending',
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('chefs.unknown'), nameEn: item.assignedTo.nameEn } : undefined,
+            }));
+
+          if (mappedItems.length === 0) return;
+
+          dispatch({ type: 'FACTORY_TASK_ASSIGNED', payload: { factoryOrderId: data.factoryOrderId, items: mappedItems } });
+          mappedItems.forEach((item: any) => {
+            addNotification({
+              _id: `${data.eventId || crypto.randomUUID()}-${item._id}`,
+              type: 'info',
+              message: t('notifications.factory_task_assigned_to_chef', {
+                chefName: item.assignedTo?.name || t('chefs.unknown'),
+                productName: item.productName,
+                quantity: item.quantity,
+                unit: item.unit,
+                orderNumber: data.factoryOrderNumber,
+              }),
+              data: { factoryOrderId: data.factoryOrderId, itemId: item._id, eventId: data.eventId },
+              read: false,
+              createdAt: new Date().toISOString(),
+            });
+          });
+        },
+      },
+      {
+        name: 'factoryItemStatusUpdated',
+        handler: async (data: SocketEventData) => {
+          if (!data.factoryOrderId || !data.itemId || !data.status || !data.factoryOrderNumber) return;
+          if (!['admin', 'production', 'chef'].includes(user.role)) return;
+          if (user.role === 'chef' && data.chefId !== user.id) return;
+
+          dispatch({ type: 'UPDATE_FACTORY_ITEM_STATUS', payload: { factoryOrderId: data.factoryOrderId, itemId: data.itemId, status: data.status } });
+
+          try {
+            const updatedOrder = await factoryOrdersAPI.getById(data.factoryOrderId);
+            if (!updatedOrder || !Array.isArray(updatedOrder.items)) return;
+            if (updatedOrder.items.every((item: any) => item.status === 'completed') && updatedOrder.status !== 'completed') {
+              dispatch({ type: 'UPDATE_FACTORY_ORDER_STATUS', factoryOrderId: data.factoryOrderId, status: 'completed' });
+              addNotification({
+                _id: data.eventId || crypto.randomUUID(),
+                type: 'success',
+                message: t('notifications.factory_order_completed', { orderNumber: data.factoryOrderNumber }),
+                data: { factoryOrderId: data.factoryOrderId, eventId: data.eventId },
+                read: false,
+                createdAt: new Date().toISOString(),
+              });
+            }
+          } catch {
+            console.error(`[${new Date().toISOString()}] Failed to fetch updated factory order:`, data.factoryOrderId);
+          }
+        },
+      },
+      {
+        name: 'factoryOrderCompleted',
+        handler: (data: SocketEventData) => {
+          if (!data.factoryOrderId || !data.factoryOrderNumber) return;
+          if (!['admin', 'production'].includes(user.role)) return;
+
+          dispatch({ type: 'UPDATE_FACTORY_ORDER_STATUS', factoryOrderId: data.factoryOrderId, status: 'completed' });
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: 'success',
+            message: t('notifications.factory_order_completed', { orderNumber: data.factoryOrderNumber }),
+            data: { factoryOrderId: data.factoryOrderId, eventId: data.eventId },
             read: false,
             createdAt: new Date().toISOString(),
           });
