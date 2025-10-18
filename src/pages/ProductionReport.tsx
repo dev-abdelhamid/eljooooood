@@ -1,10 +1,9 @@
-// File 1: ProductionReport.tsx
 import React, { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/UI/Button';
-import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api';
+import { inventoryAPI, ordersAPI, branchesAPI, salesAPI, returnsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import DailyOrdersTable from './DailyOrdersTable';
 import DailyStockTable from './DailyStockTable';
@@ -138,15 +137,16 @@ const ProductionReport: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
+        const [inventory, ordersResponse, branchesResponse, salesResponse, returnsResponse] = await Promise.all([
           inventoryAPI.getInventory({}, isRtl),
-          ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl), // Removed status: 'completed' to fetch all orders
+          ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl),
           branchesAPI.getAll(),
           salesAPI.getAnalytics({
             startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
             endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(),
             lang: language,
           }),
+          returnsAPI.getAll({ page: 1, limit: 10000 }),
         ]);
         const monthlyOrderData: { [month: number]: OrderRow[] } = {};
         const monthlyStockInData: { [month: number]: StockRow[] } = {};
@@ -210,6 +210,10 @@ const ProductionReport: React.FC = () => {
               }));
             });
         }
+        let returnsList = Array.isArray(returnsResponse) ? returnsResponse : [];
+        if (returnsList.length === 0) {
+          toast.warn(isRtl ? 'لا توجد مرتجعات، استخدام بيانات احتياطية' : 'No returns found, using fallback data');
+        }
         for (let month = 0; month < 12; month++) {
           const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
           const orderMap = new Map<string, OrderRow>();
@@ -219,7 +223,6 @@ const ProductionReport: React.FC = () => {
           const salesMap = new Map<string, SalesRow>();
           orders.forEach((order: any) => {
             const status = order.status || order.orderStatus;
-            // Removed the check for 'completed' to process all orders
             const date = new Date(order.createdAt || order.date);
             if (isNaN(date.getTime())) return;
             const orderMonth = date.getMonth();
@@ -270,6 +273,51 @@ const ProductionReport: React.FC = () => {
               }
             }
           }
+          returnsList.forEach((returnItem: any) => {
+            const status = returnItem.status;
+            if (status !== 'approved') return;
+            const date = new Date(returnItem.createdAt);
+            if (isNaN(date.getTime())) return;
+            const retMonth = date.getMonth();
+            const year = date.getFullYear();
+            if (year === currentYear && retMonth === month) {
+              const day = date.getDate() - 1;
+              const branchId = returnItem.branchId || returnItem.branch?._id;
+              const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+              (returnItem.items || []).forEach((item: any) => {
+                const productId = item.product || item.product?._id;
+                if (!productId) return;
+                const details = productDetails.get(productId) || {
+                  code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                  product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
+                  unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
+                  price: Number(item.price) || 0,
+                };
+                const key = `${productId}-${month}`;
+                if (!returnMap.has(key)) {
+                  returnMap.set(key, {
+                    id: key,
+                    product: details.product,
+                    code: details.code,
+                    unit: details.unit,
+                    totalReturns: 0,
+                    dailyReturns: Array(daysInMonthCount).fill(0),
+                    dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                    totalValue: 0,
+                    totalOrders: 0,
+                  });
+                }
+                const row = returnMap.get(key)!;
+                const quantity = Number(item.quantity) || 0;
+                const price = Number(item.price) || details.price;
+                row.dailyReturns[day] += quantity;
+                row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
+                row.totalReturns += quantity;
+                row.totalValue += quantity * price;
+                row.totalOrders = orderMap.get(key)?.totalQuantity || 0;
+              });
+            }
+          });
           inventory.forEach((item: any) => {
             const productId = item?.product?._id;
             if (!productId) return;
@@ -315,25 +363,6 @@ const ProductionReport: React.FC = () => {
                   if (isReturn) {
                     row.dailyReturns![day] += quantity;
                     row.dailyReturnsDetails![day][branchName] = (row.dailyReturnsDetails![day][branchName] || 0) + quantity;
-                    if (!returnMap.has(key)) {
-                      returnMap.set(key, {
-                        id: key,
-                        product: details.product,
-                        code: details.code,
-                        unit: details.unit,
-                        totalReturns: 0,
-                        dailyReturns: Array(daysInMonthCount).fill(0),
-                        dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-                        totalValue: 0,
-                        totalOrders: 0,
-                      });
-                    }
-                    const returnRow = returnMap.get(key)!;
-                    returnRow.dailyReturns[day] += quantity;
-                    returnRow.dailyBranchDetails[day][branchName] = (returnRow.dailyBranchDetails[day][branchName] || 0) + quantity;
-                    returnRow.totalReturns += quantity;
-                    returnRow.totalValue += quantity * details.price;
-                    returnRow.totalOrders = orderMap.get(key)?.totalQuantity || 0;
                   }
                 } else if (movement.type === 'out') {
                   if (!stockOutMap.has(key)) {
@@ -351,11 +380,11 @@ const ProductionReport: React.FC = () => {
                     });
                   }
                   const row = stockOutMap.get(key)!;
-                  const qty = -quantity; // Make out positive for display if needed, but keep logic
+                  const qty = -quantity;
                   row.dailyQuantities[day] += qty;
                   row.dailyBranchDetails[day][branchName] = (row.dailyBranchDetails[day][branchName] || 0) + qty;
                   row.totalQuantity += qty;
-                  row.totalPrice += qty * details.price; // Adjust for positive
+                  row.totalPrice += qty * details.price;
                   if (isSale) {
                     row.dailySales![day] += qty;
                     row.dailySalesDetails![day][branchName] = (row.dailySalesDetails![day][branchName] || 0) + qty;
@@ -384,6 +413,7 @@ const ProductionReport: React.FC = () => {
           const productKeys = new Set<string>();
           orderMap.forEach((_, key) => productKeys.add(key));
           salesMap.forEach((_, key) => productKeys.add(key));
+          returnMap.forEach((_, key) => productKeys.add(key));
           const ordersVsSalesMap = new Map<string, OrdersVsSalesRow>();
           productKeys.forEach((key) => {
             const ordersRow = orderMap.get(key) || {

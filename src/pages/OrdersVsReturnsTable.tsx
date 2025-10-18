@@ -1,4 +1,3 @@
-// File 3: OrdersVsReturnsTable.tsx
 import React, { useState, useMemo, Fragment } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
@@ -270,6 +269,12 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
     return content;
   };
 
+  const getRatioColor = (ratio: number) => {
+    if (ratio > 10) return 'text-red-600 bg-red-50';
+    if (ratio > 5) return 'text-yellow-600 bg-yellow-50';
+    return 'text-green-600 bg-green-50';
+  };
+
   const exportTable = (format: 'excel' | 'pdf') => {
     const baseHeaders = [
       isRtl ? 'رقم' : 'No.',
@@ -397,12 +402,12 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
           placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
         />
         <select
           value={selectedBranch}
           onChange={(e) => setSelectedBranch(e.target.value)}
-          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
         >
           <option value="all">{isRtl ? 'كل الفروع' : 'All Branches'}</option>
           {allBranches.map(branch => (
@@ -412,7 +417,7 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
         >
           <option value="all">{isRtl ? 'الشهر كامل' : 'Full Month'}</option>
           <option value="week1">{isRtl ? 'الأسبوع الأول' : 'Week 1'}</option>
@@ -427,13 +432,13 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
               type="date"
               value={customStart}
               onChange={(e) => setCustomStart(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
             />
             <input
               type="date"
               value={customEnd}
               onChange={(e) => setCustomEnd(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
             />
           </>
         )}
@@ -476,42 +481,46 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {filteredData.map((row, index) => (
-              <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
-                <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
-                <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                {displayedDays.map((day, i) => (
-                  <Fragment key={i}>
-                    <td
-                      className={`px-4 py-3 text-center font-medium ${
-                        row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
-                      }`}
-                      data-tooltip-id="orders-tooltip"
-                      data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
-                    >
-                      {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl) : '0'}
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-center font-medium ${
-                        row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
-                      }`}
-                      data-tooltip-id="returns-tooltip"
-                      data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
-                    >
-                      {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl) : '0'}
-                    </td>
-                    <td className="px-4 py-3 text-center font-medium text-blue-700">
-                      {row.displayedDailyOrders[i] > 0 ? formatNumber((row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100).toFixed(2), isRtl) + '%' : '0.00%'}
-                    </td>
-                  </Fragment>
-                ))}
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalRatio.toFixed(2), isRtl)}%</td>
-              </tr>
-            ))}
+            {filteredData.map((row, index) => {
+              const totalRatio = row.displayedTotalRatio;
+              return (
+                <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                  {displayedDays.map((day, i) => {
+                    const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
+                    return (
+                      <Fragment key={i}>
+                        <td
+                          className={`px-4 py-3 text-center font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
+                          data-tooltip-id="orders-tooltip"
+                          data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
+                        >
+                          {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl) : '0'}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-center font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'}`}
+                          data-tooltip-id="returns-tooltip"
+                          data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
+                        >
+                          {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl) : '0'}
+                        </td>
+                        <td className={`px-4 py-3 text-center font-medium ${getRatioColor(dailyRatio)}`}>
+                          {formatNumber(dailyRatio.toFixed(2), isRtl) + '%'}
+                        </td>
+                      </Fragment>
+                    );
+                  })}
+                  <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
+                  <td className={`px-4 py-3 text-center font-medium ${getRatioColor(totalRatio)}`}>
+                    {formatNumber(totalRatio.toFixed(2), isRtl) + '%'}
+                  </td>
+                </tr>
+              );
+            })}
             <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
               {displayedDays.map((_, i) => (
