@@ -1,4 +1,4 @@
-import {useMemo , useCallback ,useEffect}  from 'react';
+import React, { useMemo, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
@@ -81,12 +81,10 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     const updatedItems = selectedOrder.items.filter(item => !item.assignedTo).map((item) => {
       const departmentId = item.department._id || 'no-department';
       const availableChefs = availableChefsByDepartment.get(departmentId) || [];
-
       let assignedTo = '';
       if (availableChefs.length === 1) {
         assignedTo = availableChefs[0].userId;
       }
-
       return {
         itemId: item._id,
         assignedTo,
@@ -130,7 +128,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
             const departmentId = orderItem?.department._id || 'no-department';
             const availableChefs = availableChefsByDepartment.get(departmentId) || [];
-
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
               ...availableChefs.map((chef) => ({

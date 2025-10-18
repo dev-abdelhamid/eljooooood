@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { Card } from '../UI/Card';
 import { Button } from '../UI/Button';
 import { CheckCircle } from 'lucide-react';
@@ -8,7 +9,6 @@ interface OrderCardProps {
   order: FactoryOrder;
   calculateTotalQuantity: (order: FactoryOrder) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
-  approveOrder: (orderId: string) => void;
   updateOrderStatus: (orderId: string, status: FactoryOrder['status']) => void;
   confirmItemCompletion: (orderId: string, itemId: string) => void;
   openAssignModal: (order: FactoryOrder) => void;
@@ -77,7 +77,6 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   order,
   calculateTotalQuantity,
   translateUnit,
-  approveOrder,
   updateOrderStatus,
   confirmItemCompletion,
   openAssignModal,
@@ -86,7 +85,9 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   isRtl,
   currentUserRole,
 }) => {
+  const { user } = useAuth();  // أضفت هذا للوصول إلى user.id في الشروط
   const t = translations[isRtl ? 'ar' : 'en'];
+
   const statusStyles = useMemo(
     () => ({
       requested: 'bg-orange-100 text-orange-800',
@@ -99,6 +100,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     }),
     []
   );
+
   const priorityStyles = useMemo(
     () => ({
       low: 'bg-gray-100 text-gray-800',
@@ -146,7 +148,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                 {item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                 {item.assignedTo && <span className="text-gray-500 ml-2">({t.assign}: {item.assignedTo.displayName})</span>}
               </span>
-              {order.status === 'in_production' && currentUserRole === 'chef' && item.assignedTo?._id === user?.id && item.status !== 'completed' && (
+              {order.status === 'in_production' && canComplete && item.assignedTo?._id === user?.id && item.status !== 'completed' && (
                 <Button
                   variant="success"
                   onClick={() => confirmItemCompletion(order.id, item._id)}
@@ -164,7 +166,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         {(order.status === 'requested' || order.status === 'pending') && canApprove && (
           <Button
             variant="primary"
-            onClick={() => approveOrder(order.id)}
+            onClick={() => updateOrderStatus(order.id, 'approved')}
             disabled={submitting === order.id}
             className="px-3 py-1 text-xs"
           >

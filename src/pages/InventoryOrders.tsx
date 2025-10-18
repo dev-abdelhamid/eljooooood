@@ -1364,7 +1364,7 @@ export const InventoryOrders: React.FC = () => {
                                   </p>
                                 )}
                               </div>
-                              {['admin', 'production_manager'].includes(user.role) && (
+                              {['admin', 'production'].includes(user.role) && (
                                 <div className="flex-1">
                                   <label
                                     className={`block text-sm font-medium text-gray-700 mb-1 ${
