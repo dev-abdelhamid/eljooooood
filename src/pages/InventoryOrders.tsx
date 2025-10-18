@@ -34,7 +34,7 @@ const QuantityInput = ({
   onDecrement: () => void;
   max?: number;
 }) => {
-  const { language } from useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
