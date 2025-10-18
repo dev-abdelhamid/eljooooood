@@ -81,7 +81,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     if (!selectedOrder || !user) return;
 
     const updatedItems = selectedOrder.items.map((item) => {
-      const departmentId = item.department._id || 'no-department';
+      const orderItem = selectedOrder.items.find((i) => i._id === item._id);
+      const departmentId = orderItem?.department._id || 'no-department';
       const availableChefs = availableChefsByDepartment.get(departmentId) || [];
 
       let assignedTo = item.assignedTo?._id || '';
@@ -136,8 +137,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           ? `تعيين الشيفات لطلب ${selectedOrder?.orderNumber || ''}`
           : `Assign Chefs to Order #${selectedOrder?.orderNumber || ''}`
       }
-      size="sm"
-      className="bg-white rounded-lg shadow-xl border border-gray-100"
+      size="md"
+      className="bg-white rounded-lg shadow-xl border border-gray-200"
     >
       <form
         onSubmit={(e) => {
@@ -149,9 +150,9 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         className="space-y-4"
       >
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {assignFormData.items.map((_, index) => (
-              <Skeleton key={index} height={30} />
+              <Skeleton key={index} height={40} />
             ))}
           </div>
         ) : assignFormData.items.length === 0 ? (
@@ -166,18 +167,26 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-              ...availableChefs.map((chef) => ({
-                value: chef.userId,
-                label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
-              })),
+              ...(availableChefs.length > 0
+                ? availableChefs.map((chef) => ({
+                    value: chef.userId,
+                    label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+                  }))
+                : [
+                    {
+                      value: '',
+                      label: isRtl ? 'لا يوجد شيفات متاحة' : 'No chefs available',
+                      disabled: true,
+                    },
+                  ]),
             ];
 
             return (
               <motion.div
                 key={item.itemId}
-                initial={{ opacity: 0, y: 5 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.15, delay: index * 0.05 }}
+                transition={{ duration: 0.2, delay: index * 0.1 }}
               >
                 <label
                   className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
@@ -209,7 +218,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className={`p-2 bg-red-50 border border-red-200 rounded-md flex items-center gap-1 ${isRtl ? 'flex-row-reverse' : ''}`}
+            className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
             <AlertCircle className="w-4 h-4 text-red-600" />
             <span className="text-red-600 text-xs">{error}</span>
