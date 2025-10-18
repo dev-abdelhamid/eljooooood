@@ -1,3 +1,4 @@
+// AssignChefsModal.tsx
 import React, { useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
@@ -16,12 +17,12 @@ interface AssignChefsModalProps {
   error: string;
   submitting: string | null;
   assignChefs: (orderId: string) => void;
-  setAssignForm: (form: AssignChefsForm) => void;
+  setAssignForm: (formData: AssignChefsForm) => void;
   isRtl: boolean;
 }
 
 const translateUnit = (unit: string, isRtl: boolean) => {
-  const translations = {
+  const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
     'قطعة': { ar: 'قطعة', en: 'piece' },
     'علبة': { ar: 'علبة', en: 'pack' },
@@ -34,7 +35,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-export const AssignChefsModal = ({
+export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isOpen,
   onClose,
   selectedOrder,
@@ -49,20 +50,20 @@ export const AssignChefsModal = ({
   const { t } = useLanguage();
 
   const availableChefsByDepartment = useMemo(() => {
-    const map = new Map();
+    const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
       if (chef.department?._id) {
         if (!map.has(chef.department._id)) {
           map.set(chef.department._id, []);
         }
-        map.get(chef.department._id).push(chef);
+        map.get(chef.department._id)!.push(chef);
       }
     });
     return map;
   }, [chefs]);
 
   const updateAssignment = useCallback(
-    (index, value) => {
+    (index: number, value: string) => {
       setAssignForm({
         items: assignFormData.items.map((i, idx) =>
           idx === index ? { ...i, assignedTo: value } : i
@@ -153,13 +154,13 @@ export const AssignChefsModal = ({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2`}
+            className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
             <AlertCircle className="w-5 h-5 text-red-600" />
             <span className="text-red-600 text-sm">{error}</span>
           </motion.div>
         )}
-        <div className={`flex justify-end gap-2`}>
+        <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <Button
             variant="secondary"
             onClick={onClose}
@@ -182,3 +183,5 @@ export const AssignChefsModal = ({
     </Modal>
   );
 };
+
+export default AssignChefsModal;

@@ -100,7 +100,7 @@ interface State {
   isAssignModalOpen: boolean;
   isCreateModalOpen: boolean;
   assignFormData: AssignChefsForm;
-  createFormData: { notes: string; items: { productId: string; quantity: number; assignedTo?: string }[] };
+  createFormData: { notes: string; items: { productId: string; quantity: number }[] };
   filterStatus: string;
   searchQuery: string;
   debouncedSearchQuery: string;
@@ -150,7 +150,7 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, selectedOrder: action.payload };
     case 'SET_CHEFS':
       return { ...state, chefs: action.payload || [] };
-    case 'SET_PRODUCT':
+    case 'SET_PRODUCTS':
       return { ...state, products: action.payload || [] };
     case 'SET_ASSIGN_MODAL':
       return { ...state, isAssignModalOpen: action.isOpen ?? false };
@@ -358,7 +358,7 @@ export const InventoryOrders: React.FC = () => {
           sortOrder: state.sortOrder,
           search: state.debouncedSearchQuery || undefined,
         };
-        if (['production', 'chef'].includes(user.role) && user.department) query.department = user.department._id;
+        if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll(),
@@ -410,7 +410,7 @@ export const InventoryOrders: React.FC = () => {
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          });
+          }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
           type: 'SET_CHEFS',
@@ -436,7 +436,7 @@ export const InventoryOrders: React.FC = () => {
             : [],
         });
         dispatch({
-          type: 'SET_PRODUCT',
+          type: 'SET_PRODUCTS',
           payload: Array.isArray(productsResponse.data)
             ? productsResponse.data
                 .filter((product: any) => product && product._id)
@@ -600,13 +600,11 @@ export const InventoryOrders: React.FC = () => {
     const t = isRtl ? {
       productRequired: 'المنتج مطلوب',
       quantityRequired: 'الكمية مطلوبة',
-      quantityInvalid: 'الكمية يجب أن تكون أكبر من 0',
-      chefRequired: 'الشيف مطلوب',
+      quantityInvalid: 'الكمية يجب أن تكون أكبر من 0'
     } : {
       productRequired: 'Product is required',
       quantityRequired: 'Quantity is required',
-      quantityInvalid: 'Quantity must be greater than 0',
-      chefRequired: 'Chef is required',
+      quantityInvalid: 'Quantity must be greater than 0'
     };
     state.createFormData.items.forEach((item, index) => {
       if (!item.productId) {
@@ -615,13 +613,10 @@ export const InventoryOrders: React.FC = () => {
       if (!item.quantity || item.quantity < 1) {
         errors[`item_${index}_quantity`] = item.quantity === 0 ? t.quantityRequired : t.quantityInvalid;
       }
-      if (user.role !== 'chef' && !item.assignedTo) {
-        errors[`item_${index}_assignedTo`] = t.chefRequired;
-      }
     });
     dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
     return Object.keys(errors).length === 0;
-  }, [state.createFormData, isRtl, user.role]);
+  }, [state.createFormData, isRtl]);
   // إنشاء طلب جديد
   const createOrder = useCallback(async () => {
     if (!user?.id || !validateCreateForm()) {
@@ -632,47 +627,31 @@ export const InventoryOrders: React.FC = () => {
       const orderNumber = `ORD-${Date.now()}`;
       const response = await factoryOrdersAPI.create({
         orderNumber,
-        items: state.createFormData.items.map(i => ({ product: i.productId, quantity: i.quantity, assignedTo: i.assignedTo })),
+        items: state.createFormData.items.map(i => ({ product: i.productId, quantity: i.quantity })),
         notes: state.createFormData.notes,
         priority: 'medium',
       });
-      const items = response.data.items.map((item: any) => ({
-        _id: item._id,
-        productId: item.product._id,
-        productName: item.product.name,
-        productNameEn: item.product.nameEn,
-        displayProductName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-        quantity: Number(item.quantity),
-        unit: item.product.unit,
-        unitEn: item.product.unitEn,
-        displayUnit: translateUnit(item.product.unit, isRtl),
-        department: {
-          _id: item.product.department._id,
-          name: item.product.department.name,
-          nameEn: item.product.department.nameEn,
-          displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
-        },
-        assignedTo: item.assignedTo
-          ? {
-              _id: item.assignedTo._id,
-              username: item.assignedTo.username,
-              name: item.assignedTo.name,
-              nameEn: item.assignedTo.nameEn,
-              displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
-              department: {
-                _id: item.assignedTo.department._id,
-                name: item.assignedTo.department.name,
-                nameEn: item.assignedTo.department.nameEn,
-                displayName: isRtl ? item.assignedTo.department.name : item.assignedTo.department.nameEn || item.assignedTo.department.name,
-              },
-            }
-          : undefined,
-        status: item.status || 'pending',
-      }));
       const newOrder: FactoryOrder = {
         id: response.data._id,
         orderNumber: response.data.orderNumber,
-        items,
+        items: response.data.items.map((item: any) => ({
+          _id: item._id,
+          productId: item.product._id,
+          productName: item.product.name,
+          productNameEn: item.product.nameEn,
+          displayProductName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+          quantity: Number(item.quantity),
+          unit: item.product.unit,
+          unitEn: item.product.unitEn,
+          displayUnit: translateUnit(item.product.unit, isRtl),
+          department: {
+            _id: item.product.department._id,
+            name: item.product.department.name,
+            nameEn: item.product.department.nameEn,
+            displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+          },
+          status: item.status || 'pending',
+        })),
         status: response.data.status || 'pending',
         date: formatDate(new Date(response.data.createdAt), language),
         notes: response.data.notes || '',
@@ -1066,7 +1045,6 @@ export const InventoryOrders: React.FC = () => {
                                 openAssignModal={openAssignModal}
                                 submitting={state.submitting}
                                 isRtl={isRtl}
-                                userRole={user.role}
                               />
                             </motion.div>
                           ))}
@@ -1133,7 +1111,7 @@ export const InventoryOrders: React.FC = () => {
                               options={[
                                 { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
                                 ...state.products
-                                  .filter(product => ['production', 'chef'].includes(user?.role) && user?.department ? product.department._id === user.department._id : true)
+                                  .filter(product => user?.role === 'production' && user?.department ? product.department._id === user.department._id : true)
                                   .map(product => ({
                                     value: product._id,
                                     label: `${isRtl ? product.name : product.nameEn || product.name} (${translateUnit(product.unit, isRtl)})`,
@@ -1182,36 +1160,6 @@ export const InventoryOrders: React.FC = () => {
                                   <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
                                 )}
                               </div>
-                              {user.role !== 'chef' && (
-                                <div className="flex-1">
-                                  <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                                    {isRtl ? 'الشيف' : 'Chef'}
-                                  </label>
-                                  <ProductDropdown
-                                    options={[
-                                      { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-                                      ...state.chefs
-                                        .filter(chef => chef.department?._id === state.products.find(p => p._id === item.productId)?.department._id)
-                                        .map(chef => ({
-                                          value: chef.userId,
-                                          label: chef.displayName,
-                                        })),
-                                    ]}
-                                    value={item.assignedTo || ''}
-                                    onChange={(value) => {
-                                      const newItems = [...state.createFormData.items];
-                                      newItems[index].assignedTo = value;
-                                      dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
-                                      dispatch({ type: 'SET_FORM_ERRORS', payload: { ...state.formErrors, [`item_${index}_assignedTo`]: undefined } });
-                                    }}
-                                    ariaLabel={isRtl ? 'اختر شيف' : 'Select Chef'}
-                                    className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                                  />
-                                  {state.formErrors[`item_${index}_assignedTo`] && (
-                                    <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_assignedTo`]}</p>
-                                  )}
-                                </div>
-                              )}
                               {state.createFormData.items.length > 1 && (
                                 <button
                                   type="button"
@@ -1285,4 +1233,6 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
+
+
 export default InventoryOrders;
