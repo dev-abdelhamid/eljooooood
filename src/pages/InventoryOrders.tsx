@@ -5,7 +5,6 @@ import { useSocket } from '../contexts/SocketContext';
 import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
-
 const normalizeText = (text: string) => {
   return text
     .normalize('NFD')
@@ -16,6 +15,7 @@ const normalizeText = (text: string) => {
     .toLowerCase()
     .trim();
 };
+
 interface Product {
   _id: string;
   name: string;
@@ -198,6 +198,14 @@ const InventoryOrders: React.FC = () => {
         productsAPI.getAll(),
         departmentAPI.getAll(),
       ]);
+
+      // Log API responses for debugging
+      console.log('Orders Response:', ordersResponse);
+      console.log('Chefs Response:', chefsResponse);
+      console.log('Products Response:', productsResponse);
+      console.log('Departments Response:', departmentsResponse);
+
+      // Map orders
       const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
       setOrders(ordersData
         .filter((order: any) => order && order._id && order.orderNumber)
@@ -252,47 +260,58 @@ const InventoryOrders: React.FC = () => {
           createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
           createdByRole: order.createdBy?.role || 'unknown',
         })));
-      setChefs(Array.isArray(chefsResponse.data)
-        ? chefsResponse.data
-            .filter((chef: any) => chef && chef.user?._id)
-            .map((chef: any) => ({
-              _id: chef._id,
-              userId: chef.user._id,
-              name: chef.user?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: chef.user?.nameEn,
-              displayName: isRtl
-                ? chef.user?.name
-                : chef.user?.nameEn || chef.user?.name,
-              department: chef.department
-                ? {
-                    _id: chef.department._id || 'no-department',
-                    name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: chef.department.nameEn,
-                    displayName: isRtl
-                      ? chef.department.name
-                      : chef.department.nameEn || chef.department.name,
-                  }
-                : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
-              status: chef.status || 'active',
-            }))
-            .sort((a: Chef, b: Chef) => a.displayName.localeCompare(b.displayName, language))
-        : []);
+
+      // Map chefs with additional validation
+      const chefsData = Array.isArray(chefsResponse.data) ? chefsResponse.data : [];
+      if (chefsData.length === 0) {
+        console.warn('No chefs data received from API');
+      }
+      const mappedChefs = chefsData
+        .filter((chef: any) => chef && chef.user?._id && chef.department)
+        .map((chef: any) => {
+          const chefObj: Chef = {
+            _id: chef._id,
+            userId: chef.user._id,
+            name: chef.user?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            nameEn: chef.user?.nameEn || '',
+            displayName: isRtl
+              ? chef.user?.name || (isRtl ? 'غير معروف' : 'Unknown')
+              : chef.user?.nameEn || chef.user?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            department: chef.department
+              ? {
+                  _id: chef.department._id || 'no-department',
+                  name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  nameEn: chef.department.nameEn || '',
+                  displayName: isRtl
+                    ? chef.department.name || (isRtl ? 'غير معروف' : 'Unknown')
+                    : chef.department.nameEn || chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                }
+              : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', nameEn: '', displayName: isRtl ? 'غير معروف' : 'Unknown' },
+            status: chef.status || 'active',
+          };
+          return chefObj;
+        })
+        .sort((a: Chef, b: Chef) => a.displayName.localeCompare(b.displayName, language));
+      console.log('Mapped Chefs:', mappedChefs);
+      setChefs(mappedChefs);
+
+      // Map products
       setProducts(Array.isArray(productsResponse.data)
         ? productsResponse.data
             .filter((product: any) => product && product._id)
             .map((product: any) => ({
               _id: product._id,
               name: product.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: product.nameEn,
+              nameEn: product.nameEn || '',
               unit: product.unit || 'unit',
-              unitEn: product.unitEn,
+              unitEn: product.unitEn || '',
               department: {
                 _id: product.department?._id || 'no-department',
                 name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: product.department?.nameEn,
+                nameEn: product.department?.nameEn || '',
                 displayName: isRtl
-                  ? product.department?.name
-                  : product.department?.nameEn || product.department?.name,
+                  ? product.department?.name || (isRtl ? 'غير معروف' : 'Unknown')
+                  : product.department?.nameEn || product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
               },
               maxStockLevel: product.maxStockLevel || 1000,
             }))
@@ -302,22 +321,26 @@ const InventoryOrders: React.FC = () => {
               return nameA.localeCompare(nameB, language);
             })
         : []);
+
+      // Map departments
       setDepartments(Array.isArray(departmentsResponse.data)
         ? departmentsResponse.data.map((d: any) => ({
             _id: d._id,
-            displayName: isRtl ? d.name : d.nameEn || d.name,
+            displayName: isRtl ? d.name || (isRtl ? 'غير معروف' : 'Unknown') : d.nameEn || d.name || (isRtl ? 'غير معروف' : 'Unknown'),
           }))
         : []);
+
       setError('');
     } catch (err: any) {
-      console.error('Fetch data error:', err.message);
+      console.error('Fetch data error:', err.message, err);
       if (retryCount < 3) {
+        console.log(`Retrying fetch data (attempt ${retryCount + 1})...`);
         setTimeout(() => fetchData(retryCount + 1), 2000);
         return;
       }
       const errorMessage = err.response?.status === 404
         ? isRtl ? 'لم يتم العثور على طلبات' : 'No orders found'
-        : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
+        : isRtl ? `خطأ في جلب البيانات: ${err.message}` : `Error fetching data: ${err.message}`;
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -338,6 +361,7 @@ const InventoryOrders: React.FC = () => {
       }
     }, 5000);
     socket.on('connect', () => {
+      console.log('WebSocket connected');
       setError('');
     });
     socket.on('connect_error', (err) => {
@@ -354,16 +378,16 @@ const InventoryOrders: React.FC = () => {
               _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
               productId: item.product?._id || 'unknown',
               productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              productNameEn: item.product?.nameEn,
+              productNameEn: item.product?.nameEn || '',
               displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
               quantity: Number(item.quantity) || 1,
               unit: item.product?.unit || 'unit',
-              unitEn: item.product?.unitEn,
+              unitEn: item.product?.unitEn || '',
               displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
               department: {
                 _id: item.product?.department?._id || 'no-department',
                 name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.product?.department?.nameEn,
+                nameEn: item.product?.department?.nameEn || '',
                 displayName: isRtl
                   ? item.product?.department?.name
                   : item.product?.department?.nameEn || item.product?.department?.name,
@@ -373,14 +397,14 @@ const InventoryOrders: React.FC = () => {
                     _id: item.assignedTo._id,
                     username: item.assignedTo.username,
                     name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.assignedTo.nameEn,
+                    nameEn: item.assignedTo.nameEn || '',
                     displayName: isRtl
                       ? item.assignedTo.name
                       : item.assignedTo.nameEn || item.assignedTo.name,
                     department: {
                       _id: item.assignedTo.department?._id || 'no-department',
                       name: item.assignedTo.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                      nameEn: item.assignedTo.department?.nameEn,
+                      nameEn: item.assignedTo.department?.nameEn || '',
                       displayName: isRtl
                         ? item.assignedTo.department?.name
                         : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
@@ -434,12 +458,26 @@ const InventoryOrders: React.FC = () => {
                         ? {
                             _id: assignment.assignedTo._id,
                             username: assignment.assignedTo.username,
-                            name: assignment.assignedTo.name,
-                            nameEn: assignment.assignedTo.nameEn,
+                            name: assignment.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                            nameEn: assignment.assignedTo.nameEn || '',
                             displayName: isRtl
                               ? assignment.assignedTo.name
                               : assignment.assignedTo.nameEn || assignment.assignedTo.name,
-                            department: assignment.assignedTo.department,
+                            department: assignment.assignedTo.department
+                              ? {
+                                  _id: assignment.assignedTo.department._id,
+                                  name: assignment.assignedTo.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                                  nameEn: assignment.assignedTo.department.nameEn || '',
+                                  displayName: isRtl
+                                    ? assignment.assignedTo.department.name
+                                    : assignment.assignedTo.department.nameEn || assignment.assignedTo.department.name,
+                                }
+                              : {
+                                  _id: 'no-department',
+                                  name: isRtl ? 'غير معروف' : 'Unknown',
+                                  nameEn: '',
+                                  displayName: isRtl ? 'غير معروف' : 'Unknown',
+                                },
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -524,16 +562,16 @@ const InventoryOrders: React.FC = () => {
           _id: item._id,
           productId: item.product._id,
           productName: item.product.name,
-          productNameEn: item.product.nameEn,
+          productNameEn: item.product.nameEn || '',
           displayProductName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
           quantity: Number(item.quantity),
           unit: item.product.unit,
-          unitEn: item.product.unitEn,
+          unitEn: item.product.unitEn || '',
           displayUnit: translateUnit(item.product.unit, isRtl),
           department: {
             _id: item.product.department._id,
             name: item.product.department.name,
-            nameEn: item.product.department.nameEn,
+            nameEn: item.product.department.nameEn || '',
             displayName: isRtl
               ? item.product.department.name
               : item.product.department.nameEn || item.product.department.name,
@@ -542,13 +580,13 @@ const InventoryOrders: React.FC = () => {
             ? {
                 _id: item.assignedTo._id,
                 username: item.assignedTo.username,
-                name: item.assignedTo.name,
-                nameEn: item.assignedTo.nameEn,
+                name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                nameEn: item.assignedTo.nameEn || '',
                 displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
                 department: {
                   _id: item.assignedTo.department._id,
                   name: item.assignedTo.department.name,
-                  nameEn: item.assignedTo.department.nameEn,
+                  nameEn: item.assignedTo.department.nameEn || '',
                   displayName: isRtl
                     ? item.assignedTo.department.name
                     : item.assignedTo.department.nameEn || item.assignedTo.department.name,
@@ -608,10 +646,12 @@ const InventoryOrders: React.FC = () => {
           _id: item.assignedTo,
           username: 'unknown',
           name: isRtl ? 'غير معروف' : 'Unknown',
+          nameEn: '',
           displayName: isRtl ? 'غير معروف' : 'Unknown',
           department: {
             _id: 'no-department',
             name: isRtl ? 'غير معروف' : 'Unknown',
+            nameEn: '',
             displayName: isRtl ? 'غير معروف' : 'Unknown',
           },
         },
@@ -671,10 +711,10 @@ const InventoryOrders: React.FC = () => {
   // Debug: Log chefs data
   useEffect(() => {
     if (chefs.length === 0 && !loading) {
-      console.warn('No chefs loaded:', chefs);
+      console.warn('No chefs loaded in state:', chefs);
       setError(isRtl ? 'لم يتم تحميل الشيفات' : 'No chefs loaded');
     } else {
-      console.log('Chefs loaded:', chefs);
+      console.log('Chefs loaded in state:', chefs);
     }
   }, [chefs, loading, isRtl]);
 
@@ -814,33 +854,38 @@ const InventoryOrders: React.FC = () => {
                             <br />
                             {isRtl ? 'الشيف: ' : 'Chef: '}
                             {item.assignedTo ? item.assignedTo.displayName : (
-                              <button
-                                className="text-blue-500 hover:underline text-xs"
-                                onClick={() => {
-                                  if (order.createdByRole === 'chef') {
-                                    setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
-                                    return;
-                                  }
-                                  if (order.status !== 'approved') {
-                                    setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
-                                    return;
-                                  }
-                                  setAssignFormData({
-                                    items: order.items
-                                      .filter(i => !i.assignedTo)
-                                      .map(i => ({
-                                        itemId: i._id,
-                                        assignedTo: '',
-                                        product: i.displayProductName,
-                                        quantity: i.quantity,
-                                        unit: i.displayUnit,
-                                      })),
-                                  });
-                                  setIsAssignModalOpen(true);
-                                }}
-                              >
-                                {isRtl ? 'تعيين شيف' : 'Assign Chef'}
-                              </button>
+                              chefs.length === 0 ? (
+                                <span className="text-red-600">{isRtl ? 'لا يوجد شيفات' : 'No chefs available'}</span>
+                              ) : (
+                                <button
+                                  className="text-blue-500 hover:underline text-xs"
+                                  onClick={() => {
+                                    if (order.createdByRole === 'chef') {
+                                      setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
+                                      return;
+                                    }
+                                    if (order.status !== 'approved') {
+                                      setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
+                                      return;
+                                    }
+                                    setAssignFormData({
+                                      items: order.items
+                                        .filter(i => !i.assignedTo)
+                                        .map(i => ({
+                                          itemId: i._id,
+                                          assignedTo: '',
+                                          product: i.displayProductName,
+                                          quantity: i.quantity,
+                                          unit: i.displayUnit,
+                                        })),
+                                    });
+                                    setIsAssignModalOpen(true);
+                                  }}
+                                  disabled={chefs.length === 0}
+                                >
+                                  {isRtl ? 'تعيين شيف' : 'Assign Chef'}
+                                </button>
+                              )
                             )}
                           </li>
                         ))}
@@ -860,33 +905,38 @@ const InventoryOrders: React.FC = () => {
                     <td className="py-2 px-3 border-b text-xs">{order.createdBy}</td>
                     <td className="py-2 px-3 border-b text-xs">
                       {order.items.some(item => !item.assignedTo) && (
-                        <button
-                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
-                          onClick={() => {
-                            if (order.createdByRole === 'chef') {
-                              setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
-                              return;
-                            }
-                            if (order.status !== 'approved') {
-                              setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
-                              return;
-                            }
-                            setAssignFormData({
-                              items: order.items
-                                .filter(i => !i.assignedTo)
-                                .map(i => ({
-                                  itemId: i._id,
-                                  assignedTo: '',
-                                  product: i.displayProductName,
-                                  quantity: i.quantity,
-                                  unit: i.displayUnit,
-                                })),
-                            });
-                            setIsAssignModalOpen(true);
-                          }}
-                        >
-                          {isRtl ? 'تعيين شيفات' : 'Assign Chefs'}
-                        </button>
+                        chefs.length === 0 ? (
+                          <span className="text-red-600">{isRtl ? 'لا يوجد شيفات' : 'No chefs available'}</span>
+                        ) : (
+                          <button
+                            className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
+                            onClick={() => {
+                              if (order.createdByRole === 'chef') {
+                                setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
+                                return;
+                              }
+                              if (order.status !== 'approved') {
+                                setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
+                                return;
+                              }
+                              setAssignFormData({
+                                items: order.items
+                                  .filter(i => !i.assignedTo)
+                                  .map(i => ({
+                                    itemId: i._id,
+                                    assignedTo: '',
+                                    product: i.displayProductName,
+                                    quantity: i.quantity,
+                                    unit: i.displayUnit,
+                                  })),
+                              });
+                              setIsAssignModalOpen(true);
+                            }}
+                            disabled={chefs.length === 0}
+                          >
+                            {isRtl ? 'تعيين شيفات' : 'Assign Chefs'}
+                          </button>
+                        )
                       )}
                     </td>
                   </tr>
@@ -919,57 +969,67 @@ const InventoryOrders: React.FC = () => {
                       <br />
                       {isRtl ? 'الشيف: ' : 'Chef: '}
                       {item.assignedTo ? item.assignedTo.displayName : (
-                        <button
-                          className="text-blue-500 hover:underline text-xs"
-                          onClick={() => {
-                            if (order.createdByRole === 'chef') {
-                              setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
-                              return;
-                            }
-                            if (order.status !== 'approved') {
-                              setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
-                              return;
-                            }
-                            setAssignFormData({
-                              items: [{ itemId: item._id, assignedTo: '', product: item.displayProductName, quantity: item.quantity, unit: item.displayUnit }],
-                            });
-                            setIsAssignModalOpen(true);
-                          }}
-                        >
-                          {isRtl ? 'تعيين شيف' : 'Assign Chef'}
-                        </button>
+                        chefs.length === 0 ? (
+                          <span className="text-red-600">{isRtl ? 'لا يوجد شيفات' : 'No chefs available'}</span>
+                        ) : (
+                          <button
+                            className="text-blue-500 hover:underline text-xs"
+                            onClick={() => {
+                              if (order.createdByRole === 'chef') {
+                                setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
+                                return;
+                              }
+                              if (order.status !== 'approved') {
+                                setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
+                                return;
+                              }
+                              setAssignFormData({
+                                items: [{ itemId: item._id, assignedTo: '', product: item.displayProductName, quantity: item.quantity, unit: item.displayUnit }],
+                              });
+                              setIsAssignModalOpen(true);
+                            }}
+                            disabled={chefs.length === 0}
+                          >
+                            {isRtl ? 'تعيين شيف' : 'Assign Chef'}
+                          </button>
+                        )
                       )}
                     </li>
                   ))}
                 </ul>
                 {order.items.some(item => !item.assignedTo) && (
-                  <button
-                    className="mt-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
-                    onClick={() => {
-                      if (order.createdByRole === 'chef') {
-                        setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
-                        return;
-                      }
-                      if (order.status !== 'approved') {
-                        setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
-                        return;
-                      }
-                      setAssignFormData({
-                        items: order.items
-                          .filter(i => !i.assignedTo)
-                          .map(i => ({
-                            itemId: i._id,
-                            assignedTo: '',
-                            product: i.displayProductName,
-                            quantity: i.quantity,
-                            unit: i.displayUnit,
-                          })),
-                      });
-                      setIsAssignModalOpen(true);
-                    }}
-                  >
-                    {isRtl ? 'تعيين شيفات' : 'Assign Chefs'}
-                  </button>
+                  chefs.length === 0 ? (
+                    <span className="text-red-600">{isRtl ? 'لا يوجد شيفات' : 'No chefs available'}</span>
+                  ) : (
+                    <button
+                      className="mt-1 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs"
+                      onClick={() => {
+                        if (order.createdByRole === 'chef') {
+                          setError(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it');
+                          return;
+                        }
+                        if (order.status !== 'approved') {
+                          setError(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved');
+                          return;
+                        }
+                        setAssignFormData({
+                          items: order.items
+                            .filter(i => !i.assignedTo)
+                            .map(i => ({
+                              itemId: i._id,
+                              assignedTo: '',
+                              product: i.displayProductName,
+                              quantity: i.quantity,
+                              unit: i.displayUnit,
+                            })),
+                        });
+                        setIsAssignModalOpen(true);
+                      }}
+                      disabled={chefs.length === 0}
+                    >
+                      {isRtl ? 'تعيين شيفات' : 'Assign Chefs'}
+                    </button>
+                  )
                 )}
               </div>
             ))}
@@ -995,35 +1055,39 @@ const InventoryOrders: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-4 rounded-lg max-w-sm w-full max-h-[80vh] overflow-y-auto">
             <h2 className="text-base font-semibold mb-3">{isRtl ? 'تعيين شيفات' : 'Assign Chefs'}</h2>
-            {assignFormData.items.map((item, index) => {
-              const order = orders.find(o => o.items.some(i => i._id === item.itemId));
-              const product = order?.items.find(i => i._id === item.itemId);
-              const departmentId = product?.department._id;
-              return (
-                <div key={index} className="mb-3">
-                  <p className="text-xs">{item.product} ({item.quantity} {item.unit})</p>
-                  <select
-                    value={item.assignedTo}
-                    onChange={e => {
-                      const newItems = [...assignFormData.items];
-                      newItems[index].assignedTo = e.target.value;
-                      setAssignFormData({ items: newItems });
-                    }}
-                    className="w-full p-2 border rounded-md mt-1 text-xs"
-                  >
-                    <option value="">{isRtl ? 'اختر شيف' : 'Select Chef'}</option>
-                    {chefs
-                      .filter(c => !departmentId || c.department._id === departmentId)
-                      .map(chef => (
+            {assignFormData.items.length === 0 ? (
+              <p className="text-red-600 text-xs mb-3">{isRtl ? 'لا توجد عناصر للتعيين' : 'No items to assign'}</p>
+            ) : (
+              assignFormData.items.map((item, index) => {
+                const order = orders.find(o => o.items.some(i => i._id === item.itemId));
+                const product = order?.items.find(i => i._id === item.itemId);
+                const departmentId = product?.department._id;
+                const availableChefs = chefs.filter(c => !departmentId || c.department._id === departmentId);
+                return (
+                  <div key={index} className="mb-3">
+                    <p className="text-xs">{item.product} ({item.quantity} {item.unit})</p>
+                    <select
+                      value={item.assignedTo}
+                      onChange={e => {
+                        const newItems = [...assignFormData.items];
+                        newItems[index].assignedTo = e.target.value;
+                        setAssignFormData({ items: newItems });
+                      }}
+                      className="w-full p-2 border rounded-md mt-1 text-xs"
+                      disabled={availableChefs.length === 0}
+                    >
+                      <option value="">{isRtl ? 'اختر شيف' : 'Select Chef'}</option>
+                      {availableChefs.map(chef => (
                         <option key={chef.userId} value={chef.userId}>{chef.displayName}</option>
                       ))}
-                  </select>
-                  {chefs.filter(c => !departmentId || c.department._id === departmentId).length === 0 && (
-                    <p className="text-red-600 text-xs mt-1">{isRtl ? 'لا يوجد شيفات متاحة لهذا القسم' : 'No chefs available for this department'}</p>
-                  )}
-                </div>
-              );
-            })}
+                    </select>
+                    {availableChefs.length === 0 && (
+                      <p className="text-red-600 text-xs mt-1">{isRtl ? 'لا يوجد شيفات متاحة لهذا القسم' : 'No chefs available for this department'}</p>
+                    )}
+                  </div>
+                );
+              })
+            )}
             {error && <p className="text-red-600 text-xs mb-3">{error}</p>}
             <div className="flex justify-end gap-2">
               <button
@@ -1037,8 +1101,8 @@ const InventoryOrders: React.FC = () => {
                 {isRtl ? 'إلغاء' : 'Cancel'}
               </button>
               <button
-                onClick={() => assignChefs(assignFormData.items[0].itemId.split('-')[0])}
-                disabled={submitting || assignFormData.items.some(item => !item.assignedTo)}
+                onClick={() => assignChefs(assignFormData.items[0]?.itemId.split('-')[0])}
+                disabled={submitting || assignFormData.items.some(item => !item.assignedTo) || assignFormData.items.length === 0}
                 className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs disabled:opacity-50"
               >
                 {submitting ? (isRtl ? 'جاري التعيين...' : 'Assigning...') : (isRtl ? 'تعيين' : 'Assign')}
@@ -1137,6 +1201,7 @@ const InventoryOrders: React.FC = () => {
                             setFormErrors({ ...formErrors, [`item_${index}_assignedTo`]: undefined });
                           }}
                           className="w-full p-2 border rounded-md text-xs"
+                          disabled={chefs.filter(c => c.department._id === products.find(p => p._id === item.productId)?.department._id).length === 0}
                         >
                           <option value="">{isRtl ? 'اختر شيف' : 'Select Chef'}</option>
                           {chefs
