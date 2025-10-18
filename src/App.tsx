@@ -100,7 +100,7 @@ function AppContent() {
                   <Route path="/branch-returns" element={<BranchReturns />} />
                   <Route path="/branch-sales/new" element={<CreateSale />} />
                   <Route path="/branch-sales/analytics" element={<BranchSalesAnalytics />} />
-                  <Route path="/sales/analytics" element={<SalesAnalytics />} />
+                  <Route path="/reports" element={<SalesAnalytics />} />
                   <Route path="/admin-sales" element={<AdminSalesReport />} />
                   <Route path="/returnStats" element={<ReturnStats />} />
                   <Route path="/dailyOrdersSummary" element={<DailyOrdersSummary />} />
