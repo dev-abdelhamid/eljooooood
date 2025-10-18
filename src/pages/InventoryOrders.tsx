@@ -1,4 +1,3 @@
-// components/InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,14 +10,14 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
-import { AssignChefsModal } from '../components/production/AssignChefsModal';
+import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
-import { OrderCard } from '../components/production/OrderCard';
+import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
@@ -37,6 +36,7 @@ const QuantityInput = ({
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
     if (val === '' || isNaN(num) || num < 1) {
@@ -49,6 +49,7 @@ const QuantityInput = ({
     }
     onChange(val);
   };
+
   return (
     <div className="flex items-center gap-2">
       <button
@@ -529,26 +530,30 @@ export const InventoryOrders: React.FC = () => {
   }, [fetchData]);
 
   useEffect(() => {
-    if (!user || !['chef', 'production_manager', 'admin'].includes(user.role) || !socket) {
+    if (!user || !['chef', 'production', 'admin'].includes(user.role) || !socket) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
+
     const reconnectInterval = setInterval(() => {
       if (!isConnected && socket) {
         console.log('Attempting to reconnect WebSocket...');
         socket.connect();
       }
     }, 5000);
+
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
+
     socket.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
+
     socket.on('newFactoryOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new factory order data:', order);
@@ -605,6 +610,7 @@ export const InventoryOrders: React.FC = () => {
         position: isRtl ? 'top-left' : 'top-right',
       });
     });
+
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: FactoryOrder['status'] }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
@@ -615,6 +621,7 @@ export const InventoryOrders: React.FC = () => {
         position: isRtl ? 'top-left' : 'top-right',
       });
     });
+
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: FactoryOrderItem['status'] }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
@@ -625,6 +632,7 @@ export const InventoryOrders: React.FC = () => {
         position: isRtl ? 'top-left' : 'top-right',
       });
     });
+
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
         console.warn('Invalid task assigned data:', { orderId, items });
@@ -633,6 +641,7 @@ export const InventoryOrders: React.FC = () => {
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
       toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', { position: isRtl ? 'top-left' : 'top-right' });
     });
+
     return () => {
       clearInterval(reconnectInterval);
       socket.off('connect');
@@ -659,6 +668,7 @@ export const InventoryOrders: React.FC = () => {
           quantityInvalid: 'Quantity must be greater than 0',
           chefRequired: 'Chef is required',
         };
+
     state.createFormData.items.forEach((item, index) => {
       if (!item.productId) {
         errors[`item_${index}_productId`] = t.productRequired;
@@ -666,10 +676,11 @@ export const InventoryOrders: React.FC = () => {
       if (!item.quantity || item.quantity < 1) {
         errors[`item_${index}_quantity`] = item.quantity === 0 ? t.quantityRequired : t.quantityInvalid;
       }
-      if (['admin', 'production_manager'].includes(user.role) && !item.assignedTo) {
+      if (['admin', 'production'].includes(user.role) && !item.assignedTo) {
         errors[`item_${index}_assignedTo`] = t.chefRequired;
       }
     });
+
     dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
     return Object.keys(errors).length === 0;
   }, [state.createFormData, isRtl, user.role]);
@@ -678,23 +689,25 @@ export const InventoryOrders: React.FC = () => {
     if (!user?.id || !validateCreateForm()) {
       return;
     }
+
     dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
     try {
       const orderNumber = `ORD-${Date.now()}`;
-      const isAdminOrManager = ['admin', 'production_manager'].includes(user.role);
-      const initialStatus = isAdminOrManager && state.createFormData.items.every(i => i.assignedTo) ? 'in_production' : isAdminOrManager ? 'pending' : 'requested';
+      const isAdminOrProduction = ['admin', 'production'].includes(user.role);
+      const initialStatus = isAdminOrProduction && state.createFormData.items.every(i => i.assignedTo) ? 'in_production' : isAdminOrProduction ? 'pending' : 'requested';
       const items = state.createFormData.items.map((i) => ({
         product: i.productId,
         quantity: i.quantity,
         assignedTo: user.role === 'chef' ? user.id : i.assignedTo,
       }));
+
       const response = await factoryOrdersAPI.create({
         orderNumber,
         items,
         notes: state.createFormData.notes,
         priority: 'medium',
-        lang: language,
       });
+
       const newOrder: FactoryOrder = {
         id: response.data._id,
         orderNumber: response.data.orderNumber,
@@ -738,17 +751,21 @@ export const InventoryOrders: React.FC = () => {
         createdBy: response.data.createdBy?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
         createdByRole: response.data.createdBy?.role || 'unknown',
       };
+
       dispatch({ type: 'ADD_ORDER', payload: newOrder });
       dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
       dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }] } });
       dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
+
       if (socket && isConnected) {
         emit('newFactoryOrder', newOrder);
       }
+
       toast.success(isRtl ? 'تم إنشاء طلب الإنتاج بنجاح' : 'Production order created successfully', {
         position: isRtl ? 'top-left' : 'top-right',
       });
-      if (isAdminOrManager && state.createFormData.items.some(i => !i.assignedTo)) {
+
+      if (isAdminOrProduction && state.createFormData.items.some(i => !i.assignedTo)) {
         dispatch({ type: 'SET_SELECTED_ORDER', payload: newOrder });
         dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
       }
@@ -775,9 +792,13 @@ export const InventoryOrders: React.FC = () => {
         if (newStatus === 'stocked') {
           const items = order.items.map((item) => ({
             productId: item.productId,
-            quantity: item.quantity,
+            currentStock: item.quantity,
           }));
-          await inventoryAPI.addToInventory({ orderId, items });
+          await factoryInventoryAPI.bulkCreate({
+            userId: user.id,
+            orderId,
+            items,
+          });
         }
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
         if (socket && isConnected) {
@@ -795,7 +816,7 @@ export const InventoryOrders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [user, state.orders, isRtl, socket, isConnected, emit]
+    [state.orders, isRtl, socket, isConnected, emit, user]
   );
 
   const confirmItemCompletion = useCallback(
@@ -850,7 +871,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
+        await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
         const items = state.assignFormData.items.map((item) => ({
           _id: item.itemId,
           assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
@@ -941,7 +962,7 @@ export const InventoryOrders: React.FC = () => {
         (order) =>
           (!state.filterStatus || order.status === state.filterStatus) &&
           (!state.filterDepartment || order.items.some(item => item.department._id === state.filterDepartment)) &&
-          (user?.role === 'production_manager' && user?.department
+          (user?.role === 'production' && user?.department
             ? order.items.some((item) => item.department._id === user.department._id)
             : true) &&
           (user?.role === 'chef' ? order.items.some((item) => item.assignedTo?._id === user.id) : true)
@@ -1198,6 +1219,7 @@ export const InventoryOrders: React.FC = () => {
                                 updateOrderStatus={updateOrderStatus}
                                 confirmItemCompletion={confirmItemCompletion}
                                 openAssignModal={openAssignModal}
+                                confirmFactoryProduction={(orderId) => updateOrderStatus(orderId, 'stocked')}  // استخدم factoryInventoryAPI هنا
                                 submitting={state.submitting}
                                 isRtl={isRtl}
                                 currentUserRole={user.role}
@@ -1237,7 +1259,10 @@ export const InventoryOrders: React.FC = () => {
                     isOpen={state.isCreateModalOpen}
                     onClose={() => {
                       dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-                      dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }] } });
+                      dispatch({
+                        type: 'SET_CREATE_FORM',
+                        payload: { notes: '', items: [{ productId: '', quantity: 1 }] },
+                      });
                       dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
                     }}
                     title={isRtl ? 'إنشاء طلب إنتاج جديد' : 'Create New Production Order'}
@@ -1277,8 +1302,7 @@ export const InventoryOrders: React.FC = () => {
                                   )
                                   .map((product) => ({
                                     value: product._id,
-                                    label: `${product.displayName} (${
-                                    product.displayUnit})`,
+                                    label: `${product.displayName} (${product.displayUnit})`,
                                   })),
                               ]}
                               value={item.productId}
