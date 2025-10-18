@@ -387,10 +387,10 @@ export const InventoryOrders: React.FC = () => {
         };
         if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, productsResponse, departmentsResponse] = await Promise.all([
-          withRetry(() => factoryOrdersAPI.getAll(query)),
-          withRetry(() => chefsAPI.getAll()),
-          withRetry(() => productsAPI.getAll()),
-          withRetry(() => departmentAPI.getAll()),
+          (() => factoryOrdersAPI.getAll(query)),
+          (() => chefsAPI.getAll()),
+          (() => productsAPI.getAll()),
+          (() => departmentAPI.getAll()),
         ]);
         const ordersData = Array.isArray(ordersResponse.data.data) ? ordersResponse.data.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
@@ -709,7 +709,7 @@ export const InventoryOrders: React.FC = () => {
         quantity: i.quantity,
         assignedTo: user.role === 'chef' ? user.id : i.assignedTo,
       }));
-      const response = await withRetry(() =>
+      const response = await (() =>
         factoryOrdersAPI.create({
           orderNumber,
           items,
@@ -758,7 +758,7 @@ export const InventoryOrders: React.FC = () => {
           status: item.status || 'pending',
         })),
         status: response.data.data.status || initialStatus,
-        date: formatDate(new Date(response.data.data.createdAt), language, { timeZone: 'Europe/Athens' }),
+        date: formatDate(new Date(response.data.data.createdAt), language),
         notes: response.data.data.notes || '',
         priority: response.data.data.priority || 'medium',
         createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
@@ -846,7 +846,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: itemId });
       try {
-        await withRetry(() => factoryOrdersAPI.updateItemStatus(orderId, itemId, { status: 'completed' }));
+        await (() => factoryOrdersAPI.updateItemStatus(orderId, itemId, { status: 'completed' }));
         dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status: 'completed' } });
         if (socket && isConnected) {
           emit('itemStatusUpdated', { orderId, itemId, status: 'completed' });
@@ -883,7 +883,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await withRetry(() => factoryOrdersAPI.confirmProduction(orderId));
+        await (() => factoryOrdersAPI.confirmProduction(orderId));
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: 'stocked' });
         if (socket && isConnected) {
           emit('factoryOrderCompleted', { factoryOrderId: orderId, orderNumber: order.orderNumber });
