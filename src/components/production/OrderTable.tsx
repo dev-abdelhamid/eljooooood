@@ -1,19 +1,17 @@
-// components/Shared/OrderTable.tsx
 import React from 'react';
 import { Button } from '../UI/Button';
-import { UserCheck, CheckCircle } from 'lucide-react';
-import { FactoryOrder } from '../../types/types';
+import { CheckCircle } from 'lucide-react';
+import { FactoryOrder, UserRole } from '../../types/types';
 
 interface OrderTableProps {
   orders: FactoryOrder[];
-  calculateAdjustedTotal: (order: FactoryOrder) => string;
   calculateTotalQuantity: (order: FactoryOrder) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
   updateOrderStatus: (orderId: string, status: FactoryOrder['status']) => void;
-  openAssignModal: (order: FactoryOrder) => void;
   submitting: string | null;
   isRtl: boolean;
   startIndex: number;
+  currentUserRole: UserRole;
 }
 
 const translations = {
@@ -30,7 +28,6 @@ const translations = {
     approve: 'الموافقة',
     complete: 'إكمال',
     cancel: 'إلغاء',
-    assignChefs: 'تعيين شيفات',
     pending: 'قيد الانتظار',
     approved: 'تم الموافقة',
     in_production: 'في الإنتاج',
@@ -54,7 +51,6 @@ const translations = {
     approve: 'Approve',
     complete: 'Complete',
     cancel: 'Cancel',
-    assignChefs: 'Assign Chefs',
     pending: 'Pending',
     approved: 'Approved',
     in_production: 'In Production',
@@ -72,12 +68,15 @@ export const OrderTable: React.FC<OrderTableProps> = ({
   calculateTotalQuantity,
   translateUnit,
   updateOrderStatus,
-  openAssignModal,
   submitting,
   isRtl,
   startIndex,
+  currentUserRole,
 }) => {
   const t = translations[isRtl ? 'ar' : 'en'];
+
+  const canApprove = ['admin', 'production_manager'].includes(currentUserRole);
+  const canComplete = ['chef', 'admin', 'production_manager'].includes(currentUserRole);
 
   return (
     <div className="overflow-x-auto">
@@ -120,8 +119,6 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                   className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                     order.status === 'pending'
                       ? 'bg-yellow-100 text-yellow-800'
-                      : order.status === 'approved'
-                      ? 'bg-blue-100 text-blue-800'
                       : order.status === 'in_production'
                       ? 'bg-purple-100 text-purple-800'
                       : order.status === 'completed'
@@ -137,10 +134,10 @@ export const OrderTable: React.FC<OrderTableProps> = ({
               <td className="px-4 py-3 text-sm">{order.createdBy}</td>
               <td className="px-4 py-3 text-sm">
                 <div className={`flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  {order.status === 'pending' && (
+                  {order.status === 'pending' && canApprove && (
                     <Button
                       variant="primary"
-                      onClick={() => updateOrderStatus(order.id, 'approved')}
+                      onClick={() => updateOrderStatus(order.id, 'in_production')}
                       disabled={submitting === order.id}
                       className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
                       aria-label={t.approve}
@@ -148,7 +145,7 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                       {submitting === order.id ? '...' : t.approve}
                     </Button>
                   )}
-                  {order.status === 'in_production' && (
+                  {order.status === 'in_production' && canComplete && (
                     <Button
                       variant="success"
                       onClick={() => updateOrderStatus(order.id, 'completed')}
@@ -159,7 +156,7 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                       {submitting === order.id ? '...' : <CheckCircle className="w-4 h-4" />}
                     </Button>
                   )}
-                  {['pending', 'approved', 'in_production'].includes(order.status) && (
+                  {['pending', 'in_production'].includes(order.status) && (
                     <Button
                       variant="danger"
                       onClick={() => updateOrderStatus(order.id, 'cancelled')}
@@ -168,17 +165,6 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                       aria-label={t.cancel}
                     >
                       {submitting === order.id ? '...' : t.cancel}
-                    </Button>
-                  )}
-                  {order.status === 'approved' && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => openAssignModal(order)}
-                      disabled={submitting === order.id}
-                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
-                      aria-label={t.assignChefs}
-                    >
-                      <UserCheck className="w-4 h-4" />
                     </Button>
                   )}
                 </div>
