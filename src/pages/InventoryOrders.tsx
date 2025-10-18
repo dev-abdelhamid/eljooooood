@@ -348,7 +348,7 @@ export const InventoryOrders: React.FC = () => {
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, { ...initialState, isRtl });
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
@@ -654,7 +654,6 @@ export const InventoryOrders: React.FC = () => {
       socket.off('taskAssigned');
     };
   }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
-
   const validateCreateForm = useCallback(() => {
     const errors: Record<string, string> = {};
     const t = isRtl
@@ -684,7 +683,6 @@ export const InventoryOrders: React.FC = () => {
     dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
     return Object.keys(errors).length === 0;
   }, [state.createFormData, isRtl, user.role]);
-
   const createOrder = useCallback(async () => {
     if (!user?.id || !validateCreateForm()) {
       return;
@@ -1064,24 +1062,26 @@ export const InventoryOrders: React.FC = () => {
                   className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
-              <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                  {isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
-                </label>
-                <ProductDropdown
-                  options={[
-                    { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
-                    ...state.departments.map((dept) => ({
-                      value: dept._id,
-                      label: dept.displayName,
-                    })),
-                  ]}
-                  value={state.filterDepartment}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_DEPARTMENT', payload: value })}
-                  ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                />
-              </div>
+              {['admin', 'production_manager'].includes(user.role) && (
+                <div>
+                  <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
+                  </label>
+                  <ProductDropdown
+                    options={[
+                      { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                      ...state.departments.map((dept) => ({
+                        value: dept._id,
+                        label: dept.displayName,
+                      })),
+                    ]}
+                    value={state.filterDepartment}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER_DEPARTMENT', payload: value })}
+                    ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
+                    className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                  />
+                </div>
+              )}
               <div>
                 <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
                   {isRtl ? 'ترتيب حسب' : 'Sort By'}
@@ -1123,7 +1123,7 @@ export const InventoryOrders: React.FC = () => {
                   className="space-y-4"
                 >
                   {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
                         <motion.div
                           key={i}
@@ -1161,7 +1161,7 @@ export const InventoryOrders: React.FC = () => {
                     <Button
                       variant="primary"
                       onClick={() => fetchData()}
-                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
+                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm font-medium shadow transition-all duration-200"
                       aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                     >
                       {isRtl ? 'إعادة المحاولة' : 'Retry'}
@@ -1183,7 +1183,7 @@ export const InventoryOrders: React.FC = () => {
                         {isRtl ? 'لا توجد طلبات' : 'No Orders'}
                       </h3>
                       <p className="text-sm text-gray-500">
-                        {state.filterStatus || state.debouncedSearchQuery
+                        {state.filterStatus || state.filterDepartment || state.debouncedSearchQuery
                           ? isRtl
                             ? 'لا توجد طلبات مطابقة'
                             : 'No matching orders'
@@ -1208,7 +1208,7 @@ export const InventoryOrders: React.FC = () => {
                           currentUserRole={user.role}
                         />
                       ) : (
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                           {paginatedOrders.map((order) => (
                             <motion.div
                               key={order.id}
