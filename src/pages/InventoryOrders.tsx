@@ -95,11 +95,13 @@ interface State {
   selectedOrder: FactoryOrder | null;
   chefs: Chef[];
   products: Product[];
+  departments: any[];
   isAssignModalOpen: boolean;
   isCreateModalOpen: boolean;
   assignFormData: AssignChefsForm;
   createFormData: { notes: string; items: { productId: string; quantity: number; assignedTo?: string }[] };
   filterStatus: string;
+  departmentFilter: string;
   searchQuery: string;
   debouncedSearchQuery: string;
   sortBy: 'date' | 'totalQuantity';
@@ -119,11 +121,13 @@ const initialState: State = {
   selectedOrder: null,
   chefs: [],
   products: [],
+  departments: [],
   isAssignModalOpen: false,
   isCreateModalOpen: false,
   assignFormData: { items: [] },
   createFormData: { notes: '', items: [{ productId: '', quantity: 1 }] },
   filterStatus: '',
+  departmentFilter: '',
   searchQuery: '',
   debouncedSearchQuery: '',
   sortBy: 'date',
@@ -150,6 +154,8 @@ const reducer = (state: State, action: any): State => {
       return { ...state, chefs: action.payload || [] };
     case 'SET_PRODUCTS':
       return { ...state, products: action.payload || [] };
+    case 'SET_DEPARTMENTS':
+      return { ...state, departments: action.payload || [] };
     case 'SET_ASSIGN_MODAL':
       return { ...state, isAssignModalOpen: action.isOpen ?? false };
     case 'SET_CREATE_MODAL':
@@ -162,6 +168,8 @@ const reducer = (state: State, action: any): State => {
       return { ...state, formErrors: action.payload };
     case 'SET_FILTER_STATUS':
       return { ...state, filterStatus: action.payload, currentPage: 1 };
+    case 'SET_DEPARTMENT_FILTER':
+      return { ...state, departmentFilter: action.payload, currentPage: 1 };
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_DEBOUNCED_SEARCH':
@@ -376,11 +384,10 @@ export const InventoryOrders: React.FC = () => {
           search: state.debouncedSearchQuery || undefined,
         };
         if (user.role === 'production_manager' && user.department) query.department = user.department._id;
-        const [ordersResponse, chefsResponse, productsResponse, departmentsResponse] = await Promise.all([
+        const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll(),
           productsAPI.getAll(),
-          departmentAPI.getAll(),
         ]);
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
