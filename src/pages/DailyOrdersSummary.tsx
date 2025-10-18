@@ -112,7 +112,7 @@ const ProductDropdown: React.FC<{
   disabled?: boolean;
   className?: string;
 }> = ({ value, onChange, options, ariaLabel, disabled = false, className }) => {
-  const { language } from useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
