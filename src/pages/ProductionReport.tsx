@@ -210,7 +210,7 @@ const ProductionReport: React.FC = () => {
               }));
             });
         }
-        let returnsList = Array.isArray(returnsResponse) ? returnsResponse : [];
+        let returnsList = returnsResponse.returns || [];
         if (returnsList.length === 0) {
           toast.warn(isRtl ? 'لا توجد مرتجعات، استخدام بيانات احتياطية' : 'No returns found, using fallback data');
         }
@@ -282,10 +282,10 @@ const ProductionReport: React.FC = () => {
             const year = date.getFullYear();
             if (year === currentYear && retMonth === month) {
               const day = date.getDate() - 1;
-              const branchId = returnItem.branchId || returnItem.branch?._id;
+              const branchId = returnItem.branch?._id || returnItem.branchId;
               const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
               (returnItem.items || []).forEach((item: any) => {
-                const productId = item.product || item.product?._id;
+                const productId = item.product?._id || item.product;
                 if (!productId) return;
                 const details = productDetails.get(productId) || {
                   code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
@@ -363,6 +363,25 @@ const ProductionReport: React.FC = () => {
                   if (isReturn) {
                     row.dailyReturns![day] += quantity;
                     row.dailyReturnsDetails![day][branchName] = (row.dailyReturnsDetails![day][branchName] || 0) + quantity;
+                    if (!returnMap.has(key)) {
+                      returnMap.set(key, {
+                        id: key,
+                        product: details.product,
+                        code: details.code,
+                        unit: details.unit,
+                        totalReturns: 0,
+                        dailyReturns: Array(daysInMonthCount).fill(0),
+                        dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                        totalValue: 0,
+                        totalOrders: 0,
+                      });
+                    }
+                    const returnRow = returnMap.get(key)!;
+                    returnRow.dailyReturns[day] += quantity;
+                    returnRow.dailyBranchDetails[day][branchName] = (returnRow.dailyBranchDetails[day][branchName] || 0) + quantity;
+                    returnRow.totalReturns += quantity;
+                    returnRow.totalValue += quantity * details.price;
+                    returnRow.totalOrders = orderMap.get(key)?.totalQuantity || 0;
                   }
                 } else if (movement.type === 'out') {
                   if (!stockOutMap.has(key)) {
@@ -380,11 +399,11 @@ const ProductionReport: React.FC = () => {
                     });
                   }
                   const row = stockOutMap.get(key)!;
-                  const qty = -quantity;
+                  const qty = -quantity; // Make out positive for display if needed, but keep logic
                   row.dailyQuantities[day] += qty;
                   row.dailyBranchDetails[day][branchName] = (row.dailyBranchDetails[day][branchName] || 0) + qty;
                   row.totalQuantity += qty;
-                  row.totalPrice += qty * details.price;
+                  row.totalPrice += qty * details.price; // Adjust for positive
                   if (isSale) {
                     row.dailySales![day] += qty;
                     row.dailySalesDetails![day][branchName] = (row.dailySalesDetails![day][branchName] || 0) + qty;
