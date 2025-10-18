@@ -1003,10 +1003,8 @@ export const inventoryAPI = {
 
 
 
-
-// api/factoryInventoryAPI.js and factoryOrdersAPI.js
 export const factoryInventoryAPI = {
-  getAll: async (params: { product?: string; department?: string; lowStock?: boolean; stockStatus?: 'low' | 'normal' | 'high'; lang?: string } = {}) => {
+  getAll: async (params = {}) => {
     if (params.product && !isValidObjectId(params.product)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid product ID:`, params.product);
       throw new Error(createErrorMessage('invalidProductId', params.lang === 'ar'));
@@ -1015,11 +1013,11 @@ export const factoryInventoryAPI = {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid department ID:`, params.department);
       throw new Error(createErrorMessage('invalidDepartmentId', params.lang === 'ar'));
     }
-    const response = await api.get('/factoryInventory', { params });
+    const response = await api.get('/factoryInventory', { params: params });
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
-    return response; // Return the raw response as expected by FactoryInventory.tsx
+    return response;
   },
-  create: async (data: { productId: string; userId: string; currentStock: number; minStockLevel?: number; maxStockLevel?: number; orderId?: string }) => {
+  create: async (data) => {
     if (!isValidObjectId(data.productId) || !isValidObjectId(data.userId) || (data.orderId && !isValidObjectId(data.orderId))) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid data:`, data);
       throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
@@ -1051,7 +1049,7 @@ export const factoryInventoryAPI = {
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.create - Response:`, response);
     return response;
   },
-  bulkCreate: async (data: { userId: string; orderId?: string; items: { productId: string; currentStock: number; minStockLevel?: number; maxStockLevel?: number }[] }) => {
+  bulkCreate: async (data) => {
     if (!isValidObjectId(data.userId) || (data.orderId && !isValidObjectId(data.orderId)) || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.productId))) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid data:`, data);
       throw new Error(createErrorMessage('invalidUserId', localStorage.getItem('language') === 'ar'));
@@ -1085,7 +1083,7 @@ export const factoryInventoryAPI = {
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Response:`, response);
     return response;
   },
-  updateStock: async (id: string, data: { currentStock?: number; minStockLevel?: number; maxStockLevel?: number }) => {
+  updateStock: async (id, data) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid inventory ID:`, id);
       throw new Error(createErrorMessage('invalidInventoryId', localStorage.getItem('language') === 'ar'));
@@ -1114,7 +1112,7 @@ export const factoryInventoryAPI = {
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Response:`, response);
     return response;
   },
-  getHistory: async (params: { productId?: string; department?: string; period?: 'daily' | 'weekly' | 'monthly'; lang?: string } = {}) => {
+  getHistory: async (params = {}) => {
     if (params.productId && !isValidObjectId(params.productId)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid product ID:`, params.productId);
       throw new Error(createErrorMessage('invalidProductId', params.lang === 'ar'));
@@ -1127,18 +1125,21 @@ export const factoryInventoryAPI = {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid period:`, params.period);
       throw new Error(createErrorMessage('invalidStatus', params.lang === 'ar'));
     }
-    const response = await api.get('/factoryInventory/history', { params });
+    const response = await api.get('/factoryInventory/history', { params: params });
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
     return response;
   },
-  getAvailableProducts: async () => {
-    const response = await api.get('/products');
+  getAvailableProducts: async (params = {}) => {
+    const response = await api.get('/products', { params: params });
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
     return response;
   },
 };
+
+
+
 export const factoryOrdersAPI = {
-  create: async (data: { orderNumber: string; items: { product: string; quantity: number; }[]; notes?: string; priority?: string }) => {
+  create: async (data) => {
     if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity < 1 )) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
       throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
@@ -1160,7 +1161,7 @@ export const factoryOrdersAPI = {
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
     return response;
   },
-  getById: async (id: string) => {
+  getById: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Invalid order ID:`, id);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
@@ -1169,7 +1170,7 @@ export const factoryOrdersAPI = {
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Response:`, response);
     return response;
   },
-  assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
+  assignChefs: async (id, data) => {
     if (!isValidObjectId(id) || !Array.isArray(data.items) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Invalid data:`, { id, data });
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
@@ -1180,7 +1181,7 @@ export const factoryOrdersAPI = {
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Response:`, response);
     return response;
   },
-  updateStatus: async (id: string, data: { status: 'pending' | 'in_production' | 'completed' | 'cancelled' }) => {
+  updateStatus: async (id, data) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid order ID:`, id);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
@@ -1195,7 +1196,7 @@ export const factoryOrdersAPI = {
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Response:`, response);
     return response;
   },
-  confirmProduction: async (id: string) => {
+  confirmProduction: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Invalid order ID:`, id);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
