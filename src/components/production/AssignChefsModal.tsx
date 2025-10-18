@@ -1,9 +1,8 @@
-import React, { useMemo, useEffect, useCallback } from 'react';
+import {useMemo , useCallback ,useEffect}  from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
 import { Select } from '../../components/UI/Select';
-import { useLanguage } from '../../contexts/LanguageContext';
 import { AlertCircle } from 'lucide-react';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
 import Skeleton from 'react-loading-skeleton';
@@ -51,7 +50,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isRtl,
   loading,
 }) => {
-  const { t } = useLanguage();
   const { user } = useAuth();
 
   const availableChefsByDepartment = useMemo(() => {
@@ -80,15 +78,12 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   useEffect(() => {
     if (!selectedOrder || !user) return;
 
-    const updatedItems = selectedOrder.items.map((item) => {
-      const orderItem = selectedOrder.items.find((i) => i._id === item._id);
-      const departmentId = orderItem?.department._id || 'no-department';
+    const updatedItems = selectedOrder.items.filter(item => !item.assignedTo).map((item) => {
+      const departmentId = item.department._id || 'no-department';
       const availableChefs = availableChefsByDepartment.get(departmentId) || [];
 
-      let assignedTo = item.assignedTo?._id || '';
-      if (user.role === 'chef' && user.department?._id === departmentId) {
-        assignedTo = user.id;
-      } else if (availableChefs.length === 1 && user.role !== 'chef') {
+      let assignedTo = '';
+      if (availableChefs.length === 1) {
         assignedTo = availableChefs[0].userId;
       }
 
@@ -101,32 +96,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       };
     });
 
-    const hasChanges = updatedItems.some(
-      (item, idx) =>
-        item.assignedTo !== assignFormData.items[idx]?.assignedTo ||
-        item.unit !== assignFormData.items[idx]?.unit
-    );
-
-    if (hasChanges || assignFormData.items.length !== updatedItems.length) {
-      setAssignForm({ items: updatedItems });
-    }
-  }, [assignFormData.items, availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user]);
-
-  const isFullyAutomated = useMemo(() => {
-    if (user?.role !== 'chef') return false;
-    return assignFormData.items.every((item) => item.assignedTo === user.id);
-  }, [assignFormData.items, user]);
-
-  useEffect(() => {
-    if (isFullyAutomated && selectedOrder?.id && isOpen) {
-      assignChefs(selectedOrder.id);
-      onClose();
-    }
-  }, [isFullyAutomated, selectedOrder, assignChefs, onClose, isOpen]);
-
-  if (isFullyAutomated) {
-    return null;
-  }
+    setAssignForm({ items: updatedItems });
+  }, [availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user]);
 
   return (
     <Modal
@@ -138,7 +109,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           : `Assign Chefs to Order #${selectedOrder?.orderNumber || ''}`
       }
       size="md"
-      className="bg-white rounded-lg shadow-xl border border-gray-200"
     >
       <form
         onSubmit={(e) => {
@@ -150,14 +120,10 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         className="space-y-4"
       >
         {loading ? (
-          <div className="space-y-4">
-            {assignFormData.items.map((_, index) => (
-              <Skeleton key={index} height={40} />
-            ))}
-          </div>
+          <Skeleton count={assignFormData.items.length} height={40} />
         ) : assignFormData.items.length === 0 ? (
           <p className="text-gray-600 text-xs">
-            {isRtl ? 'لا توجد عناصر لتعيين الشيفات' : 'No items to assign chefs'}
+            {isRtl ? 'لا توجد عناصر غير معينة' : 'No unassigned items'}
           </p>
         ) : (
           assignFormData.items.map((item, index) => {
@@ -167,18 +133,10 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-              ...(availableChefs.length > 0
-                ? availableChefs.map((chef) => ({
-                    value: chef.userId,
-                    label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
-                  }))
-                : [
-                    {
-                      value: '',
-                      label: isRtl ? 'لا يوجد شيفات متاحة' : 'No chefs available',
-                      disabled: true,
-                    },
-                  ]),
+              ...availableChefs.map((chef) => ({
+                value: chef.userId,
+                label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+              })),
             ];
 
             return (
@@ -203,7 +161,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                   onChange={(value) => updateAssignment(index, value)}
                   className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
                   aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
-                  disabled={availableChefs.length === 0 || (user?.role === 'chef' && item.assignedTo === user.id)}
+                  disabled={availableChefs.length === 0}
                 />
                 {availableChefs.length === 0 && (
                   <p className="text-red-600 text-xs mt-1">
@@ -229,7 +187,6 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             variant="secondary"
             onClick={onClose}
             className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
-            aria-label={isRtl ? 'إلغاء' : 'Cancel'}
           >
             {isRtl ? 'إلغاء' : 'Cancel'}
           </Button>
@@ -238,9 +195,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             variant="primary"
             disabled={submitting !== null || loading || assignFormData.items.some((item) => !item.assignedTo)}
             className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm disabled:opacity-50"
-            aria-label={isRtl ? 'تعيين الشيفات' : 'Assign Chefs'}
           >
-            {submitting ? (isRtl ? 'جارٍ التعيين...' : 'Assigning...') : (isRtl ? 'تعيين الشيفات' : 'Assign Chefs')}
+            {submitting ? (isRtl ? 'جارٍ التعيين...' : 'Assigning...') : (isRtl ? 'تعيين' : 'Assign')}
           </Button>
         </div>
       </form>

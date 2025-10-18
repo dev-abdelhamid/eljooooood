@@ -68,7 +68,7 @@ export interface AssignChefsForm {
     unit: string;
   }>;
 }
-
+export type UserRole = 'admin' | 'branch' | 'chef' | 'production';
 
 
 export interface ReturnForm {

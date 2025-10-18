@@ -7,9 +7,11 @@ interface OrderTableProps {
   orders: FactoryOrder[];
   calculateTotalQuantity: (order: FactoryOrder) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
+  approveOrder: (orderId: string) => void;
   updateOrderStatus: (orderId: string, status: FactoryOrder['status']) => void;
   confirmItemCompletion: (orderId: string, itemId: string) => void;
   openAssignModal: (order: FactoryOrder) => void;
+  confirmFactoryProduction: (orderId: string) => void;
   submitting: string | null;
   isRtl: boolean;
   startIndex: number;
@@ -31,7 +33,8 @@ const translations = {
     complete: 'إكمال',
     cancel: 'إلغاء',
     assign: 'تعيين شيفات',
-    confirmStock: 'تأكيد المخزون',
+    confirmStock: 'تأكيد الإضافة إلى المخزون',
+    requested: 'مطلوب',
     pending: 'قيد الانتظار',
     approved: 'تم الموافقة',
     in_production: 'في الإنتاج',
@@ -57,7 +60,8 @@ const translations = {
     complete: 'Complete',
     cancel: 'Cancel',
     assign: 'Assign Chefs',
-    confirmStock: 'Confirm Stock',
+    confirmStock: 'Confirm Add to Inventory',
+    requested: 'Requested',
     pending: 'Pending',
     approved: 'Approved',
     in_production: 'In Production',
@@ -75,9 +79,11 @@ export const OrderTable: React.FC<OrderTableProps> = ({
   orders,
   calculateTotalQuantity,
   translateUnit,
+  approveOrder,
   updateOrderStatus,
   confirmItemCompletion,
   openAssignModal,
+  confirmFactoryProduction,
   submitting,
   isRtl,
   startIndex,
@@ -85,10 +91,10 @@ export const OrderTable: React.FC<OrderTableProps> = ({
 }) => {
   const t = translations[isRtl ? 'ar' : 'en'];
 
-  const canApprove = ['admin', 'production_manager'].includes(currentUserRole);
-  const canAssign = ['admin', 'production_manager'].includes(currentUserRole);
-  const canComplete = ['chef', 'admin', 'production_manager'].includes(currentUserRole);
-  const canConfirmStock = ['admin', 'production_manager'].includes(currentUserRole);
+  const canApprove = ['admin', 'production'].includes(currentUserRole);
+  const canAssign = ['admin', 'production'].includes(currentUserRole);
+  const canComplete = ['chef', 'admin', 'production'].includes(currentUserRole);
+  const canConfirmStock = ['admin', 'production'].includes(currentUserRole);
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-lg">
@@ -109,15 +115,16 @@ export const OrderTable: React.FC<OrderTableProps> = ({
         </thead>
         <tbody className="divide-y divide-gray-200">
           {orders.map((order, index) => {
-            const allAssigned = order.items.every(item => item.assignedTo);
-            const allCompleted = order.items.every(item => item.status === 'completed');
+            const allAssigned = order.items.every((item) => item.assignedTo);
+            const allCompleted = order.items.every((item) => item.status === 'completed');
+            const displayStatus = order.status === 'completed' && order.inventoryProcessed ? 'stocked' : order.status;
             return (
               <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-200">
                 <td className="px-6 py-4 text-xs text-gray-900">{startIndex + index}</td>
                 <td className="px-6 py-4 text-xs text-gray-900">{order.orderNumber}</td>
                 <td className="px-6 py-4 text-xs text-gray-900">{order.date}</td>
                 <td className="px-6 py-4 text-xs text-gray-900">
-                  {order.items.map(item => (
+                  {order.items.map((item) => (
                     <div key={item._id} className="mb-1 flex items-center justify-between gap-2">
                       <span>{item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})</span>
                       {item.assignedTo && (
@@ -125,13 +132,12 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                           ({isRtl ? 'معين إلى' : 'Assigned to'}: {item.assignedTo.displayName})
                         </span>
                       )}
-                      {order.status === 'in_production' && currentUserRole === 'chef' && item.assignedTo?._id === user.id && item.status !== 'completed' && (
+                      {order.status === 'in_production' && currentUserRole === 'chef' && item.assignedTo?._id === user?.id && item.status !== 'completed' && (
                         <Button
                           variant="success"
                           onClick={() => confirmItemCompletion(order.id, item._id)}
                           disabled={submitting === item._id}
                           className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs shadow-sm"
-                          aria-label={t.complete}
                         >
                           {submitting === item._id ? '...' : <CheckCircle className="w-3 h-3" />}
                         </Button>
@@ -143,39 +149,39 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                 <td className="px-6 py-4 text-xs">
                   <span
                     className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
-                      order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      order.status === 'in_production' ? 'bg-indigo-100 text-indigo-800' :
-                      order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                      order.status === 'stocked' ? 'bg-blue-100 text-blue-800' :
+                      displayStatus === 'requested' ? 'bg-orange-100 text-orange-800' :
+                      displayStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      displayStatus === 'approved' ? 'bg-blue-100 text-blue-800' :
+                      displayStatus === 'in_production' ? 'bg-indigo-100 text-indigo-800' :
+                      displayStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                      displayStatus === 'stocked' ? 'bg-purple-100 text-purple-800' :
                       'bg-red-100 text-red-800'
                     }`}
                   >
-                    {t[order.status]}
+                    {t[displayStatus]}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-xs text-gray-900">{t[order.priority]}</td>
                 <td className="px-6 py-4 text-xs text-gray-900">{order.notes || '—'}</td>
                 <td className="px-6 py-4 text-xs text-gray-900">{order.createdBy}</td>
                 <td className="px-6 py-4 text-xs">
-                  <div className={`flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    {order.status === 'pending' && canApprove && (
+                  <div className={`flex gap-2 flex-wrap ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    {(order.status === 'requested' || order.status === 'pending') && canApprove && (
                       <Button
                         variant="primary"
-                        onClick={() => updateOrderStatus(order.id, 'in_production')}
+                        onClick={() => approveOrder(order.id)}
                         disabled={submitting === order.id}
                         className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-                        aria-label={t.approve}
                       >
                         {submitting === order.id ? '...' : t.approve}
                       </Button>
                     )}
-                    {order.status === 'in_production' && !allAssigned && canAssign && (
+                    {order.status === 'approved' && !allAssigned && canAssign && (
                       <Button
                         variant="primary"
                         onClick={() => openAssignModal(order)}
                         disabled={submitting === order.id}
                         className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-                        aria-label={t.assign}
                       >
                         {submitting === order.id ? '...' : t.assign}
                       </Button>
@@ -186,29 +192,26 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                         onClick={() => updateOrderStatus(order.id, 'completed')}
                         disabled={submitting === order.id}
                         className="bg-green-500 hover:bg-green-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-                        aria-label={t.complete}
                       >
-                        {submitting === order.id ? '...' : <CheckCircle className="w-4 h-4" />}
+                        {submitting === order.id ? '...' : t.complete}
                       </Button>
                     )}
-                    {order.status === 'completed' && canConfirmStock && (
+                    {order.status === 'completed' && !order.inventoryProcessed && canConfirmStock && (
                       <Button
                         variant="success"
-                        onClick={() => updateOrderStatus(order.id, 'stocked')}
+                        onClick={() => confirmFactoryProduction(order.id)}
                         disabled={submitting === order.id}
-                        className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-                        aria-label={t.confirmStock}
+                        className="bg-purple-500 hover:bg-purple-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
                       >
                         {submitting === order.id ? '...' : t.confirmStock}
                       </Button>
                     )}
-                    {['pending', 'in_production'].includes(order.status) && (
+                    {(order.status === 'requested' || order.status === 'pending' || order.status === 'approved' || order.status === 'in_production') && (
                       <Button
                         variant="danger"
                         onClick={() => updateOrderStatus(order.id, 'cancelled')}
                         disabled={submitting === order.id}
                         className="bg-red-500 hover:bg-red-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-                        aria-label={t.cancel}
                       >
                         {submitting === order.id ? '...' : t.cancel}
                       </Button>

@@ -1,16 +1,18 @@
 import React, { useMemo } from 'react';
 import { Card } from '../UI/Card';
 import { Button } from '../UI/Button';
-import { CheckCircle, Clock } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { FactoryOrder, UserRole } from '../../types/types';
 
 interface OrderCardProps {
   order: FactoryOrder;
   calculateTotalQuantity: (order: FactoryOrder) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
+  approveOrder: (orderId: string) => void;
   updateOrderStatus: (orderId: string, status: FactoryOrder['status']) => void;
   confirmItemCompletion: (orderId: string, itemId: string) => void;
   openAssignModal: (order: FactoryOrder) => void;
+  confirmFactoryProduction: (orderId: string) => void;
   submitting: string | null;
   isRtl: boolean;
   currentUserRole: UserRole;
@@ -30,7 +32,8 @@ const translations = {
     complete: 'إكمال',
     cancel: 'إلغاء',
     assign: 'تعيين شيفات',
-    confirmStock: 'تأكيد المخزون',
+    confirmStock: 'تأكيد الإضافة إلى المخزون',
+    requested: 'مطلوب',
     pending: 'قيد الانتظار',
     approved: 'تم الموافقة',
     in_production: 'في الإنتاج',
@@ -55,7 +58,8 @@ const translations = {
     complete: 'Complete',
     cancel: 'Cancel',
     assign: 'Assign Chefs',
-    confirmStock: 'Confirm Stock',
+    confirmStock: 'Confirm Add to Inventory',
+    requested: 'Requested',
     pending: 'Pending',
     approved: 'Approved',
     in_production: 'In Production',
@@ -73,9 +77,11 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   order,
   calculateTotalQuantity,
   translateUnit,
+  approveOrder,
   updateOrderStatus,
   confirmItemCompletion,
   openAssignModal,
+  confirmFactoryProduction,
   submitting,
   isRtl,
   currentUserRole,
@@ -83,10 +89,12 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   const t = translations[isRtl ? 'ar' : 'en'];
   const statusStyles = useMemo(
     () => ({
+      requested: 'bg-orange-100 text-orange-800',
       pending: 'bg-yellow-100 text-yellow-800',
+      approved: 'bg-blue-100 text-blue-800',
       in_production: 'bg-indigo-100 text-indigo-800',
       completed: 'bg-green-100 text-green-800',
-      stocked: 'bg-blue-100 text-blue-800',
+      stocked: 'bg-purple-100 text-purple-800',
       cancelled: 'bg-red-100 text-red-800',
     }),
     []
@@ -101,13 +109,14 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     []
   );
 
-  const canApprove = ['admin', 'production_manager'].includes(currentUserRole);
-  const canAssign = ['admin', 'production_manager'].includes(currentUserRole);
-  const canComplete = ['chef', 'admin', 'production_manager'].includes(currentUserRole);
-  const canConfirmStock = ['admin', 'production_manager'].includes(currentUserRole);
+  const canApprove = ['admin', 'production'].includes(currentUserRole);
+  const canAssign = ['admin', 'production'].includes(currentUserRole);
+  const canComplete = ['chef', 'admin', 'production'].includes(currentUserRole);
+  const canConfirmStock = ['admin', 'production'].includes(currentUserRole);
 
-  const allAssigned = order.items.every(item => item.assignedTo);
-  const allCompleted = order.items.every(item => item.status === 'completed');
+  const allAssigned = order.items.every((item) => item.assignedTo);
+  const allCompleted = order.items.every((item) => item.status === 'completed');
+  const displayStatus = order.status === 'completed' && order.inventoryProcessed ? 'stocked' : order.status;
 
   return (
     <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
@@ -117,76 +126,57 @@ export const OrderCard: React.FC<OrderCardProps> = ({
           <p className="text-xs text-gray-600">{t.date}: {order.date}</p>
           <p className="text-xs text-gray-600">{t.createdBy}: {order.createdBy}</p>
           <p className="text-xs text-gray-600">
-            {t.priority}:{' '}
-            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${priorityStyles[order.priority]}`}>
-              {t[order.priority]}
-            </span>
+            {t.priority}: <span className={`px-2 py-1 rounded-full text-xs ${priorityStyles[order.priority]}`}>{t[order.priority]}</span>
           </p>
         </div>
         <div className={isRtl ? 'text-right' : 'text-left'}>
           <p className="text-xs text-gray-600">
-            {t.status}:{' '}
-            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusStyles[order.status]}`}>
-              {t[order.status]}
-            </span>
+            {t.status}: <span className={`px-2 py-1 rounded-full text-xs ${statusStyles[displayStatus]}`}>{t[displayStatus]}</span>
           </p>
           <p className="text-xs text-gray-600">{t.quantity}: {calculateTotalQuantity(order)}</p>
           <p className="text-xs text-gray-600">{t.notes}: {order.notes || '—'}</p>
         </div>
       </div>
-      <div className="mt-3">
-        <h4 className="text-sm font-medium text-gray-700">{t.items}</h4>
-        <ul className="mt-2 space-y-1">
+      <div className="mt-4">
+        <h4 className="text-sm font-medium text-gray-700 mb-2">{t.items}</h4>
+        <ul className="space-y-2">
           {order.items.map((item) => (
             <li key={item._id} className="text-xs text-gray-600 flex items-center justify-between gap-2">
               <span>
                 {item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})
-                {item.assignedTo && (
-                  <span className="ml-2 text-xs text-gray-500">
-                    ({isRtl ? 'معين إلى' : 'Assigned to'}: {item.assignedTo.displayName})
-                  </span>
-                )}
+                {item.assignedTo && <span className="text-gray-500 ml-2">({t.assign}: {item.assignedTo.displayName})</span>}
               </span>
-              {item.progress > 0 && (
-                <span className="text-xs text-gray-500 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {item.progress}%
-                </span>
-              )}
-              {order.status === 'in_production' && currentUserRole === 'chef' && item.assignedTo?._id === user.id && item.status !== 'completed' && (
+              {order.status === 'in_production' && currentUserRole === 'chef' && item.assignedTo?._id === user?.id && item.status !== 'completed' && (
                 <Button
                   variant="success"
                   onClick={() => confirmItemCompletion(order.id, item._id)}
                   disabled={submitting === item._id}
-                  className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs shadow-sm"
-                  aria-label={t.complete}
+                  className="px-2 py-1 text-xs"
                 >
-                  {submitting === item._id ? '...' : <CheckCircle className="w-3 h-3" />}
+                  {submitting === item._id ? '...' : <CheckCircle className="w-4 h-4" />}
                 </Button>
               )}
             </li>
           ))}
         </ul>
       </div>
-      <div className={`mt-3 flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        {order.status === 'pending' && canApprove && (
+      <div className={`mt-4 flex gap-2 flex-wrap ${isRtl ? 'flex-row-reverse' : ''}`}>
+        {(order.status === 'requested' || order.status === 'pending') && canApprove && (
           <Button
             variant="primary"
-            onClick={() => updateOrderStatus(order.id, 'in_production')}
+            onClick={() => approveOrder(order.id)}
             disabled={submitting === order.id}
-            className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-            aria-label={t.approve}
+            className="px-3 py-1 text-xs"
           >
             {submitting === order.id ? '...' : t.approve}
           </Button>
         )}
-        {order.status === 'in_production' && !allAssigned && canAssign && (
+        {order.status === 'approved' && !allAssigned && canAssign && (
           <Button
             variant="primary"
             onClick={() => openAssignModal(order)}
             disabled={submitting === order.id}
-            className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-            aria-label={t.assign}
+            className="px-3 py-1 text-xs"
           >
             {submitting === order.id ? '...' : t.assign}
           </Button>
@@ -196,30 +186,27 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             variant="success"
             onClick={() => updateOrderStatus(order.id, 'completed')}
             disabled={submitting === order.id}
-            className="bg-green-500 hover:bg-green-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-            aria-label={t.complete}
+            className="px-3 py-1 text-xs"
           >
-            {submitting === order.id ? '...' : <CheckCircle className="w-4 h-4" />}
+            {submitting === order.id ? '...' : t.complete}
           </Button>
         )}
-        {order.status === 'completed' && canConfirmStock && (
+        {order.status === 'completed' && !order.inventoryProcessed && canConfirmStock && (
           <Button
             variant="success"
-            onClick={() => updateOrderStatus(order.id, 'stocked')}
+            onClick={() => confirmFactoryProduction(order.id)}
             disabled={submitting === order.id}
-            className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-            aria-label={t.confirmStock}
+            className="px-3 py-1 text-xs"
           >
             {submitting === order.id ? '...' : t.confirmStock}
           </Button>
         )}
-        {['pending', 'in_production'].includes(order.status) && (
+        {(order.status === 'requested' || order.status === 'pending' || order.status === 'approved' || order.status === 'in_production') && (
           <Button
             variant="danger"
             onClick={() => updateOrderStatus(order.id, 'cancelled')}
             disabled={submitting === order.id}
-            className="bg-red-500 hover:bg-red-600 text-white rounded-md px-3 py-1 text-xs shadow-sm"
-            aria-label={t.cancel}
+            className="px-3 py-1 text-xs"
           >
             {submitting === order.id ? '...' : t.cancel}
           </Button>
