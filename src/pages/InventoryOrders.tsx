@@ -1,3 +1,4 @@
+// components/InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,7 +11,7 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, inventoryAPI, departmentAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
@@ -371,7 +372,7 @@ export const InventoryOrders: React.FC = () => {
 
   const fetchData = useCallback(
     async (retryCount = 0) => {
-      if (!user || !['chef', 'production_manager', 'admin'].includes(user.role)) {
+      if (!user || !['chef', 'production', 'admin'].includes(user.role)) {
         dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -382,13 +383,13 @@ export const InventoryOrders: React.FC = () => {
           sortBy: state.sortBy,
           sortOrder: state.sortOrder,
           search: state.debouncedSearchQuery || undefined,
+          lang: language,
         };
-        if (user.role === 'production_manager' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, productsResponse, departmentsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
-          chefsAPI.getAll(),
-          productsAPI.getAll(),
-          departmentAPI.getAll(),
+          chefsAPI.getAll({ lang: language }),
+          productsAPI.getAll({ lang: language }),
+          departmentAPI.getAll({ lang: language }),
         ]);
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
@@ -402,7 +403,7 @@ export const InventoryOrders: React.FC = () => {
                   productId: item.product?._id || 'unknown',
                   productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   productNameEn: item.product?.nameEn,
-                  displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
+                  displayProductName: item.product?.displayName || (isRtl ? item.product?.name : item.product?.nameEn || item.product?.name),
                   quantity: Number(item.quantity) || 1,
                   unit: item.product?.unit || 'unit',
                   unitEn: item.product?.unitEn,
@@ -411,9 +412,7 @@ export const InventoryOrders: React.FC = () => {
                     _id: item.product?.department?._id || 'no-department',
                     name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: item.product?.department?.nameEn,
-                    displayName: isRtl
-                      ? item.product?.department?.name
-                      : item.product?.department?.nameEn || item.product?.department?.name,
+                    displayName: item.product?.department?.displayName || (isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name),
                   },
                   assignedTo: item.assignedTo
                     ? {
@@ -421,16 +420,12 @@ export const InventoryOrders: React.FC = () => {
                         username: item.assignedTo.username,
                         name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                         nameEn: item.assignedTo.nameEn,
-                        displayName: isRtl
-                          ? item.assignedTo.name
-                          : item.assignedTo.nameEn || item.assignedTo.name,
+                        displayName: item.assignedTo.displayName || (isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name),
                         department: {
                           _id: item.assignedTo.department?._id || 'no-department',
                           name: item.assignedTo.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                           nameEn: item.assignedTo.department?.nameEn,
-                          displayName: isRtl
-                            ? item.assignedTo.department?.name
-                            : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
+                          displayName: item.assignedTo.department?.displayName || (isRtl ? item.assignedTo.department?.name : item.assignedTo.department?.nameEn || item.assignedTo.department?.name),
                         },
                       }
                     : undefined,
@@ -441,7 +436,7 @@ export const InventoryOrders: React.FC = () => {
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             notes: order.notes || '',
             priority: order.priority || 'medium',
-            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            createdBy: order.createdBy?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
             createdByRole: order.createdBy?.role || 'unknown',
           }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
@@ -455,17 +450,13 @@ export const InventoryOrders: React.FC = () => {
                   userId: chef.user._id,
                   name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   nameEn: chef.user?.nameEn || chef.nameEn,
-                  displayName: isRtl
-                    ? chef.user?.name || chef.name
-                    : chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name,
+                  displayName: chef.user?.displayName || (isRtl ? chef.user?.name || chef.name : chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
                   department: chef.department
                     ? {
                         _id: chef.department._id || 'no-department',
                         name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
                         nameEn: chef.department.nameEn,
-                        displayName: isRtl
-                          ? chef.department.name
-                          : chef.department.nameEn || chef.department.name,
+                        displayName: chef.department.displayName || (isRtl ? chef.department.name : chef.department.nameEn || chef.department.name),
                       }
                     : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
                   status: chef.status || 'active',
@@ -481,21 +472,21 @@ export const InventoryOrders: React.FC = () => {
                   _id: product._id,
                   name: product.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   nameEn: product.nameEn,
+                  displayName: product.displayName || (isRtl ? product.name : product.nameEn || product.name),
                   unit: product.unit || 'unit',
                   unitEn: product.unitEn,
+                  displayUnit: translateUnit(product.unit || 'unit', isRtl),
                   department: {
                     _id: product.department?._id || 'no-department',
                     name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: product.department?.nameEn,
-                    displayName: isRtl
-                      ? product.department?.name
-                      : product.department?.nameEn || product.department?.name,
+                    displayName: product.department?.displayName || (isRtl ? product.department?.name : product.department?.nameEn || product.department?.name),
                   },
                   maxStockLevel: product.maxStockLevel || 1000,
                 }))
                 .sort((a: Product, b: Product) => {
-                  const nameA = isRtl ? a.name : a.nameEn || a.name;
-                  const nameB = isRtl ? b.name : b.nameEn || b.name;
+                  const nameA = isRtl ? a.displayName : a.nameEn || a.name;
+                  const nameB = isRtl ? b.displayName : b.nameEn || b.name;
                   return nameA.localeCompare(nameB, language);
                 })
             : [],
@@ -505,7 +496,7 @@ export const InventoryOrders: React.FC = () => {
           payload: Array.isArray(departmentsResponse.data)
             ? departmentsResponse.data.map((d: any) => ({
                 _id: d._id,
-                displayName: isRtl ? d.name : d.nameEn || d.name,
+                displayName: d.displayName || (isRtl ? d.name : d.nameEn || d.name),
               }))
             : [],
         });
@@ -532,6 +523,10 @@ export const InventoryOrders: React.FC = () => {
     },
     [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, isRtl, language]
   );
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     if (!user || !['chef', 'production_manager', 'admin'].includes(user.role) || !socket) {
@@ -568,7 +563,7 @@ export const InventoryOrders: React.FC = () => {
               productId: item.product?._id || 'unknown',
               productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
               productNameEn: item.product?.nameEn,
-              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
+              displayProductName: item.product?.displayName || (isRtl ? item.product?.name : item.product?.nameEn || item.product?.name),
               quantity: Number(item.quantity) || 1,
               unit: item.product?.unit || 'unit',
               unitEn: item.product?.unitEn,
@@ -577,9 +572,7 @@ export const InventoryOrders: React.FC = () => {
                 _id: item.product?.department?._id || 'no-department',
                 name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                 nameEn: item.product?.department?.nameEn,
-                displayName: isRtl
-                  ? item.product?.department?.name
-                  : item.product?.department?.nameEn || item.product?.department?.name,
+                displayName: item.product?.department?.displayName || (isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name),
               },
               assignedTo: item.assignedTo
                 ? {
@@ -587,16 +580,12 @@ export const InventoryOrders: React.FC = () => {
                     username: item.assignedTo.username,
                     name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: item.assignedTo.nameEn,
-                    displayName: isRtl
-                      ? item.assignedTo.name
-                      : item.assignedTo.nameEn || item.assignedTo.name,
+                    displayName: item.assignedTo.displayName || (isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name),
                     department: {
                       _id: item.assignedTo.department?._id || 'no-department',
                       name: item.assignedTo.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                       nameEn: item.assignedTo.department?.nameEn,
-                      displayName: isRtl
-                        ? item.assignedTo.department?.name
-                        : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
+                      displayName: item.assignedTo.department?.displayName || (isRtl ? item.assignedTo.department?.name : item.assignedTo.department?.nameEn || item.assignedTo.department?.name),
                     },
                   }
                 : undefined,
@@ -607,7 +596,7 @@ export const InventoryOrders: React.FC = () => {
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
         notes: order.notes || '',
         priority: order.priority || 'medium',
-        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        createdBy: order.createdBy?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
         createdByRole: order.createdBy?.role || 'unknown',
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
@@ -704,6 +693,7 @@ export const InventoryOrders: React.FC = () => {
         items,
         notes: state.createFormData.notes,
         priority: 'medium',
+        lang: language,
       });
       const newOrder: FactoryOrder = {
         id: response.data._id,
@@ -713,7 +703,7 @@ export const InventoryOrders: React.FC = () => {
           productId: item.product._id,
           productName: item.product.name,
           productNameEn: item.product.nameEn,
-          displayProductName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+          displayProductName: item.product.displayName || (isRtl ? item.product.name : item.product.nameEn || item.product.name),
           quantity: Number(item.quantity),
           unit: item.product.unit,
           unitEn: item.product.unitEn,
@@ -722,9 +712,7 @@ export const InventoryOrders: React.FC = () => {
             _id: item.product.department._id,
             name: item.product.department.name,
             nameEn: item.product.department.nameEn,
-            displayName: isRtl
-              ? item.product.department.name
-              : item.product.department.nameEn || item.product.department.name,
+            displayName: item.product.department.displayName || (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name),
           },
           assignedTo: item.assignedTo
             ? {
@@ -732,14 +720,12 @@ export const InventoryOrders: React.FC = () => {
                 username: item.assignedTo.username,
                 name: item.assignedTo.name,
                 nameEn: item.assignedTo.nameEn,
-                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                displayName: item.assignedTo.displayName || (isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name),
                 department: {
                   _id: item.assignedTo.department._id,
                   name: item.assignedTo.department.name,
                   nameEn: item.assignedTo.department.nameEn,
-                  displayName: isRtl
-                    ? item.assignedTo.department.name
-                    : item.assignedTo.department.nameEn || item.assignedTo.department.name,
+                  displayName: item.assignedTo.department.displayName || (isRtl ? item.assignedTo.department.name : item.assignedTo.department.nameEn || item.assignedTo.department.name),
                 },
               }
             : undefined,
@@ -749,8 +735,8 @@ export const InventoryOrders: React.FC = () => {
         date: formatDate(new Date(response.data.createdAt), language),
         notes: response.data.notes || '',
         priority: response.data.priority || 'medium',
-        createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        createdByRole: user.role,
+        createdBy: response.data.createdBy?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
+        createdByRole: response.data.createdBy?.role || 'unknown',
       };
       dispatch({ type: 'ADD_ORDER', payload: newOrder });
       dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
@@ -939,17 +925,6 @@ export const InventoryOrders: React.FC = () => {
     dispatch({ type: 'SET_PAGE', payload: page });
     listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
-    if (!state.chefs.length && !state.loading && state.isAssignModalOpen) {
-      console.warn('No chefs loaded, retrying fetch...');
-      fetchData();
-    }
-  }, [state.chefs, state.loading, state.isAssignModalOpen, fetchData]);
 
   const filteredOrders = useMemo(() => {
     const normalizedQuery = normalizeText(state.debouncedSearchQuery);
@@ -1302,159 +1277,208 @@ export const InventoryOrders: React.FC = () => {
                                   )
                                   .map((product) => ({
                                     value: product._id,
-                                    label: `${isRtl ? product.name : product.nameEn || product.name} (${translateUnit(
-                                      product.unit,
-                                      isRtl
-                                    )})`,
+                                    label: `${product.displayName} (${
+                                    product.displayUnit})`,
                                   })),
                               ]}
                               value={item.productId}
-                              onChange={(value) => {
-                                const newItems = [...state.createFormData.items];
-                                newItems[index].productId = value;
-                                dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
+                              onChange={(value) =>
                                 dispatch({
-                                  type: 'SET_FORM_ERRORS',
-                                  payload: { ...state.formErrors, [`item_${index}_productId`]: undefined },
-                                });
-                              }}
+                                  type: 'SET_CREATE_FORM',
+                                  payload: {
+                                    ...state.createFormData,
+                                    items: state.createFormData.items.map((it, i) =>
+                                      i === index ? { ...it, productId: value } : it
+                                    ),
+                                  },
+                                })
+                              }
                               ariaLabel={isRtl ? 'اختر منتج' : 'Select Product'}
-                              className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                              className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
+                                state.formErrors[`item_${index}_productId`] ? 'border-red-500' : ''
+                              }`}
                             />
                             {state.formErrors[`item_${index}_productId`] && (
-                              <p className="text-red-600 text-xs">{state.formErrors[`item_${index}_productId`]}</p>
+                              <p className="text-xs text-red-600 mt-1">
+                                {state.formErrors[`item_${index}_productId`]}
+                              </p>
                             )}
-                            <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="flex items-center gap-4">
                               <div className="flex-1">
                                 <label
-                                  className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                                  className={`block text-sm font-medium text-gray-700 mb-1 ${
+                                    isRtl ? 'text-right' : 'text-left'
+                                  }`}
                                 >
                                   {isRtl ? 'الكمية' : 'Quantity'}
                                 </label>
                                 <QuantityInput
                                   value={item.quantity}
-                                  onChange={(val) => {
-                                    const num = parseInt(val, 10);
-                                    const newItems = [...state.createFormData.items];
-                                    newItems[index].quantity = isNaN(num) ? 1 : num;
-                                    dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
+                                  onChange={(val) =>
                                     dispatch({
-                                      type: 'SET_FORM_ERRORS',
-                                      payload: { ...state.formErrors, [`item_${index}_quantity`]: undefined },
-                                    });
-                                  }}
-                                  onIncrement={() => {
-                                    const newItems = [...state.createFormData.items];
-                                    newItems[index].quantity += 1;
-                                    dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
-                                  }}
-                                  onDecrement={() => {
-                                    const newItems = [...state.createFormData.items];
-                                    newItems[index].quantity = Math.max(newItems[index].quantity - 1, 1);
-                                    dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
-                                  }}
+                                      type: 'SET_CREATE_FORM',
+                                      payload: {
+                                        ...state.createFormData,
+                                        items: state.createFormData.items.map((it, i) =>
+                                          i === index ? { ...it, quantity: parseInt(val) || 1 } : it
+                                        ),
+                                      },
+                                    })
+                                  }
+                                  onIncrement={() =>
+                                    dispatch({
+                                      type: 'SET_CREATE_FORM',
+                                      payload: {
+                                        ...state.createFormData,
+                                        items: state.createFormData.items.map((it, i) =>
+                                          i === index
+                                            ? {
+                                                ...it,
+                                                quantity: Math.min(
+                                                  it.quantity + 1,
+                                                  state.products.find((p) => p._id === it.productId)
+                                                    ?.maxStockLevel || 1000
+                                                ),
+                                              }
+                                            : it
+                                        ),
+                                      },
+                                    })
+                                  }
+                                  onDecrement={() =>
+                                    dispatch({
+                                      type: 'SET_CREATE_FORM',
+                                      payload: {
+                                        ...state.createFormData,
+                                        items: state.createFormData.items.map((it, i) =>
+                                          i === index ? { ...it, quantity: Math.max(it.quantity - 1, 1) } : it
+                                        ),
+                                      },
+                                    })
+                                  }
                                   max={state.products.find((p) => p._id === item.productId)?.maxStockLevel}
                                 />
                                 {state.formErrors[`item_${index}_quantity`] && (
-                                  <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
+                                  <p className="text-xs text-red-600 mt-1">
+                                    {state.formErrors[`item_${index}_quantity`]}
+                                  </p>
                                 )}
                               </div>
-                              {['admin', 'production_manager'].includes(user.role) && item.productId && (
+                              {['admin', 'production_manager'].includes(user.role) && (
                                 <div className="flex-1">
                                   <label
-                                    className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                                    className={`block text-sm font-medium text-gray-700 mb-1 ${
+                                      isRtl ? 'text-right' : 'text-left'
+                                    }`}
                                   >
-                                    {isRtl ? 'تعيين شيف' : 'Assign Chef'}
+                                    {isRtl ? 'تعيين إلى' : 'Assign To'}
                                   </label>
-                                  <Select
+                                  <ProductDropdown
                                     options={[
                                       { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
                                       ...state.chefs
-                                        .filter(c => c.department?._id === state.products.find(p => p._id === item.productId)?.department._id)
-                                        .map(c => ({
-                                          value: c.userId,
-                                          label: c.displayName,
-                                        }))
+                                        .filter(
+                                          (chef) =>
+                                            chef.department._id ===
+                                            state.products.find((p) => p._id === item.productId)?.department._id
+                                        )
+                                        .map((chef) => ({
+                                          value: chef.userId,
+                                          label: chef.displayName,
+                                        })),
                                     ]}
                                     value={item.assignedTo || ''}
-                                    onChange={(value) => {
-                                      const newItems = [...state.createFormData.items];
-                                      newItems[index].assignedTo = value;
-                                      dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
+                                    onChange={(value) =>
                                       dispatch({
-                                        type: 'SET_FORM_ERRORS',
-                                        payload: { ...state.formErrors, [`item_${index}_assignedTo`]: undefined },
-                                      });
-                                    }}
-                                    className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
-                                    aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
+                                        type: 'SET_CREATE_FORM',
+                                        payload: {
+                                          ...state.createFormData,
+                                          items: state.createFormData.items.map((it, i) =>
+                                            i === index ? { ...it, assignedTo: value } : it
+                                          ),
+                                        },
+                                      })
+                                    }
+                                    ariaLabel={isRtl ? 'تعيين إلى' : 'Assign To'}
+                                    className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
+                                      state.formErrors[`item_${index}_assignedTo`] ? 'border-red-500' : ''
+                                    }`}
                                   />
                                   {state.formErrors[`item_${index}_assignedTo`] && (
-                                    <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_assignedTo`]}</p>
+                                    <p className="text-xs text-red-600 mt-1">
+                                      {state.formErrors[`item_${index}_assignedTo`]}
+                                    </p>
                                   )}
                                 </div>
                               )}
                               {state.createFormData.items.length > 1 && (
                                 <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newItems = state.createFormData.items.filter((_, i) => i !== index);
-                                    dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
-                                  }}
-                                  className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
+                                  onClick={() =>
+                                    dispatch({
+                                      type: 'SET_CREATE_FORM',
+                                      payload: {
+                                        ...state.createFormData,
+                                        items: state.createFormData.items.filter((_, i) => i !== index),
+                                      },
+                                    })
+                                  }
+                                  className="mt-6 text-red-600 hover:text-red-800 transition-colors duration-200"
                                   aria-label={isRtl ? 'إزالة العنصر' : 'Remove Item'}
                                 >
-                                  <MinusCircle className="w-4 h-4" />
+                                  <MinusCircle className="w-5 h-5" />
                                 </button>
                               )}
                             </div>
                           </div>
                         ))}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newItems = [...state.createFormData.items, { productId: '', quantity: 1 }];
-                            dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
-                          }}
-                          className={`flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium ${isRtl ? 'justify-end' : 'justify-start'}`}
-                          aria-label={isRtl ? 'إضافة عنصر' : 'Add Item'}
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            dispatch({
+                              type: 'SET_CREATE_FORM',
+                              payload: {
+                                ...state.createFormData,
+                                items: [...state.createFormData.items, { productId: '', quantity: 1 }],
+                              },
+                            })
+                          }
+                          className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200 mt-4"
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-5 h-5" />
                           {isRtl ? 'إضافة عنصر' : 'Add Item'}
-                        </button>
+                        </Button>
                       </div>
                       {state.formErrors.form && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
-                        >
-                          <AlertCircle className="w-5 h-5 text-red-600" />
-                          <span className="text-red-600 text-sm">{state.formErrors.form}</span>
-                        </motion.div>
+                        <p className="text-sm text-red-600 mt-2">{state.formErrors.form}</p>
                       )}
-                      <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
                         <Button
                           variant="secondary"
                           onClick={() => {
                             dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-                            dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }] } });
+                            dispatch({
+                              type: 'SET_CREATE_FORM',
+                              payload: { notes: '', items: [{ productId: '', quantity: 1 }] },
+                            });
                             dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
                           }}
-                          className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2 text-sm shadow-sm"
-                          aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
                         >
                           {isRtl ? 'إلغاء' : 'Cancel'}
                         </Button>
                         <Button
-                          type="button"
                           variant="primary"
                           onClick={createOrder}
-                          disabled={state.submitting === 'create' || state.createFormData.items.length === 0}
-                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm disabled:opacity-50"
-                          aria-label={isRtl ? 'إنشاء الطلب' : 'Create Order'}
+                          disabled={state.submitting === 'create'}
+                          className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200 disabled:opacity-50"
                         >
-                          {state.submitting === 'create' ? (isRtl ? 'جارٍ الإنشاء...' : 'Creating...') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
+                          {state.submitting === 'create'
+                            ? isRtl
+                              ? 'جاري الإنشاء...'
+                              : 'Creating...'
+                            : isRtl
+                            ? 'إنشاء الطلب'
+                            : 'Create Order'}
                         </Button>
                       </div>
                     </div>
@@ -1468,5 +1492,3 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
-
-export default InventoryOrders;
