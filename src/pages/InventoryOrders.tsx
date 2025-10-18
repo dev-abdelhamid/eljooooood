@@ -8,7 +8,7 @@ import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, time } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { factoryOrdersAPI, chefsAPI, productsAPI, inventoryAPI, departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
@@ -758,7 +758,7 @@ export const InventoryOrders: React.FC = () => {
           status: item.status || 'pending',
         })),
         status: response.data.data.status || initialStatus,
-        date: formatDate(new Date(response.data.data.createdAt), language),
+        date: formatDate(new Date(response.data.data.createdAt), language , { timeZone: 'Europe/Athens' }),
         notes: response.data.data.notes || '',
         priority: response.data.data.priority || 'medium',
         createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
