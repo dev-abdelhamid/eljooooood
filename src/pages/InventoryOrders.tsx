@@ -1,3 +1,7 @@
+
+
+
+
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -1306,16 +1310,10 @@ export const InventoryOrders: React.FC = () => {
                             <ProductDropdown
                               options={[
                                 { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
-                                ...state.products
-                                  .filter((product) =>
-                                    user?.role === 'chef'
-                                      ? product.department._id === user.department?._id
-                                      : true
-                                  )
-                                  .map((product) => ({
-                                    value: product._id,
-                                    label: `${product.displayName} (${product.displayUnit})`,
-                                  })),
+                                ...state.products.map((product) => ({
+                                  value: product._id,
+                                  label: `${product.displayName} (${product.displayUnit})`,
+                                })),
                               ]}
                               value={item.productId}
                               onChange={(value) =>
@@ -1412,16 +1410,10 @@ export const InventoryOrders: React.FC = () => {
                                   <ProductDropdown
                                     options={[
                                       { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-                                      ...state.chefs
-                                        .filter(
-                                          (chef) =>
-                                            chef.department._id ===
-                                            state.products.find((p) => p._id === item.productId)?.department._id
-                                        )
-                                        .map((chef) => ({
-                                          value: chef.userId,
-                                          label: chef.displayName,
-                                        })),
+                                      ...state.chefs.map((chef) => ({
+                                        value: chef.userId,
+                                        label: chef.displayName,
+                                      })),
                                     ]}
                                     value={item.assignedTo || ''}
                                     onChange={(value) =>

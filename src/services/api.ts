@@ -1137,6 +1137,7 @@ export const factoryInventoryAPI = {
 };
 
 
+
 export const factoryOrdersAPI = {
   // Create a new factory order
   create: async (data: { orderNumber: string; items: { product: string; quantity: number; assignedTo?: string }[]; notes?: string; priority?: string }) => {
@@ -1294,24 +1295,7 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-  assignChef: async (orderId, data) => {
-    if (!isValidObjectId(orderId) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid data:`, { orderId, data });
-      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
-    }
-    try {
-      const response = await api.patch(`/orders/${orderId}/assign`, {
-        items: data.items,
-        timestamp: new Date().toISOString(),
-      });
-      console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response);
-      return response;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Error:`, error.message);
-      throw new Error(`Failed to assign chefs: ${error.message}`);
-    }
-  },
-};
 
+};
 export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
