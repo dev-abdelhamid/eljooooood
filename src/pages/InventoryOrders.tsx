@@ -1,6 +1,3 @@
-
-
-// InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,11 +14,12 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
-import {AssignChefsModal} from '../components/production/AssignChefsModal';
+import { AssignChefsModal } from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
-import {OrderCard} from '../components/production/OrderCard';
+import { OrderCard } from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
+
 // مكون QuantityInput
 const QuantityInput = ({
   value,
@@ -80,6 +78,7 @@ const QuantityInput = ({
     </div>
   );
 };
+
 // دالة normalizeText
 const normalizeText = (text: string) => {
   return text
@@ -91,6 +90,7 @@ const normalizeText = (text: string) => {
     .toLowerCase()
     .trim();
 };
+
 // واجهة الحالة
 interface State {
   orders: FactoryOrder[];
@@ -115,6 +115,7 @@ interface State {
   viewMode: 'card' | 'table';
   formErrors: Record<string, string>;
 }
+
 // الـ initialState
 const initialState: State = {
   orders: [],
@@ -139,13 +140,14 @@ const initialState: State = {
   viewMode: 'card',
   formErrors: {},
 };
+
 // دالة reducer
-const reducer = (state: State, action: Action): State => {
+const reducer = (state: State, action: any): State => {
   switch (action.type) {
     case 'SET_ORDERS':
       return { ...state, orders: action.payload || [], error: '', currentPage: 1 };
     case 'ADD_ORDER':
-      return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
+      return { ...state, orders: [action.payload, ...state.orders.filter((o) => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER':
       return { ...state, selectedOrder: action.payload };
     case 'SET_CHEFS':
@@ -185,7 +187,9 @@ const reducer = (state: State, action: Action): State => {
     case 'UPDATE_ORDER_STATUS':
       return {
         ...state,
-        orders: state.orders.map(o => (o.id === action.orderId ? { ...o, status: action.status! } : o)),
+        orders: state.orders.map((o) =>
+          o.id === action.orderId ? { ...o, status: action.status! } : o
+        ),
         selectedOrder:
           state.selectedOrder && state.selectedOrder.id === action.orderId
             ? { ...state.selectedOrder, status: action.status! }
@@ -194,14 +198,17 @@ const reducer = (state: State, action: Action): State => {
     case 'UPDATE_ITEM_STATUS':
       return {
         ...state,
-        orders: state.orders.map(order =>
+        orders: state.orders.map((order) =>
           order.id === action.orderId
             ? {
                 ...order,
-                items: order.items.map(item =>
+                items: order.items.map((item) =>
                   item._id === action.payload.itemId ? { ...item, status: action.payload.status } : item
                 ),
-                status: order.items.every(i => i.status === 'completed') && order.status !== 'completed' ? 'completed' : order.status,
+                status:
+                  order.items.every((i) => i.status === 'completed') && order.status !== 'completed'
+                    ? 'completed'
+                    : order.status,
               }
             : order
         ),
@@ -209,11 +216,12 @@ const reducer = (state: State, action: Action): State => {
           state.selectedOrder && state.selectedOrder.id === action.orderId
             ? {
                 ...state.selectedOrder,
-                items: state.selectedOrder.items.map(item =>
+                items: state.selectedOrder.items.map((item) =>
                   item._id === action.payload.itemId ? { ...item, status: action.payload.status } : item
                 ),
                 status:
-                  state.selectedOrder.items.every(i => i.status === 'completed') && state.selectedOrder.status !== 'completed'
+                  state.selectedOrder.items.every((i) => i.status === 'completed') &&
+                  state.selectedOrder.status !== 'completed'
                     ? 'completed'
                     : state.selectedOrder.status,
               }
@@ -222,12 +230,12 @@ const reducer = (state: State, action: Action): State => {
     case 'TASK_ASSIGNED':
       return {
         ...state,
-        orders: state.orders.map(order =>
+        orders: state.orders.map((order) =>
           order.id === action.orderId
             ? {
                 ...order,
-                items: order.items.map(i => {
-                  const assignment = action.items?.find(a => a._id === i._id);
+                items: order.items.map((i) => {
+                  const assignment = action.items?.find((a) => a._id === i._id);
                   return assignment
                     ? {
                         ...i,
@@ -237,7 +245,9 @@ const reducer = (state: State, action: Action): State => {
                               username: assignment.assignedTo.username,
                               name: assignment.assignedTo.name,
                               nameEn: assignment.assignedTo.nameEn,
-                              displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name,
+                              displayName: isRtl
+                                ? assignment.assignedTo.name
+                                : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                               department: assignment.assignedTo.department,
                             }
                           : undefined,
@@ -245,7 +255,7 @@ const reducer = (state: State, action: Action): State => {
                       }
                     : i;
                 }),
-                status: order.items.every(i => i.status === 'assigned') ? 'in_production' : order.status,
+                status: order.items.every((i) => i.status === 'assigned') ? 'in_production' : order.status,
               }
             : order
         ),
@@ -253,8 +263,8 @@ const reducer = (state: State, action: Action): State => {
           state.selectedOrder && state.selectedOrder.id === action.orderId
             ? {
                 ...state.selectedOrder,
-                items: state.selectedOrder.items.map(i => {
-                  const assignment = action.items?.find(a => a._id === i._id);
+                items: state.selectedOrder.items.map((i) => {
+                  const assignment = action.items?.find((a) => a._id === i._id);
                   return assignment
                     ? {
                         ...i,
@@ -264,7 +274,9 @@ const reducer = (state: State, action: Action): State => {
                               username: assignment.assignedTo.username,
                               name: assignment.assignedTo.name,
                               nameEn: assignment.assignedTo.nameEn,
-                              displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name,
+                              displayName: isRtl
+                                ? assignment.assignedTo.name
+                                : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                               department: assignment.assignedTo.department,
                             }
                           : undefined,
@@ -272,7 +284,9 @@ const reducer = (state: State, action: Action): State => {
                       }
                     : i;
                 }),
-                status: state.selectedOrder.items.every(i => i.status === 'assigned') ? 'in_production' : state.selectedOrder.status,
+                status: state.selectedOrder.items.every((i) => i.status === 'assigned')
+                  ? 'in_production'
+                  : state.selectedOrder.status,
               }
             : state.selectedOrder,
       };
@@ -282,6 +296,7 @@ const reducer = (state: State, action: Action): State => {
       return state;
   }
 };
+
 // الثوابت
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]> = {
@@ -305,6 +320,7 @@ const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalQuantity', label: 'sort_total_quantity' },
 ];
+
 // ترجمة الوحدات
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
@@ -319,6 +335,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   };
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
+
 // مكون InventoryOrders
 export const InventoryOrders: React.FC = () => {
   const { t, language } = useLanguage();
@@ -329,6 +346,7 @@ export const InventoryOrders: React.FC = () => {
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
+
   // Debounce للبحث
   const [searchInput, setSearchInput] = useState('');
   useEffect(() => {
@@ -337,12 +355,15 @@ export const InventoryOrders: React.FC = () => {
     }, 300);
     return () => clearTimeout(handler);
   }, [searchInput]);
+
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
   const calculateTotalQuantity = useCallback((order: FactoryOrder) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
+
   // جلب البيانات
   const fetchData = useCallback(
     async (retryCount = 0) => {
@@ -364,6 +385,7 @@ export const InventoryOrders: React.FC = () => {
           chefsAPI.getAll(),
           productsAPI.getAll(),
         ]);
+        console.log('Chefs Response:', chefsResponse.data); // تسجيل استجابة الشيفات
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
           .filter((order: any) => order && order._id && order.orderNumber)
@@ -382,10 +404,12 @@ export const InventoryOrders: React.FC = () => {
                   unitEn: item.product?.unitEn,
                   displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
                   department: {
-                    _id: item.product?.department?._id || 'unknown',
+                    _id: item.product?.department?._id || 'no-department',
                     name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: item.product?.department?.nameEn,
-                    displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
+                    displayName: isRtl
+                      ? item.product?.department?.name
+                      : item.product?.department?.nameEn || item.product?.department?.name,
                   },
                   assignedTo: item.assignedTo
                     ? {
@@ -393,12 +417,16 @@ export const InventoryOrders: React.FC = () => {
                         username: item.assignedTo.username,
                         name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                         nameEn: item.assignedTo.nameEn,
-                        displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                        displayName: isRtl
+                          ? item.assignedTo.name
+                          : item.assignedTo.nameEn || item.assignedTo.name,
                         department: {
-                          _id: item.assignedTo.department?._id || 'unknown',
+                          _id: item.assignedTo.department?._id || 'no-department',
                           name: item.assignedTo.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                           nameEn: item.assignedTo.department?.nameEn,
-                          displayName: isRtl ? item.assignedTo.department?.name : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
+                          displayName: isRtl
+                            ? item.assignedTo.department?.name
+                            : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
                         },
                       }
                     : undefined,
@@ -422,15 +450,19 @@ export const InventoryOrders: React.FC = () => {
                   userId: chef.user._id,
                   name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   nameEn: chef.user?.nameEn || chef.nameEn,
-                  displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
+                  displayName: isRtl
+                    ? chef.user?.name || chef.name
+                    : chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name,
                   department: chef.department
                     ? {
-                        _id: chef.department._id,
+                        _id: chef.department._id || 'no-department',
                         name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
                         nameEn: chef.department.nameEn,
-                        displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name),
+                        displayName: isRtl
+                          ? chef.department.name
+                          : chef.department.nameEn || chef.department.name,
                       }
-                    : null,
+                    : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
                   status: chef.status || 'active',
                 }))
             : [],
@@ -447,12 +479,14 @@ export const InventoryOrders: React.FC = () => {
                   unit: product.unit || 'unit',
                   unitEn: product.unitEn,
                   department: {
-                    _id: product.department?._id || 'unknown',
+                    _id: product.department?._id || 'no-department',
                     name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: product.department?.nameEn,
-                    displayName: isRtl ? product.department?.name : product.department?.nameEn || product.department?.name,
+                    displayName: isRtl
+                      ? product.department?.name
+                      : product.department?.nameEn || product.department?.name,
                   },
-                  maxStockLevel: product.maxStockLevel || 1000, // افتراضي
+                  maxStockLevel: product.maxStockLevel || 1000,
                 }))
                 .sort((a: Product, b: Product) => {
                   const nameA = isRtl ? a.name : a.nameEn || a.name;
@@ -468,9 +502,14 @@ export const InventoryOrders: React.FC = () => {
           setTimeout(() => fetchData(retryCount + 1), 2000);
           return;
         }
-        const errorMessage = err.response?.status === 404
-          ? isRtl ? 'لم يتم العثور على طلبات' : 'No orders found'
-          : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
+        const errorMessage =
+          err.response?.status === 404
+            ? isRtl
+              ? 'لم يتم العثور على طلبات'
+              : 'No orders found'
+            : isRtl
+            ? `خطأ في جلب الطلبات: ${err.message}`
+            : `Error fetching orders: ${err.message}`;
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
       } finally {
@@ -479,6 +518,7 @@ export const InventoryOrders: React.FC = () => {
     },
     [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, isRtl, language]
   );
+
   // أحداث WebSocket
   useEffect(() => {
     if (!user || !['chef', 'production', 'admin'].includes(user.role) || !socket) {
@@ -521,10 +561,12 @@ export const InventoryOrders: React.FC = () => {
               unitEn: item.product?.unitEn,
               displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
               department: {
-                _id: item.product?.department?._id || 'unknown',
+                _id: item.product?.department?._id || 'no-department',
                 name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                 nameEn: item.product?.department?.nameEn,
-                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
+                displayName: isRtl
+                  ? item.product?.department?.name
+                  : item.product?.department?.nameEn || item.product?.department?.name,
               },
               assignedTo: item.assignedTo
                 ? {
@@ -532,12 +574,16 @@ export const InventoryOrders: React.FC = () => {
                     username: item.assignedTo.username,
                     name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: item.assignedTo.nameEn,
-                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                    displayName: isRtl
+                      ? item.assignedTo.name
+                      : item.assignedTo.nameEn || item.assignedTo.name,
                     department: {
-                      _id: item.assignedTo.department?._id || 'unknown',
+                      _id: item.assignedTo.department?._id || 'no-department',
                       name: item.assignedTo.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                       nameEn: item.assignedTo.department?.nameEn,
-                      displayName: isRtl ? item.assignedTo.department?.name : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
+                      displayName: isRtl
+                        ? item.assignedTo.department?.name
+                        : item.assignedTo.department?.nameEn || item.assignedTo.department?.name,
                     },
                   }
                 : undefined,
@@ -594,18 +640,21 @@ export const InventoryOrders: React.FC = () => {
       socket.off('taskAssigned');
     };
   }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
+
   // تحقق من صحة النموذج
   const validateCreateForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    const t = isRtl ? {
-      productRequired: 'المنتج مطلوب',
-      quantityRequired: 'الكمية مطلوبة',
-      quantityInvalid: 'الكمية يجب أن تكون أكبر من 0'
-    } : {
-      productRequired: 'Product is required',
-      quantityRequired: 'Quantity is required',
-      quantityInvalid: 'Quantity must be greater than 0'
-    };
+    const t = isRtl
+      ? {
+          productRequired: 'المنتج مطلوب',
+          quantityRequired: 'الكمية مطلوبة',
+          quantityInvalid: 'الكمية يجب أن تكون أكبر من 0',
+        }
+      : {
+          productRequired: 'Product is required',
+          quantityRequired: 'Quantity is required',
+          quantityInvalid: 'Quantity must be greater than 0',
+        };
     state.createFormData.items.forEach((item, index) => {
       if (!item.productId) {
         errors[`item_${index}_productId`] = t.productRequired;
@@ -617,6 +666,7 @@ export const InventoryOrders: React.FC = () => {
     dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
     return Object.keys(errors).length === 0;
   }, [state.createFormData, isRtl]);
+
   // إنشاء طلب جديد
   const createOrder = useCallback(async () => {
     if (!user?.id || !validateCreateForm()) {
@@ -627,7 +677,7 @@ export const InventoryOrders: React.FC = () => {
       const orderNumber = `ORD-${Date.now()}`;
       const response = await factoryOrdersAPI.create({
         orderNumber,
-        items: state.createFormData.items.map(i => ({ product: i.productId, quantity: i.quantity })),
+        items: state.createFormData.items.map((i) => ({ product: i.productId, quantity: i.quantity })),
         notes: state.createFormData.notes,
         priority: 'medium',
       });
@@ -648,7 +698,9 @@ export const InventoryOrders: React.FC = () => {
             _id: item.product.department._id,
             name: item.product.department.name,
             nameEn: item.product.department.nameEn,
-            displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+            displayName: isRtl
+              ? item.product.department.name
+              : item.product.department.nameEn || item.product.department.name,
           },
           status: item.status || 'pending',
         })),
@@ -677,10 +729,11 @@ export const InventoryOrders: React.FC = () => {
       dispatch({ type: 'SET_SUBMITTING', payload: null });
     }
   }, [user, state.createFormData, isRtl, socket, isConnected, emit, language, validateCreateForm]);
+
   // معالجات أخرى
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: FactoryOrder['status']) => {
-      const order = state.orders.find(o => o.id === orderId);
+      const order = state.orders.find((o) => o.id === orderId);
       if (!order || !validTransitions[order.status].includes(newStatus)) {
         toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
         return;
@@ -706,36 +759,10 @@ export const InventoryOrders: React.FC = () => {
     },
     [state.orders, isRtl, socket, isConnected, emit]
   );
-  const updateItemStatus = useCallback(
-    async (orderId: string, itemId: string, status: FactoryOrderItem['status']) => {
-      if (!user?.id) {
-        toast.error(isRtl ? 'لا يوجد مستخدم مرتبط' : 'No user associated', { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await factoryOrdersAPI.updateItemStatus(orderId, itemId, { status });
-        dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-        if (socket && isConnected) {
-          emit('itemStatusUpdated', { orderId, itemId, status });
-        }
-        toast.success(isRtl ? `تم تحديث حالة العنصر إلى: ${status}` : `Item status updated to: ${status}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } catch (err: any) {
-        console.error('Update item status error:', err.message);
-        toast.error(isRtl ? `فشل في تحديث حالة العنصر: ${err.message}` : `Failed to update item status: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [isRtl, user, socket, isConnected, emit]
-  );
+
   const assignChefs = useCallback(
     async (orderId: string) => {
-      if (!user?.id || state.assignFormData.items.some(item => !item.assignedTo)) {
+      if (!user?.id || state.assignFormData.items.some((item) => !item.assignedTo)) {
         toast.error(isRtl ? 'يرجى تعيين شيف واحد على الأقل' : 'Please assign at least one chef', {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -743,15 +770,20 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
-        const items = state.assignFormData.items.map(item => ({
+        const response = await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
+        console.log('Assign Chefs API Response:', response.data);
+        const items = state.assignFormData.items.map((item) => ({
           _id: item.itemId,
-          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || {
+          assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
             _id: item.assignedTo,
             username: 'unknown',
             name: isRtl ? 'غير معروف' : 'Unknown',
             displayName: isRtl ? 'غير معروف' : 'Unknown',
-            department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
+            department: {
+              _id: 'no-department',
+              name: isRtl ? 'غير معروف' : 'Unknown',
+              displayName: isRtl ? 'غير معروف' : 'Unknown',
+            },
           },
           status: 'assigned' as FactoryOrderItem['status'],
         }));
@@ -775,10 +807,11 @@ export const InventoryOrders: React.FC = () => {
     },
     [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
   );
+
   const openAssignModal = useCallback(
     (order: FactoryOrder) => {
-      if (order.status !== 'approved' && order.status !== 'pending') {
-        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not ready for assignment', {
+      if (order.status !== 'approved') {
+        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
           position: isRtl ? 'top-left' : 'top-right',
         });
         return;
@@ -788,8 +821,8 @@ export const InventoryOrders: React.FC = () => {
         type: 'SET_ASSIGN_FORM',
         payload: {
           items: order.items
-            .filter(item => !item.assignedTo)
-            .map(item => ({
+            .filter((item) => !item.assignedTo)
+            .map((item) => ({
               itemId: item._id,
               assignedTo: '',
               product: item.displayProductName,
@@ -802,58 +835,74 @@ export const InventoryOrders: React.FC = () => {
     },
     [isRtl]
   );
+
   const handlePageChange = useCallback((page: number) => {
     dispatch({ type: 'SET_PAGE', payload: page });
     listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // التحقق من تحميل الشيفات
+  useEffect(() => {
+    if (!state.chefs.length && !state.loading && state.isAssignModalOpen) {
+      console.warn('No chefs loaded, retrying fetch...');
+      fetchData();
+    }
+  }, [state.chefs, state.loading, state.isAssignModalOpen, fetchData]);
+
   // تصفية وترتيب الطلبات
-  const filteredOrders = useMemo(
-    () => {
-      const normalizedQuery = normalizeText(state.debouncedSearchQuery);
-      return state.orders
-        .filter(order => order)
-        .filter(
-          order =>
-            normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
-            normalizeText(order.notes || '').includes(normalizedQuery) ||
-            normalizeText(order.createdBy || '').includes(normalizedQuery) ||
-            order.items.some(item => normalizeText(item.displayProductName || '').includes(normalizedQuery))
-        )
-        .filter(
-          order =>
-            (!state.filterStatus || order.status === state.filterStatus) &&
-            (user?.role === 'production' && user?.department
-              ? order.items.some(item => item.department._id === user.department._id)
-              : true) &&
-            (user?.role === 'chef' ? order.items.some(item => item.assignedTo?._id === user.id) : true)
-        );
-    },
-    [state.orders, state.debouncedSearchQuery, state.filterStatus, user]
-  );
-  const sortedOrders = useMemo(
-    () => {
-      return [...filteredOrders].sort((a, b) => {
-        if (state.sortBy === 'date') {
-          return state.sortOrder === 'asc'
-            ? new Date(a.date).getTime() - new Date(b.date).getTime()
-            : new Date(b.date).getTime() - new Date(a.date).getTime();
-        } else {
-          const totalA = calculateTotalQuantity(a);
-          const totalB = calculateTotalQuantity(b);
-          return state.sortOrder === 'asc' ? totalA - totalB : totalB - totalA;
-        }
-      });
-    },
-    [filteredOrders, state.sortBy, state.sortOrder, calculateTotalQuantity]
-  );
+  const filteredOrders = useMemo(() => {
+    const normalizedQuery = normalizeText(state.debouncedSearchQuery);
+    return state.orders
+      .filter((order) => order)
+      .filter(
+        (order) =>
+          normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
+          normalizeText(order.notes || '').includes(normalizedQuery) ||
+          normalizeText(order.createdBy || '').includes(normalizedQuery) ||
+          order.items.some((item) => normalizeText(item.displayProductName || '').includes(normalizedQuery))
+      )
+      .filter(
+        (order) =>
+          (!state.filterStatus || order.status === state.filterStatus) &&
+          (user?.role === 'production' && user?.department
+            ? order.items.some((item) => item.department._id === user.department._id)
+            : true) &&
+          (user?.role === 'chef' ? order.items.some((item) => item.assignedTo?._id === user.id) : true)
+      );
+  }, [state.orders, state.debouncedSearchQuery, state.filterStatus, user]);
+
+  const sortedOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      if (state.sortBy === 'date') {
+        return state.sortOrder === 'asc'
+          ? new Date(a.date).getTime() - new Date(b.date).getTime()
+          : new Date(b.date).getTime() - new Date(a.date).getTime();
+      } else {
+        const totalA = calculateTotalQuantity(a);
+        const totalB = calculateTotalQuantity(b);
+        return state.sortOrder === 'asc' ? totalA - totalB : totalB - totalA;
+      }
+    });
+  }, [filteredOrders, state.sortBy, state.sortOrder, calculateTotalQuantity]);
+
   const paginatedOrders = useMemo(
-    () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
+    () =>
+      sortedOrders.slice(
+        (state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode],
+        state.currentPage * ORDERS_PER_PAGE[state.viewMode]
+      ),
     [sortedOrders, state.currentPage, state.viewMode]
   );
-  const totalPages = useMemo(() => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]), [sortedOrders, state.viewMode]);
+
+  const totalPages = useMemo(
+    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
+    [sortedOrders, state.viewMode]
+  );
+
   return (
     <div className="px-4 py-6 max-w-7xl mx-auto">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
@@ -896,10 +945,18 @@ export const InventoryOrders: React.FC = () => {
                   {isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
                 </label>
                 <ProductDropdown
-                  options={statusOptions.map(opt => ({
+                  options={statusOptions.map((opt) => ({
                     value: opt.value,
                     label: isRtl
-                      ? { '': 'كل الحالات', requested: 'مطلوب', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', cancelled: 'ملغى' }[opt.value]
+                      ? {
+                          '': 'كل الحالات',
+                          requested: 'مطلوب',
+                          pending: 'قيد الانتظار',
+                          approved: 'تم الموافقة',
+                          in_production: 'في الإنتاج',
+                          completed: 'مكتمل',
+                          cancelled: 'ملغى',
+                        }[opt.value]
                       : opt.label,
                   }))}
                   value={state.filterStatus}
@@ -913,7 +970,7 @@ export const InventoryOrders: React.FC = () => {
                   {isRtl ? 'ترتيب حسب' : 'Sort By'}
                 </label>
                 <ProductDropdown
-                  options={sortOptions.map(opt => ({
+                  options={sortOptions.map((opt) => ({
                     value: opt.value,
                     label: isRtl ? { date: 'التاريخ', totalQuantity: 'الكمية الإجمالية' }[opt.value] : opt.label,
                   }))}
@@ -1009,8 +1066,12 @@ export const InventoryOrders: React.FC = () => {
                       </h3>
                       <p className="text-sm text-gray-500">
                         {state.filterStatus || state.debouncedSearchQuery
-                          ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
-                          : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
+                          ? isRtl
+                            ? 'لا توجد طلبات مطابقة'
+                            : 'No matching orders'
+                          : isRtl
+                          ? 'لا توجد طلبات بعد'
+                          : 'No orders yet'}
                       </p>
                     </Card>
                   ) : (
@@ -1018,7 +1079,7 @@ export const InventoryOrders: React.FC = () => {
                       {state.viewMode === 'table' ? (
                         <OrderTable
                           orders={paginatedOrders}
-                          calculateAdjustedTotal={() => ''} // No total amount for factory orders
+                          calculateAdjustedTotal={() => ''} // لا يوجد إجمالي للطلبات
                           calculateTotalQuantity={calculateTotalQuantity}
                           translateUnit={translateUnit}
                           updateOrderStatus={updateOrderStatus}
@@ -1029,7 +1090,7 @@ export const InventoryOrders: React.FC = () => {
                         />
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {paginatedOrders.map(order => (
+                          {paginatedOrders.map((order) => (
                             <motion.div
                               key={order.id}
                               initial={{ opacity: 0, scale: 0.95 }}
@@ -1038,7 +1099,6 @@ export const InventoryOrders: React.FC = () => {
                             >
                               <OrderCard
                                 order={order}
-                                calculateAdjustedTotal={() => ''} // No total amount for factory orders
                                 calculateTotalQuantity={calculateTotalQuantity}
                                 translateUnit={translateUnit}
                                 updateOrderStatus={updateOrderStatus}
@@ -1075,6 +1135,7 @@ export const InventoryOrders: React.FC = () => {
                     error={state.error}
                     submitting={state.submitting}
                     isRtl={isRtl}
+                    loading={state.loading}
                   />
                   <Modal
                     isOpen={state.isCreateModalOpen}
@@ -1094,7 +1155,9 @@ export const InventoryOrders: React.FC = () => {
                         </label>
                         <textarea
                           value={state.createFormData.notes}
-                          onChange={(e) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, notes: e.target.value } })}
+                          onChange={(e) =>
+                            dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, notes: e.target.value } })
+                          }
                           placeholder={isRtl ? 'أدخل ملاحظات (اختياري)' : 'Enter notes (optional)'}
                           className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
                           rows={3}
@@ -1111,10 +1174,18 @@ export const InventoryOrders: React.FC = () => {
                               options={[
                                 { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
                                 ...state.products
-                                  .filter(product => user?.role === 'production' && user?.department ? product.department._id === user.department._id : true)
-                                  .map(product => ({
+                                  .filter(
+                                    (product) =>
+                                      user?.role === 'production' && user?.department
+                                        ? product.department._id === user.department._id
+                                        : true
+                                  )
+                                  .map((product) => ({
                                     value: product._id,
-                                    label: `${isRtl ? product.name : product.nameEn || product.name} (${translateUnit(product.unit, isRtl)})`,
+                                    label: `${isRtl ? product.name : product.nameEn || product.name} (${translateUnit(
+                                      product.unit,
+                                      isRtl
+                                    )})`,
                                   })),
                               ]}
                               value={item.productId}
@@ -1122,7 +1193,10 @@ export const InventoryOrders: React.FC = () => {
                                 const newItems = [...state.createFormData.items];
                                 newItems[index].productId = value;
                                 dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
-                                dispatch({ type: 'SET_FORM_ERRORS', payload: { ...state.formErrors, [`item_${index}_productId`]: undefined } });
+                                dispatch({
+                                  type: 'SET_FORM_ERRORS',
+                                  payload: { ...state.formErrors, [`item_${index}_productId`]: undefined },
+                                });
                               }}
                               ariaLabel={isRtl ? 'اختر منتج' : 'Select Product'}
                               className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
@@ -1132,7 +1206,9 @@ export const InventoryOrders: React.FC = () => {
                             )}
                             <div className="flex flex-col sm:flex-row gap-4">
                               <div className="flex-1">
-                                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                                <label
+                                  className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                                >
                                   {isRtl ? 'الكمية' : 'Quantity'}
                                 </label>
                                 <QuantityInput
@@ -1142,7 +1218,10 @@ export const InventoryOrders: React.FC = () => {
                                     const newItems = [...state.createFormData.items];
                                     newItems[index].quantity = isNaN(num) ? 1 : num;
                                     dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
-                                    dispatch({ type: 'SET_FORM_ERRORS', payload: { ...state.formErrors, [`item_${index}_quantity`]: undefined } });
+                                    dispatch({
+                                      type: 'SET_FORM_ERRORS',
+                                      payload: { ...state.formErrors, [`item_${index}_quantity`]: undefined },
+                                    });
                                   }}
                                   onIncrement={() => {
                                     const newItems = [...state.createFormData.items];
@@ -1154,7 +1233,7 @@ export const InventoryOrders: React.FC = () => {
                                     newItems[index].quantity = Math.max(newItems[index].quantity - 1, 1);
                                     dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
                                   }}
-                                  max={state.products.find(p => p._id === item.productId)?.maxStockLevel}
+                                  max={state.products.find((p) => p._id === item.productId)?.maxStockLevel}
                                 />
                                 {state.formErrors[`item_${index}_quantity`] && (
                                   <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
@@ -1182,7 +1261,9 @@ export const InventoryOrders: React.FC = () => {
                             const newItems = [...state.createFormData.items, { productId: '', quantity: 1 }];
                             dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
                           }}
-                          className={`flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium ${isRtl ? 'justify-end' : 'justify-start'}`}
+                          className={`flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium ${
+                            isRtl ? 'justify-end' : 'justify-start'
+                          }`}
                           aria-label={isRtl ? 'إضافة عنصر' : 'Add Item'}
                         >
                           <Plus className="w-4 h-4" />
@@ -1208,14 +1289,15 @@ export const InventoryOrders: React.FC = () => {
                             dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
                           }}
                           className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium shadow transition-all duration-200"
-                          aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                          aria-label={isRtl ? 'إلغاء' : '                        Cancel'}
                         >
                           {isRtl ? 'إلغاء' : 'Cancel'}
                         </Button>
                         <Button
+                          type="button"
                           variant="primary"
                           onClick={createOrder}
-                          disabled={state.submitting !== null}
+                          disabled={state.submitting === 'create' || state.createFormData.items.length === 0}
                           className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium shadow transition-all duration-200 disabled:opacity-50"
                           aria-label={isRtl ? 'إنشاء الطلب' : 'Create Order'}
                         >
@@ -1233,6 +1315,5 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
-
 
 export default InventoryOrders;
