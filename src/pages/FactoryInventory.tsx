@@ -299,7 +299,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
 };
 
 export const FactoryInventory: React.FC = () => {
-  const { t: languageT, language } = useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
@@ -387,12 +387,7 @@ export const FactoryInventory: React.FC = () => {
               : item.currentStock >= item.maxStockLevel
               ? InventoryStatus.FULL
               : InventoryStatus.NORMAL,
-          inProduction:
-            factoryOrdersData?.some(
-              (order) =>
-                (order.status === 'pending' || order.status === 'in_production') &&
-                order.items.some((i) => i.productId === item.product?._id)
-            ) || false,
+          inProduction: false, // Will be calculated later
         }));
     },
     onError: (err) => {
@@ -456,7 +451,7 @@ export const FactoryInventory: React.FC = () => {
       try {
         const response = await factoryInventoryAPI.getAvailableProducts();
         console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
-        const products = Array.isArray(response) ? response : response?.data || response?.products || [];
+        const products = Array.isArray(response) ? response : response?.data?.products || response?.products || [];
         if (!Array.isArray(products)) {
           console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
           setAvailableProducts([]);
@@ -684,6 +679,7 @@ export const FactoryInventory: React.FC = () => {
   }, []);
 
   const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
+    setSelectedItem(item || null);
     dispatchProductionForm({ type: 'RESET' });
     if (item?.product) {
       dispatchProductionForm({
@@ -739,7 +735,7 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-  
+
   }, [t]);
 
   const handleProductChange = useCallback(
@@ -762,7 +758,7 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-   
+
     },
     [t, productionForm.items]
   );
@@ -844,6 +840,7 @@ export const FactoryInventory: React.FC = () => {
       setIsProductionModalOpen(false);
       dispatchProductionForm({ type: 'RESET' });
       setProductionErrors({});
+      setSelectedItem(null);
       toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
       if (socket && isConnected) {
         socket.emit('factoryOrderCreated', {
@@ -963,7 +960,7 @@ export const FactoryInventory: React.FC = () => {
               className="w-full"
             />
           </div>
-          <div className="w-full lg:w-1/2 flex flex-col sm:flex-row gap-4">
+          <div className="w-full lg:w-1/2 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <ProductDropdown
               value={filterStatus}
               onChange={(value) => {
@@ -1168,6 +1165,7 @@ export const FactoryInventory: React.FC = () => {
                 setIsProductionModalOpen(false);
                 dispatchProductionForm({ type: 'RESET' });
                 setProductionErrors({});
+                setSelectedItem(null);
               }}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
               aria-label={t.cancel}
@@ -1244,6 +1242,7 @@ export const FactoryInventory: React.FC = () => {
                   setIsProductionModalOpen(false);
                   dispatchProductionForm({ type: 'RESET' });
                   setProductionErrors({});
+                  setSelectedItem(null);
                 }}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
@@ -1439,5 +1438,3 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
-
-export default FactoryInventory ;
