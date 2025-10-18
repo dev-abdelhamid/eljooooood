@@ -739,7 +739,7 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
- 
+  
   }, [t]);
 
   const handleProductChange = useCallback(
@@ -762,7 +762,7 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-    
+   
     },
     [t, productionForm.items]
   );
