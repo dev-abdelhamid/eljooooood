@@ -10,10 +10,10 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI , } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem , User } from '../types/types';
+import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
@@ -34,7 +34,7 @@ const QuantityInput = ({
   onDecrement: () => void;
   max?: number;
 }) => {
-  const { language } = useLanguage();
+  const { language } from useLanguage();
   const isRtl = language === 'ar';
 
   const handleChange = (val: string) => {
@@ -410,10 +410,10 @@ export const InventoryOrders: React.FC = () => {
                   unitEn: item.product?.unitEn,
                   displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
                   department: {
-                    _id: item.product?.department?._id || 'no-department',
-                    name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.product?.department?.nameEn,
-                    displayName: item.product?.department?.displayName || (isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name),
+                    _id: item.department?._id || item.product?.department?._id || 'no-department',
+                    name: item.department?.name || item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: item.department?.nameEn || item.product?.department?.nameEn,
+                    displayName: item.department?.displayName || item.product?.department?.displayName || (isRtl ? item.department?.name || item.product?.department?.name : item.department?.nameEn || item.product?.department?.nameEn || item.department?.name || item.product?.department?.name),
                   },
                   assignedTo: item.assignedTo
                     ? {
@@ -1404,7 +1404,9 @@ export const InventoryOrders: React.FC = () => {
                                         .filter(
                                           (chef) =>
                                             chef.department._id ===
-                                            state.products.find((p) => p._id === item.productId)?.department._id
+                                            (typeof state.products.find((p) => p._id === item.productId)?.department === 'object' 
+                                              ? state.products.find((p) => p._id === item.productId)?.department._id 
+                                              : state.products.find((p) => p._id === item.productId)?.department)
                                         )
                                         .map((chef) => ({
                                           value: chef.userId,
