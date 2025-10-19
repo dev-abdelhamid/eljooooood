@@ -41,7 +41,7 @@ interface FactoryInventoryItem {
 interface ProductionItem {
   product: string;
   quantity: number;
-  assignedTo: string; // Chef ID
+  assignedTo?: string; // Chef ID
 }
 
 interface ProductionFormState {
@@ -67,6 +67,7 @@ interface AvailableProduct {
   productName: string;
   unit: string;
   departmentName: string;
+  departmentId?: string; // Added for chef filtering
 }
 
 interface FactoryOrder {
@@ -113,7 +114,6 @@ const translations = {
     notes: 'ملاحظات',
     notesPlaceholder: 'أدخل ملاحظات إضافية (اختياري)',
     items: 'العناصر',
-    chef: 'الشيف',
     addItem: 'إضافة عنصر',
     removeItem: 'إزالة العنصر',
     submit: 'إرسال',
@@ -131,6 +131,7 @@ const translations = {
     inProduction: 'في الإنتاج',
     errors: {
       fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
+      fetchChefs: 'خطأ في جلب بيانات الشيفات',
       createProduction: 'خطأ في إنشاء طلب الإنتاج',
       updateInventory: 'خطأ في تحديث المخزون',
       invalidForm: 'البيانات المدخلة غير صالحة',
@@ -142,6 +143,7 @@ const translations = {
       invalidProductId: 'معرف المنتج غير صالح',
       invalidChefId: 'معرف الشيف غير صالح',
       productNotFound: 'المنتج غير موجود',
+      chefNotFound: 'الشيف غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
     },
@@ -177,7 +179,6 @@ const translations = {
     notes: 'Notes',
     notesPlaceholder: 'Enter additional notes (optional)',
     items: 'Items',
-    chef: 'Chef',
     addItem: 'Add Item',
     removeItem: 'Remove Item',
     submit: 'Submit',
@@ -195,6 +196,7 @@ const translations = {
     inProduction: 'In Production',
     errors: {
       fetchInventory: 'Error fetching factory inventory data',
+      fetchChefs: 'Error fetching chefs data',
       createProduction: 'Error creating production order',
       updateInventory: 'Error updating inventory',
       invalidForm: 'Invalid form data',
@@ -206,6 +208,7 @@ const translations = {
       invalidProductId: 'Invalid product ID',
       invalidChefId: 'Invalid chef ID',
       productNotFound: 'Product not found',
+      chefNotFound: 'Chef not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
     },
@@ -298,23 +301,9 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
   }
 };
 
-// Aggregate items by product and chef
+// Aggregate items by product (modified to preserve assignedTo)
 const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
-  const aggregated: Record<string, ProductionItem> = {};
-  items.forEach((item) => {
-    const key = `${item.product}_${item.assignedTo}`; // Unique key for product and chef
-    if (!aggregated[key]) {
-      aggregated[key] = {
-        product: item.product,
-        quantity: 0,
-        assignedTo: item.assignedTo,
-      };
-    }
-    aggregated[key].quantity += item.quantity;
-  });
-  return Object.values(aggregated).filter(
-    (item) => item.product && isValidObjectId(item.product) && item.assignedTo && isValidObjectId(item.assignedTo)
-  );
+  return items.filter((item) => item.product && isValidObjectId(item.product) && item.assignedTo && isValidObjectId(item.assignedTo));
 };
 
 export const FactoryInventory: React.FC = () => {
@@ -351,6 +340,7 @@ export const FactoryInventory: React.FC = () => {
     }, [value, delay]);
     return [value, setValue, debouncedValue] as const;
   };
+
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
   // Inventory Query
@@ -431,14 +421,14 @@ export const FactoryInventory: React.FC = () => {
         console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
         return [];
       }
-      return data.filter((chef: Chef) => chef.status === 'active');
+      return data.filter((chef) => chef.status === 'active');
     },
-    enabled: isProductionModalOpen && !!user?.role && ['production', 'admin'].includes(user.role),
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
-      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.fetchChefs, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
 
@@ -467,7 +457,7 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  // Factory Orders Query for inProduction flag
+  // Factory Orders Query
   const { data: factoryOrdersData } = useQuery<FactoryOrder[], Error>({
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
@@ -511,6 +501,7 @@ export const FactoryInventory: React.FC = () => {
               departmentName: isRtl
                 ? product.department?.name || t.allDepartments
                 : product.department?.nameEn || product.department?.name || 'Unknown',
+              departmentId: product.department?._id,
             }))
         );
       } catch (err: any) {
@@ -687,16 +678,19 @@ export const FactoryInventory: React.FC = () => {
   );
 
   // Chef options
-  const chefOptions = useMemo(
-    () => [
+  const getChefOptions = (productId: string) => {
+    const product = availableProducts.find((p) => p.productId === productId);
+    const departmentId = product?.departmentId;
+    return [
       { value: '', label: t.selectChef },
-      ...chefsData?.map((chef) => ({
-        value: chef._id,
-        label: isRtl ? chef.name : chef.nameEn || chef.name,
-      })) || [],
-    ],
-    [chefsData, isRtl, t]
-  );
+      ...(chefsData || [])
+        .filter((chef) => !departmentId || chef.department._id === departmentId)
+        .map((chef) => ({
+          value: chef._id,
+          label: chef.displayName,
+        })),
+    ];
+  };
 
   // Filtered and paginated inventory
   const filteredInventory = useMemo(
@@ -783,6 +777,10 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+    setProductionErrors((prev) => ({
+      ...prev,
+      [`item_${index}_${field}`]: undefined,
+    }));
   }, [t]);
 
   const handleProductChange = useCallback(
@@ -805,25 +803,12 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
+      setProductionErrors((prev) => ({
+        ...prev,
+        [`item_${index}_product`]: undefined,
+      }));
     },
     [t, productionForm.items]
-  );
-
-  const handleChefChange = useCallback(
-    (index: number, chefId: string) => {
-      if (!isValidObjectId(chefId)) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_assignedTo`]: t.errors.invalidChefId,
-        }));
-        return;
-      }
-      dispatchProductionForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'assignedTo', value: chefId },
-      });
-    },
-    [t]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
@@ -849,7 +834,7 @@ export const FactoryInventory: React.FC = () => {
         errors[`item_${index}_product`] = t.errors.invalidProductId;
       }
       if (!item.assignedTo) {
-        errors[`item_${index}_assignedTo`] = t.errors.required.replace('{field}', t.chef);
+        errors[`item_${index}_assignedTo`] = t.errors.required.replace('{field}', t.selectChef);
       } else if (!isValidObjectId(item.assignedTo)) {
         errors[`item_${index}_assignedTo`] = t.errors.invalidChefId;
       }
@@ -891,8 +876,13 @@ export const FactoryInventory: React.FC = () => {
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
         items: aggregatedItems.map((item) => ({
-          productId: item.product,
+          itemId: crypto.randomUUID(), // Generate unique itemId
+          product: item.product,
+          productNameEn: availableProducts.find((p) => p.productId === item.product)?.productName || '',
           quantity: item.quantity,
+          unit: availableProducts.find((p) => p.productId === item.product)?.unit || '',
+          unitEn: availableProducts.find((p) => p.productId === item.product)?.unit || '',
+          displayUnit: availableProducts.find((p) => p.productId === item.product)?.unit || '',
           assignedTo: item.assignedTo,
         })),
         notes: productionForm.notes || undefined,
@@ -938,10 +928,12 @@ export const FactoryInventory: React.FC = () => {
         });
       } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
         errorMessage = t.errors.invalidProductId;
-      } else if (err.message.includes('معرف الشيف غير صالح') || err.message.includes('Invalid chef ID')) {
-        errorMessage = t.errors.invalidChefId;
       } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
+      } else if (err.message.includes('معرف الشيف غير صالح') || err.message.includes('Invalid chef ID')) {
+        errorMessage = t.errors.invalidChefId;
+      } else if (err.message.includes('الشيف غير موجود') || err.message.includes('Chef not found')) {
+        errorMessage = t.errors.chefNotFound;
       }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setProductionErrors((prev) => ({ ...prev, form: errorMessage }));
@@ -1264,20 +1256,22 @@ export const FactoryInventory: React.FC = () => {
                     ariaLabel={`${t.items} ${index + 1}`}
                     placeholder={t.selectProduct}
                     className="w-full"
-                    disabled={chefsLoading}
                   />
                   {productionErrors[`item_${index}_product`] && (
                     <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
                   )}
-                  <ProductDropdown
-                    value={item.assignedTo}
-                    onChange={(value) => handleChefChange(index, value)}
-                    options={chefOptions}
-                    ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
-                    placeholder={t.selectChef}
-                    className="w-full"
-                    disabled={chefsLoading}
-                  />
+                  {chefsLoading ? (
+                    <div className="text-sm text-gray-600">{isRtl ? 'جاري تحميل الشيفات...' : 'Loading chefs...'}</div>
+                  ) : (
+                    <ProductDropdown
+                      value={item.assignedTo || ''}
+                      onChange={(value) => updateItemInForm(index, 'assignedTo', value)}
+                      options={getChefOptions(item.product)}
+                      ariaLabel={`${t.items} ${index + 1} - ${t.selectChef}`}
+                      placeholder={t.selectChef}
+                      className="w-full"
+                    />
+                  )}
                   {productionErrors[`item_${index}_assignedTo`] && (
                     <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
                   )}
