@@ -6,13 +6,6 @@ import { Select } from '../../components/UI/Select';
 import { AlertCircle } from 'lucide-react';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
 import { useLanguage } from '../../contexts/LanguageContext';
-
-
-
-
-
-
-
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -26,10 +19,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   };
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
-
-
-
-
+// واجهة الخصائص لمكون AssignChefsModal
 interface AssignChefsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -97,7 +87,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     [assignFormData, setAssignForm]
   );
 
-  // إعادة تعيين النموذج عند فتح المودال
+  // إعادة تعيين النموذج عند فتح النافذة
   useEffect(() => {
     if (isOpen && selectedOrder) {
       setAssignForm({

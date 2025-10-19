@@ -1138,16 +1138,24 @@ export const factoryInventoryAPI = {
 
 
 export const factoryOrdersAPI = {
-  // Create a new factory order
-  create: async (data: { orderNumber: string; items: { product: string; quantity: number; assignedTo?: string }[]; notes?: string; priority?: string }) => {
+  // إنشاء طلب إنتاج جديد
+  create: async (data: {
+    orderNumber: string;
+    items: { product: string; quantity: number; assignedTo?: string }[];
+    notes?: string;
+    priority?: string;
+  }) => {
+    // التحقق من صحة البيانات المدخلة
     if (
       !data.orderNumber ||
       !data.orderNumber.trim() ||
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
-      data.items.some((item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1)
+      data.items.some(
+        (item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1
+      )
     ) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - البيانات غير صالحة:`, data);
       throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
     }
     try {
@@ -1161,59 +1169,59 @@ export const factoryOrdersAPI = {
         notes: data.notes?.trim() || '',
         priority: data.priority?.trim() || 'medium',
       });
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - الاستجابة:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - خطأ:`, error.message);
       throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // Retrieve all factory orders with optional query parameters
+  // استرجاع جميع طلبات الإنتاج مع معايير اختيارية
   getAll: async (query: Record<string, any> = {}) => {
     try {
       const response = await api.get('/factoryOrders', { params: query });
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - الاستجابة:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Retrieve a specific factory order by ID
+  // استرجاع طلب إنتاج محدد باستخدام المعرف
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Invalid factory order ID:`, id);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - معرف طلب غير صالح:`, id);
       throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.get(`/factoryOrders/${id}`);
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getById - الاستجابة:`, response);
       return response.data;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Approve a factory order
+  // الموافقة على طلب إنتاج
   approve: async (id: string) => {
     if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - Invalid factory order ID:`, id);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - معرف طلب غير صالح:`, id);
       throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/approve`);
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.approve - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.approve - الاستجابة:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Assign chefs to items in a factory order
+  // تعيين شيفات لعناصر طلب الإنتاج
   assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
     if (
       !isValidObjectId(id) ||
@@ -1221,7 +1229,7 @@ export const factoryOrdersAPI = {
       data.items.length === 0 ||
       data.items.some((item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))
     ) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Invalid data:`, { id, data });
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - بيانات غير صالحة:`, { id, data });
       throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
     try {
@@ -1231,92 +1239,95 @@ export const factoryOrdersAPI = {
           assignedTo: item.assignedTo,
         })),
       });
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - الاستجابة:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Update the status of a factory order item
+  // تحديث حالة عنصر في طلب الإنتاج
   updateItemStatus: async (id: string, itemId: string, data: { status: string }) => {
     if (!isValidObjectId(id) || !isValidObjectId(itemId)) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Invalid IDs:`, { id, itemId });
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - معرفات غير صالحة:`, { id, itemId });
       throw new Error(createErrorMessage('invalidId', localStorage.getItem('language') === 'ar'));
     }
     if (!['pending', 'assigned', 'in_progress', 'completed'].includes(data.status)) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Invalid status:`, data.status);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - حالة غير صالحة:`, data.status);
       throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/items/${itemId}/status`, data);
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - الاستجابة:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Update the status of a factory order
+  // تحديث حالة طلب الإنتاج
   updateStatus: async (id: string, data: { status: string }) => {
     if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid factory order ID:`, id);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - معرف طلب غير صالح:`, id);
       throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
     if (!['requested', 'pending', 'approved', 'in_production', 'completed', 'cancelled'].includes(data.status)) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid status:`, data.status);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - حالة غير صالحة:`, data.status);
       throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/status`, data);
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - الاستجابة:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Confirm production for a factory order
+  // تأكيد الإنتاج لطلب الإنتاج
   confirmProduction: async (id: string) => {
     if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Invalid factory order ID:`, id);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - معرف طلب غير صالح:`, id);
       throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/confirm-production`);
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - الاستجابة:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Get available products for the current user
+  // استرجاع المنتجات المتاحة للمستخدم الحالي
   getAvailableProducts: async () => {
     try {
       const response = await api.get('/factoryOrders/available-products');
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Response:`, response);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - الاستجابة:`, response);
       return response.data.data;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - خطأ:`, error.message);
       throw error;
     }
   },
 
-  // Get available chefs, optionally filtered by department
+  // استرجاع الشيفات المتاحين، مع إمكانية التصفية حسب القسم
   getAvailableChefs: async (departmentId?: string) => {
     try {
-      const params = departmentId ? { departmentId } : {};
+      const params = departmentId && isValidObjectId(departmentId)
+        ? { departmentId, lang: localStorage.getItem('language') || 'ar' }
+        : { lang: localStorage.getItem('language') || 'ar' };
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - معايير الطلب:`, params);
       const response = await api.get('/factoryOrders/available-chefs', { params });
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Response:`, response);
-      return response.data.data;
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - الاستجابة:`, response);
+      return response.data.data || [];
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Error:`, error.message);
-      throw error;
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - خطأ:`, error.message);
+      throw new Error(createErrorMessage('fetchChefsFailed', localStorage.getItem('language') === 'ar'));
     }
   },
 };
