@@ -5,236 +5,193 @@ import { Button } from '../../components/UI/Button';
 import { Select } from '../../components/UI/Select';
 import { AlertCircle } from 'lucide-react';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
-import Skeleton from 'react-loading-skeleton';
-import 'react-loading-skeleton/dist/skeleton.css';
-import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { toast } from 'react-toastify';
 
 interface AssignChefsModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedOrder: FactoryOrder | null;
-  assignFormData: AssignChefsForm;
   chefs: Chef[];
+  assignFormData: AssignChefsForm;
+  setAssignForm: (data: AssignChefsForm) => void;
+  assignChefs: (orderId: string) => Promise<void>;
   error: string;
   submitting: string | null;
-  assignChefs: (orderId: string) => Promise<void>;
-  setAssignForm: (formData: AssignChefsForm) => void;
   loading: boolean;
 }
 
-const translateUnit = (unit: string | undefined, isRtl: boolean): string => {
-  if (!unit) return isRtl ? 'وحدة' : 'unit';
-  const translations: Record<string, { ar: string; en: string }> = {
-    'كيلو': { ar: 'كيلو', en: 'kg' },
-    'قطعة': { ar: 'قطعة', en: 'piece' },
-    'علبة': { ar: 'علبة', en: 'pack' },
-    'صينية': { ar: 'صينية', en: 'tray' },
-    'kg': { ar: 'كجم', en: 'kg' },
-    'piece': { ar: 'قطعة', en: 'piece' },
-    'pack': { ar: 'علبة', en: 'pack' },
-    'tray': { ar: 'صينية', en: 'tray' },
-  };
-  return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
-};
-
-export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
+const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isOpen,
   onClose,
   selectedOrder,
-  assignFormData,
   chefs,
+  assignFormData,
+  setAssignForm,
+  assignChefs,
   error,
   submitting,
-  assignChefs,
-  setAssignForm,
   loading,
 }) => {
-  const { user } = useAuth();
-  const { language, t } = useLanguage();
+  const { t, language } = useLanguage();
   const isRtl = language === 'ar';
 
+  // تنظيم الشيفات حسب القسم
   const availableChefsByDepartment = useMemo(() => {
-    const map = new Map<string, Chef[]>();
+    const chefsByDept: Record<string, Chef[]> = {};
     chefs.forEach((chef) => {
-      const departmentId = chef.department?._id?.toString() || 'no-department';
-      if (!map.has(departmentId)) {
-        map.set(departmentId, []);
+      const deptId = chef.department?._id || 'no-department';
+      if (!chefsByDept[deptId]) {
+        chefsByDept[deptId] = [];
       }
-      map.get(departmentId)!.push(chef);
+      chefsByDept[deptId].push(chef);
     });
-    return map;
+    return chefsByDept;
   }, [chefs]);
 
-  const updateAssignment = useCallback(
-    (index: number, value: string) => {
+  // التحقق من صحة النموذج
+  const isFormValid = useCallback(() => {
+    return assignFormData.items.every((item) => item.assignedTo);
+  }, [assignFormData]);
+
+  // تحديث شيف معين لعنصر معين
+  const handleAssignChef = useCallback(
+    (index: number, chefId: string) => {
       setAssignForm({
-        items: assignFormData.items.map((item, idx) =>
-          idx === index ? { ...item, assignedTo: value } : item
+        items: assignFormData.items.map((item, i) =>
+          i === index ? { ...item, assignedTo: chefId } : item
         ),
       });
     },
-    [assignFormData.items, setAssignForm]
+    [assignFormData, setAssignForm]
   );
 
+  // إعادة تعيين النموذج عند فتح المودال
   useEffect(() => {
-    if (!selectedOrder || !user) {
-      console.warn('No selected order or user found for chef assignment');
-      return;
-    }
-
-    const updatedItems = selectedOrder.items
-      .filter((item) => !item.assignedTo)
-      .map((item) => {
-        const departmentId = item.department?._id?.toString() || 'no-department';
-        const availableChefs = availableChefsByDepartment.get(departmentId) || [];
-        if (!availableChefs.length && departmentId !== 'no-department') {
-          console.warn(`No chefs available for department: ${departmentId}, product: ${item.displayProductName}`);
-          toast.warn(t('no_chefs_available_for_department', { department: item.department?.displayName || 'غير معروف' }), {
-            position: isRtl ? 'top-left' : 'top-right',
-          });
-        }
-        let assignedTo = '';
-        if (availableChefs.length === 1) {
-          assignedTo = availableChefs[0].userId;
-        }
-        return {
-          itemId: item._id,
-          assignedTo,
-          product: item.displayProductName || (isRtl ? 'غير معروف' : 'Unknown'),
-          quantity: item.quantity,
-          unit: translateUnit(item.unit, isRtl),
-        };
+    if (isOpen && selectedOrder) {
+      setAssignForm({
+        items: selectedOrder.items
+          .filter((item) => !item.assignedTo)
+          .map((item) => ({
+            itemId: item._id,
+            assignedTo: '',
+            product: item.displayProductName,
+            quantity: item.quantity,
+            unit: item.displayUnit,
+            departmentId: item.department._id,
+          })),
       });
-
-    setAssignForm({ items: updatedItems });
-  }, [availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user, t]);
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!selectedOrder?.id) {
-        console.error('No order selected for chef assignment');
-        toast.error(t('no_order_selected'), { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      if (assignFormData.items.some((item) => !item.assignedTo)) {
-        console.warn('Some items are missing assigned chefs');
-        toast.error(t('assign_chef_required'), { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      try {
-        await assignChefs(selectedOrder.id);
-      } catch (err: any) {
-        console.error('Error assigning chefs:', err.message);
-        toast.error(t('error_assigning_chefs', { message: err.message }), {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      }
-    },
-    [selectedOrder, assignFormData.items, assignChefs, isRtl, t]
-  );
+    }
+  }, [isOpen, selectedOrder, setAssignForm]);
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={
-        isRtl
-          ? `تعيين الشيفات لطلب ${selectedOrder?.orderNumber || ''}`
-          : `Assign Chefs to Order #${selectedOrder?.orderNumber || ''}`
-      }
+      title={isRtl ? 'تعيين الشيفات للطلب' : 'Assign Chefs to Order'}
       size="md"
+      className="bg-white rounded-xl shadow-xl border border-gray-100 max-h-[90vh] overflow-y-auto"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="space-y-6"
+      >
         {loading ? (
-          <Skeleton count={assignFormData.items.length || 3} height={40} />
-        ) : !selectedOrder ? (
-          <p className="text-gray-600 text-xs">{t('no_order_selected')}</p>
-        ) : assignFormData.items.length === 0 ? (
-          <p className="text-gray-600 text-xs">{t('no_unassigned_items')}</p>
-        ) : (
-          assignFormData.items.map((item, index) => {
-            const orderItem = selectedOrder.items.find((i) => i._id === item.itemId);
-            const departmentId = orderItem?.department?._id?.toString() || 'no-department';
-            const availableChefs = availableChefsByDepartment.get(departmentId) || [];
-            const chefOptions = [
-              { value: '', label: t('select_chef') },
-              ...availableChefs
-                .sort((a, b) => a.displayName.localeCompare(b.displayName, language))
-                .map((chef) => ({
-                  value: chef.userId,
-                  label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
-                })),
-            ];
-
-            return (
-              <motion.div
-                key={item.itemId}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-start gap-2 mb-3 p-2 border border-gray-200 rounded-md bg-gray-50"
+          <div className="text-center">
+            <p className="text-sm text-gray-600">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center gap-2 text-red-600">
+            <AlertCircle className="w-5 h-5" />
+            <p className="text-sm font-medium">{error}</p>
+          </div>
+        ) : selectedOrder ? (
+          <>
+            <div className="space-y-4">
+              <h3 className={`text-lg font-semibold text-gray-800 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? `طلب رقم: ${selectedOrder.orderNumber}` : `Order Number: ${selectedOrder.orderNumber}`}
+              </h3>
+              {assignFormData.items.length === 0 ? (
+                <p className="text-sm text-gray-600 text-center">
+                  {isRtl ? 'جميع العناصر تم تعيينها مسبقًا' : 'All items have already been assigned'}
+                </p>
+              ) : (
+                assignFormData.items.map((item, index) => {
+                  const availableChefs = availableChefsByDepartment[item.departmentId] || [];
+                  return (
+                    <div
+                      key={item.itemId}
+                      className="flex flex-col gap-2 p-4 bg-gray-50 rounded-lg border border-gray-100 shadow-sm"
+                    >
+                      <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <span className="text-sm font-medium text-gray-700">
+                          {isRtl
+                            ? `${item.product} (${item.quantity} ${item.unit})`
+                            : `${item.product} (${item.quantity} ${item.unit})`}
+                        </span>
+                      </div>
+                      {availableChefs.length === 0 ? (
+                        <p className="text-sm text-red-600">
+                          {isRtl ? 'لا يوجد شيفات متاحين لهذا القسم' : 'No chefs available for this department'}
+                        </p>
+                      ) : (
+                        <Select
+                          options={[
+                            { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
+                            ...availableChefs.map((chef) => ({
+                              value: chef.userId,
+                              label: chef.displayName,
+                            })),
+                          ]}
+                          value={item.assignedTo}
+                          onChange={(value) => handleAssignChef(index, value)}
+                          ariaLabel={isRtl ? 'تعيين شيف' : 'Assign Chef'}
+                          className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
+                            !item.assignedTo ? 'border-red-500' : ''
+                          }`}
+                        />
+                      )}
+                      {!item.assignedTo && availableChefs.length > 0 && (
+                        <p className="text-xs text-red-600 mt-1">
+                          {isRtl ? 'يرجى اختيار شيف' : 'Please select a chef'}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Button
+                variant="secondary"
+                onClick={onClose}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
               >
-                <div className="flex-1">
-                  <label
-                    className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
-                    htmlFor={`chef-select-${index}`}
-                  >
-                    {isRtl
-                      ? `تعيين شيف لـ ${orderItem?.displayProductName || 'غير معروف'} (${item.quantity} ${item.unit})`
-                      : `Assign chef to ${orderItem?.displayProductName || 'Unknown'} (${item.quantity} ${item.unit})`}
-                  </label>
-                  <Select
-                    id={`chef-select-${index}`}
-                    options={chefOptions}
-                    value={item.assignedTo}
-                    onChange={(value) => updateAssignment(index, value)}
-                    className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
-                    aria-label={t('select_chef')}
-                    disabled={availableChefs.length === 0}
-                  />
-                  {availableChefs.length === 0 && (
-                    <p className="text-red-600 text-xs mt-1">
-                      {t('no_chefs_available_for_department', {
-                        department: orderItem?.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
-                      })}
-                    </p>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => assignChefs(selectedOrder.id)}
+                disabled={submitting === selectedOrder.id || !isFormValid() || assignFormData.items.length === 0}
+                className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200 disabled:opacity-50"
+              >
+                {submitting === selectedOrder.id
+                  ? isRtl
+                    ? 'جاري التعيين...'
+                    : 'Assigning...'
+                  : isRtl
+                  ? 'تعيين الشيفات'
+                  : 'Assign Chefs'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-gray-600 text-center">
+            {isRtl ? 'لم يتم تحديد طلب' : 'No order selected'}
+          </p>
         )}
-        {error && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
-          >
-            <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-xs">{error}</span>
-          </motion.div>
-        )}
-        <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
-          >
-            {t('cancel')}
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={submitting !== null || loading || !selectedOrder || assignFormData.items.some((item) => !item.assignedTo)}
-            className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm disabled:opacity-50"
-          >
-            {submitting ? t('assigning') : t('assign')}
-          </Button>
-        </div>
-      </form>
+      </motion.div>
     </Modal>
   );
 };
