@@ -5,6 +5,7 @@ import { salesAPI, ordersAPI, returnsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, BarChart2, ChevronDown, Search, X } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { ProductDropdown , ProductSearchInput } from './OrdersTablePage';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 import { motion } from 'framer-motion';
