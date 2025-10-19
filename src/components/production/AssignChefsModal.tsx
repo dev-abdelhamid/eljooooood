@@ -1,5 +1,3 @@
-
-
 import React, { useMemo, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
@@ -54,6 +52,18 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const { user } = useAuth();
 
+  const availableChefsByDepartment = useMemo(() => {
+    const map = new Map<string, Chef[]>();
+    chefs.forEach((chef) => {
+      const departmentId = typeof chef.department === 'string' ? chef.department : chef.department?._id || 'no-department';
+      if (!map.has(departmentId)) {
+        map.set(departmentId, []);
+      }
+      map.get(departmentId)!.push(chef);
+    });
+    return map;
+  }, [chefs]);
+
   const updateAssignment = useCallback(
     (index: number, value: string) => {
       setAssignForm({
@@ -69,9 +79,11 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     if (!selectedOrder || !user) return;
 
     const updatedItems = selectedOrder.items.filter(item => !item.assignedTo).map((item) => {
+      const departmentId = typeof item.department === 'string' ? item.department : item.department?._id || 'no-department';
+      const availableChefs = availableChefsByDepartment.get(departmentId) || [];
       let assignedTo = '';
-      if (chefs.length === 1) {
-        assignedTo = chefs[0].userId;
+      if (availableChefs.length === 1) {
+        assignedTo = availableChefs[0].userId;
       }
       return {
         itemId: item._id,
@@ -83,7 +95,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     });
 
     setAssignForm({ items: updatedItems });
-  }, [chefs, selectedOrder, setAssignForm, isRtl, user]);
+  }, [availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user]);
 
   return (
     <Modal
@@ -114,11 +126,13 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         ) : (
           assignFormData.items.map((item, index) => {
             const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
+            const departmentId = typeof orderItem?.department === 'string' ? orderItem?.department : orderItem?.department?._id || 'no-department';
+            const availableChefs = availableChefsByDepartment.get(departmentId) || [];
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-              ...chefs.map((chef) => ({
+              ...availableChefs.map((chef) => ({
                 value: chef.userId,
-                label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+                label: chef.displayName,
               })),
             ];
 
@@ -144,11 +158,11 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                   onChange={(value) => updateAssignment(index, value)}
                   className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
                   aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
-                  disabled={chefs.length === 0}
+                  disabled={availableChefs.length === 0}
                 />
-                {chefs.length === 0 && (
+                {availableChefs.length === 0 && (
                   <p className="text-red-600 text-xs mt-1">
-                    {isRtl ? 'لا يوجد شيفات متاحة' : 'No chefs available'}
+                    {isRtl ? 'لا يوجد شيفات متاحة لهذا القسم' : 'No chefs available for this department'}
                   </p>
                 )}
               </motion.div>
