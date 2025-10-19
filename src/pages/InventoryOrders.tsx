@@ -1,7 +1,5 @@
 
 
-
-
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,10 +12,10 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI , } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem , User } from '../types/types';
+import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem, User } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
@@ -101,7 +99,7 @@ interface State {
   selectedOrder: FactoryOrder | null;
   chefs: Chef[];
   products: Product[];
-  departments: { _id: string; displayName: string }[];
+  departments: { _id: string; displayName: string; name: string; nameEn: string }[];
   isAssignModalOpen: boolean;
   isCreateModalOpen: boolean;
   assignFormData: AssignChefsForm;
@@ -391,22 +389,24 @@ export const InventoryOrders: React.FC = () => {
           lang: language,
         };
 
-        const [ordersResponse, chefsResponse, departmentsResponse] = await Promise.all([
+        const [ordersResponse, chefsResponse, productsResponse, departmentsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll({ lang: language }),
+          productsAPI.getAll({ lang: language }),
           departmentAPI.getAll({ lang: language }),
         ]);
 
-        // Fetch all products by looping through pages
-        let allProducts = [];
-        let page = 1;
-        let totalPages = 1;
-        do {
-          const productsResponse = await productsAPI.getAll({ lang: language, page, limit: 50 });
-          allProducts = [...allProducts, ...productsResponse.data];
-          totalPages = productsResponse.totalPages;
-          page++;
-        } while (page <= totalPages);
+        dispatch({
+          type: 'SET_DEPARTMENTS',
+          payload: Array.isArray(departmentsResponse.data)
+            ? departmentsResponse.data.map((d: any) => ({
+                _id: d._id,
+                name: d.name,
+                nameEn: d.nameEn,
+                displayName: d.displayName || (isRtl ? d.name : d.nameEn || d.name),
+              }))
+            : [],
+        });
 
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
@@ -426,10 +426,10 @@ export const InventoryOrders: React.FC = () => {
                   unitEn: item.product?.unitEn,
                   displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
                   department: {
-                    _id: item.product?.department?._id || 'no-department',
-                    name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.product?.department?.nameEn,
-                    displayName: item.product?.department?.displayName || (isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name),
+                    _id: item.product?.department?._id || item.product?.department || 'no-department',
+                    name: item.product?.department?.name || departmentsResponse.data.find(d => d._id === (item.product?.department?._id || item.product?.department))?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: item.product?.department?.nameEn || departmentsResponse.data.find(d => d._id === (item.product?.department?._id || item.product?.department))?.nameEn,
+                    displayName: item.product?.department?.displayName || departmentsResponse.data.find(d => d._id === (item.product?.department?._id || item.product?.department))?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
                   },
                   assignedTo: item.assignedTo
                     ? {
@@ -468,22 +468,20 @@ export const InventoryOrders: React.FC = () => {
                   name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   nameEn: chef.user?.nameEn || chef.nameEn,
                   displayName: chef.user?.displayName || (isRtl ? chef.user?.name || chef.name : chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
-                  department: chef.department
-                    ? {
-                        _id: chef.department._id || 'no-department',
-                        name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                        nameEn: chef.department.nameEn,
-                        displayName: chef.department.displayName || (isRtl ? chef.department.name : chef.department.nameEn || chef.department.name),
-                      }
-                    : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
+                  department: {
+                    _id: chef.department?._id || chef.department || 'no-department',
+                    name: chef.department?.name || departmentsResponse.data.find(d => d._id === (chef.department?._id || chef.department))?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: chef.department?.nameEn || departmentsResponse.data.find(d => d._id === (chef.department?._id || chef.department))?.nameEn,
+                    displayName: chef.department?.displayName || departmentsResponse.data.find(d => d._id === (chef.department?._id || chef.department))?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
+                  },
                   status: chef.status || 'active',
                 }))
             : [],
         });
         dispatch({
-          type: 'SET_PRODUCT',
-          payload: Array.isArray(allProducts)
-            ? allProducts
+          type: 'SET_PRODUCTS',
+          payload: Array.isArray(productsResponse.data)
+            ? productsResponse.data
                 .filter((product: any) => product && product._id)
                 .map((product: any) => ({
                   _id: product._id,
@@ -494,10 +492,10 @@ export const InventoryOrders: React.FC = () => {
                   unitEn: product.unitEn,
                   displayUnit: translateUnit(product.unit || 'unit', isRtl),
                   department: {
-                    _id: product.department?._id || 'no-department',
-                    name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: product.department?.nameEn,
-                    displayName: product.department?.displayName || (isRtl ? product.department?.name : product.department?.nameEn || product.department?.name),
+                    _id: product.department?._id || product.department || 'no-department',
+                    name: product.department?.name || departmentsResponse.data.find(d => d._id === (product.department?._id || product.department))?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: product.department?.nameEn || departmentsResponse.data.find(d => d._id === (product.department?._id || product.department))?.nameEn,
+                    displayName: product.department?.displayName || departmentsResponse.data.find(d => d._id === (product.department?._id || product.department))?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
                   },
                   maxStockLevel: product.maxStockLevel || 1000,
                 }))
@@ -506,15 +504,6 @@ export const InventoryOrders: React.FC = () => {
                   const nameB = isRtl ? b.displayName : b.nameEn || b.name;
                   return nameA.localeCompare(nameB, language);
                 })
-            : [],
-        });
-        dispatch({
-          type: 'SET_DEPARTMENTS',
-          payload: Array.isArray(departmentsResponse.data)
-            ? departmentsResponse.data.map((d: any) => ({
-                _id: d._id,
-                displayName: d.displayName || (isRtl ? d.name : d.nameEn || d.name),
-              }))
             : [],
         });
         dispatch({ type: 'SET_ERROR', payload: '' });
@@ -590,7 +579,7 @@ export const InventoryOrders: React.FC = () => {
               unitEn: item.product?.unitEn,
               displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
               department: {
-                _id: item.product?.department?._id || 'no-department',
+                _id: item.product?.department?._id || item.product?.department || 'no-department',
                 name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                 nameEn: item.product?.department?.nameEn,
                 displayName: item.product?.department?.displayName || (isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name),
@@ -1310,10 +1299,16 @@ export const InventoryOrders: React.FC = () => {
                             <ProductDropdown
                               options={[
                                 { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
-                                ...state.products.map((product) => ({
-                                  value: product._id,
-                                  label: `${product.displayName} (${product.displayUnit})`,
-                                })),
+                                ...state.products
+                                  .filter((product) =>
+                                    user?.role === 'chef'
+                                      ? (product.department._id === (user.department?._id || user.department))
+                                      : true
+                                  )
+                                  .map((product) => ({
+                                    value: product._id,
+                                    label: `${product.displayName} (${product.displayUnit})`,
+                                  })),
                               ]}
                               value={item.productId}
                               onChange={(value) =>
@@ -1410,10 +1405,19 @@ export const InventoryOrders: React.FC = () => {
                                   <ProductDropdown
                                     options={[
                                       { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-                                      ...state.chefs.map((chef) => ({
-                                        value: chef.userId,
-                                        label: chef.displayName,
-                                      })),
+                                      ...state.chefs
+                                        .filter(
+                                          (chef) => {
+                                            const product = state.products.find((p) => p._id === item.productId);
+                                            const productDepartmentId = product?.department._id || product?.department;
+                                            const chefDepartmentId = chef.department._id || chef.department;
+                                            return chefDepartmentId === productDepartmentId;
+                                          }
+                                        )
+                                        .map((chef) => ({
+                                          value: chef.userId,
+                                          label: chef.displayName,
+                                        })),
                                     ]}
                                     value={item.assignedTo || ''}
                                     onChange={(value) =>

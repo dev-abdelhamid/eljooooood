@@ -23,7 +23,8 @@ const Button: React.FC<{
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-2 rounded-full flex-row px-4 py-2 text-xs font-medium transition-all duration-200 ${
+      
+      className={`flex items-center gap-2 rounded-full flex-row   px-4 py-2 text-xs font-medium transition-all duration-200 ${
         variant === 'primary' && !disabled
           ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
           : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -50,10 +51,11 @@ export const ProductSearchInput: React.FC<{
   };
 
   return (
-    <div className={`relative group w-full ${className}`}>
+    <div className={`relative group w-full ${className} ` }>
       <motion.div
         className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
+        
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
@@ -226,16 +228,16 @@ const generatePDFHeader = (
   doc.setFontSize(16);
   doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
-  doc.text(title, pageWidth / 2, 12, { align: 'center' });
+  doc.text(title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
     ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl, true)}`
     : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl, true)}`;
-  doc.text(stats, pageWidth / 2, 20, { align: 'center' });
+  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
   doc.setDrawColor(245, 158, 11);
-  doc.line(15, 25, pageWidth - 15, 25);
+  doc.line(20, 25, pageWidth - 20, 25);
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
@@ -272,7 +274,6 @@ const generatePDFTable = (
       cellWidth: 'auto',
       minCellWidth: 5,
       halign: 'center',
-      valign: 'middle',
     };
   });
 
@@ -289,7 +290,6 @@ const generatePDFTable = (
       textColor: [255, 255, 255],
       fontSize: fontSizeHead,
       halign: 'center',
-      valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
       cellPadding,
@@ -297,7 +297,6 @@ const generatePDFTable = (
     bodyStyles: {
       fontSize: fontSizeBody,
       halign: 'center',
-      valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
@@ -311,13 +310,13 @@ const generatePDFTable = (
           let processedText = text;
           if (isRtl) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
+          
           }
           return processedText;
         });
       }
-      if (hookData.section === 'body' && hookData.row.index === data.length - 1) {
+      if (hookData.section === 'body' && hookData.column.index >= (isRtl ? 0 : headers.length - 4)) {
         hookData.cell.styles.fontStyle = 'bold';
-        hookData.cell.styles.fillColor = [245, 245, 245];
       }
     },
     didDrawPage: () => {
@@ -358,86 +357,6 @@ const exportToPDF = async (
     console.error('Error exporting PDF:', error);
     toast.update('pdf-export', {
       render: isRtl ? 'فشل في تصدير ملف PDF' : 'Failed to export PDF',
-      type: 'error',
-      autoClose: 3000,
-    });
-  }
-};
-
-const exportToExcel = (data: any[][], title: string, monthName: string, headers: string[], isRtl: boolean, totalItems: number, totalQuantity: number, totalPrice: number) => {
-  toast.info(isRtl ? 'جارٍ إنشاء ملف Excel...' : 'Generating Excel...', {
-    position: isRtl ? 'top-left' : 'top-right',
-    autoClose: false,
-    toastId: 'excel-export',
-  });
-  try {
-    const wsData = [headers, ...data];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    if (isRtl) ws['!views'] = [{ RTL: true }];
-
-    // Enhanced styling
-    ws['!cols'] = [
-      { wch: 5 }, // No.
-      { wch: 10 }, // Code
-      { wch: 25 }, // Product
-      { wch: 10 }, // Unit
-      ...headers.slice(4, -4).map(() => ({ wch: 6 })), // Days
-      { wch: 12 }, // Total Quantity
-      { wch: 12 }, // Actual Sales
-      { wch: 12 }, // Total Price
-      { wch: 12 }, // Sales Percentage
-    ];
-    ws['!rows'] = Array(data.length + 1).fill({ hpt: 15 });
-
-    // Apply styles
-    const range = XLSX.utils.decode_range(ws['!ref']!);
-    const amberColor = 'FFF59E0B';
-    const whiteColor = 'FFFFFFFF';
-    const blackColor = 'FF000000';
-    for (let R = range.s.r; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-        if (R === 0) {
-          if (ws[cellAddress]) {
-            ws[cellAddress].s = {
-              fill: { fgColor: { rgb: amberColor } },
-              font: { color: { rgb: whiteColor }, bold: true },
-              alignment: { horizontal: 'center', vertical: 'middle' },
-            };
-          }
-        } else {
-          if (ws[cellAddress]) {
-            ws[cellAddress].s = {
-              alignment: { horizontal: 'center', vertical: 'middle' },
-              font: { color: { rgb: blackColor } },
-              border: {
-                top: { style: 'thin', color: { rgb: 'D3D3D3' } },
-                bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
-                left: { style: 'thin', color: { rgb: 'D3D3D3' } },
-                right: { style: 'thin', color: { rgb: 'D3D3D3' } },
-              },
-            };
-            if (R === data.length) {
-              ws[cellAddress].s.font.bold = true;
-              ws[cellAddress].s.fill = { fgColor: { rgb: 'F5F5F5' } };
-            }
-          }
-        }
-      }
-    }
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Orders_${monthName}`);
-    XLSX.writeFile(wb, generateFileName(title, monthName, isRtl, 'xlsx'));
-    toast.update('excel-export', {
-      render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
-      type: 'success',
-      autoClose: 3000,
-    });
-  } catch (error) {
-    console.error('Error exporting Excel:', error);
-    toast.update('excel-export', {
-      render: isRtl ? 'فشل في تصدير ملف Excel' : 'Failed to export Excel',
       type: 'error',
       autoClose: 3000,
     });
@@ -760,7 +679,78 @@ const DailyOrdersPage: React.FC = () => {
       `${row.salesPercentage}%`,
     ]);
     if (format === 'excel') {
-      exportToExcel(dataRows, isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report', monthName, headers, isRtl, filteredData.length, grandTotalQuantity, grandTotalPrice);
+      toast.info(isRtl ? 'جارٍ إنشاء ملف Excel...' : 'Generating Excel...', {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: false,
+        toastId: 'excel-export',
+      });
+      try {
+        const sheetData = isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows;
+        const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
+        const ws = XLSX.utils.json_to_sheet(sheetData, { header: sheetHeaders });
+        if (isRtl) {
+          ws['!views'] = [{ RTL: true }];
+        }
+        ws['!cols'] = [
+          { wch: 5 },
+          { wch: 10 },
+          { wch: 25 },
+          { wch: 10 },
+          ...displayedDays.map(() => ({ wch: 6 })),
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 12 },
+        ];
+        ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
+        // Add styles
+        const amberColor = 'FFF59E0B'; // Amber ARGB
+        const whiteColor = 'FFFFFFFF';
+        const blackColor = 'FF000000';
+        for (let c = 0; c < sheetHeaders.length; c++) {
+          const cell = XLSX.utils.encode_cell({ r: 0, c });
+          if (ws[cell]) {
+            ws[cell].s = {
+              fill: { fgColor: { rgb: amberColor } },
+              font: { color: { rgb: whiteColor }, bold: true },
+              alignment: { horizontal: 'center' },
+            };
+          }
+        }
+        for (let r = 1; r <= rows.length; r++) {
+          for (let c = 0; c < sheetHeaders.length; c++) {
+            const cell = XLSX.utils.encode_cell({ r: r, c });
+            if (ws[cell]) {
+              ws[cell].s = {
+                alignment: { horizontal: 'center' },
+                font: { color: { rgb: blackColor } },
+              };
+            }
+          }
+        }
+        // Bold the total row
+        for (let c = 0; c < sheetHeaders.length; c++) {
+          const cell = XLSX.utils.encode_cell({ r: rows.length, c });
+          if (ws[cell]) {
+            ws[cell].s.font = { ...ws[cell].s.font, bold: true };
+          }
+        }
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, `Orders_${monthName}`);
+        XLSX.writeFile(wb, generateFileName('Orders', monthName, isRtl, 'xlsx'));
+        toast.update('excel-export', {
+          render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
+          type: 'success',
+          autoClose: 3000,
+        });
+      } catch (error) {
+        console.error('Error exporting Excel:', error);
+        toast.update('excel-export', {
+          render: isRtl ? 'فشل في تصدير ملف Excel' : 'Failed to export Excel',
+          type: 'error',
+          autoClose: 3000,
+        });
+      }
     } else if (format === 'pdf') {
       exportToPDF(dataRows, isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report', monthName, headers, isRtl, filteredData.length, grandTotalQuantity, grandTotalPrice);
     }
@@ -775,9 +765,9 @@ const DailyOrdersPage: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
+    <div className={`min-h-screen px-4 py-8 `}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 `}>
           <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
           <div className="flex gap-2 items-center">
             <ProductDropdown
@@ -787,15 +777,7 @@ const DailyOrdersPage: React.FC = () => {
               ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
               className="w-40"
             />
-            <Button
-              variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-              onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
-              disabled={filteredData.length === 0}
-              className="flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              {isRtl ? 'إكسل' : 'Excel'}
-            </Button>
+           
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
@@ -803,11 +785,11 @@ const DailyOrdersPage: React.FC = () => {
               className="flex items-center gap-2"
             >
               <Upload className="w-4 h-4" />
-              {isRtl ? 'PDF' : 'PDF'}
+              {isRtl ? ' PDF' : ' PDF'}
             </Button>
           </div>
         </div>
-        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4 ${isRtl ? 'grid-flow-row-dense' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4 `}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
