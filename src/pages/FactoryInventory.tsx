@@ -400,7 +400,7 @@ export const FactoryInventory: React.FC = () => {
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
     retry: 3,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
+    retryDelay: (attempt) => (attempt + 1) * 1000,
   });
 
   // Product History Query
@@ -739,7 +739,6 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
- 
   }, [t]);
 
   const handleProductChange = useCallback(
@@ -762,7 +761,6 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-    
     },
     [t, productionForm.items]
   );
@@ -1278,21 +1276,21 @@ export const FactoryInventory: React.FC = () => {
           animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
           className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
         >
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
-            <button
-              onClick={() => {
-                setIsEditModalOpen(false);
-                setEditErrors({});
-                setSelectedItem(null);
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
+              <button
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditErrors({});
+                  setSelectedItem(null);
+                }}
+                className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+                aria-label={t.cancel}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             {selectedItem?.product && (
               <p className="text-sm text-gray-600">
                 {t.productDetails}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
@@ -1375,20 +1373,20 @@ export const FactoryInventory: React.FC = () => {
           animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
           className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
         >
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
-            <button
-              onClick={() => {
-                setIsDetailsModalOpen(false);
-                setSelectedProductId('');
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
+              <button
+                onClick={() => {
+                  setIsDetailsModalOpen(false);
+                  setSelectedProductId('');
+                }}
+                className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+                aria-label={t.cancel}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             {historyLoading ? (
               <div className="space-y-3 animate-pulse">
                 {[...Array(3)].map((_, i) => (
