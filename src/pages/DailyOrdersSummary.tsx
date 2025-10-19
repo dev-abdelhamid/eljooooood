@@ -193,11 +193,11 @@ const exportToExcel = (dataRows: any[], headers: string[], monthName: string, is
     const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 20 },
-      { wch: 20 },
+         { wch: 15 },
+      { wch: 15 },
       ...Array(headers.length - 4).fill({ wch: 15 }),
-      { wch: 20 },
-      { wch: 50 },
+      { wch: 15 },
+      { wch: 15 },
       { wch: 50 },
     ];
     const wb = XLSX.utils.book_new();
@@ -264,7 +264,7 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
       headStyles: {
         fillColor: [245, 158, 11],
         textColor: [255, 255, 255],
-        fontSize: 12,
+        fontSize: 10,
         font: fontLoaded ? fontName : 'helvetica',
         fontStyle: 'bold',
         halign: 'center',
