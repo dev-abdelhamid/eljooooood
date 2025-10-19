@@ -52,15 +52,14 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const { user } = useAuth();
 
- const availableChefsByDepartment = useMemo(() => {
+  const availableChefsByDepartment = useMemo(() => {
     const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
-      if (chef.department?._id) {
-        if (!map.has(chef.department._id)) {
-          map.set(chef.department._id, []);
-        }
-        map.get(chef.department._id)!.push(chef);
+      const departmentId = chef.department?._id.toString() || 'no-department';
+      if (!map.has(departmentId)) {
+        map.set(departmentId, []);
       }
+      map.get(departmentId)!.push(chef);
     });
     return map;
   }, [chefs]);
@@ -80,7 +79,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     if (!selectedOrder || !user) return;
 
     const updatedItems = selectedOrder.items.filter(item => !item.assignedTo).map((item) => {
-      const departmentId = typeof item.department === 'string' ? item.department : item.department?._id || 'no-department';
+      const departmentId = item.department?._id.toString() || 'no-department';
       const availableChefs = availableChefsByDepartment.get(departmentId) || [];
       let assignedTo = '';
       if (availableChefs.length === 1) {
@@ -127,15 +126,15 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         ) : (
           assignFormData.items.map((item, index) => {
             const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
-            const departmentId = typeof orderItem?.department === 'string' ? orderItem?.department : orderItem?.department?._id || 'no-department';
+            const departmentId = orderItem?.department?._id.toString() || 'no-department';
             const availableChefs = availableChefsByDepartment.get(departmentId) || [];
-            const chefOptions = [
-              { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-              ...availableChefs.map((chef) => ({
+            const chefOptions = availableChefs
+              .sort((a, b) => a.displayName.localeCompare(b.displayName))
+              .map((chef) => ({
                 value: chef.userId,
-                label: chef.displayName,
-              })),
-            ];
+                label: `${chef.displayName} (${chef.department.displayName})`,
+              }));
+            chefOptions.unshift({ value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' });
 
             return (
               <motion.div
