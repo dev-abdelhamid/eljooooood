@@ -7,6 +7,7 @@ import { factoryOrdersAPI, factoryInventoryAPI, chefsAPI, isValidObjectId } from
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { ProductSearchInput  } from './NewOrder';
 import { useNotifications } from '../contexts/NotificationContext';
 
 // Enums for type safety
