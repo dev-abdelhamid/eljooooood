@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLanguage } from '../../contexts/LanguageContext';
 import { Card } from '../UI/Card';
 import { Button } from '../UI/Button';
 import { CheckCircle } from 'lucide-react';
@@ -15,8 +14,64 @@ interface OrderCardProps {
   openAssignModal: (order: FactoryOrder) => void;
   confirmFactoryProduction: (orderId: string) => void;
   submitting: string | null;
+  isRtl: boolean;
   currentUserRole: UserRole;
 }
+
+const translations = {
+  ar: {
+    orderNumber: 'رقم الطلب',
+    date: 'التاريخ',
+    items: 'العناصر',
+    quantity: 'الكمية',
+    status: 'الحالة',
+    priority: 'الأولوية',
+    notes: 'الملاحظات',
+    createdBy: 'تم الإنشاء بواسطة',
+    approve: 'الموافقة',
+    complete: 'إكمال',
+    cancel: 'إلغاء',
+    assign: 'تعيين شيفات',
+    confirmStock: 'تأكيد الإضافة إلى المخزون',
+    requested: 'مطلوب',
+    pending: 'قيد الانتظار',
+    approved: 'تم الموافقة',
+    in_production: 'في الإنتاج',
+    completed: 'مكتمل',
+    stocked: 'مخزن',
+    cancelled: 'ملغى',
+    low: 'منخفض',
+    medium: 'متوسط',
+    high: 'مرتفع',
+    urgent: 'عاجل',
+  },
+  en: {
+    orderNumber: 'Order Number',
+    date: 'Date',
+    items: 'Items',
+    quantity: 'Quantity',
+    status: 'Status',
+    priority: 'Priority',
+    notes: 'Notes',
+    createdBy: 'Created By',
+    approve: 'Approve',
+    complete: 'Complete',
+    cancel: 'Cancel',
+    assign: 'Assign Chefs',
+    confirmStock: 'Confirm Add to Inventory',
+    requested: 'Requested',
+    pending: 'Pending',
+    approved: 'Approved',
+    in_production: 'In Production',
+    completed: 'Completed',
+    stocked: 'Stocked',
+    cancelled: 'Cancelled',
+    low: 'Low',
+    medium: 'Medium',
+    high: 'High',
+    urgent: 'Urgent',
+  },
+};
 
 export const OrderCard: React.FC<OrderCardProps> = ({
   order,
@@ -27,11 +82,11 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   openAssignModal,
   confirmFactoryProduction,
   submitting,
+  isRtl,
   currentUserRole,
 }) => {
   const { user } = useAuth();
-  const { language, t } = useLanguage();
-  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
 
   const statusStyles = useMemo(
     () => ({
@@ -69,33 +124,29 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className={isRtl ? 'text-right' : 'text-left'}>
-          <h3 className="text-sm font-semibold text-gray-800">{t('order_number')}: {order.orderNumber}</h3>
-          <p className="text-xs text-gray-600">{t('date')}: {order.date}</p>
-          <p className="text-xs text-gray-600">{t('created_by')}: {order.createdBy}</p>
+          <h3 className="text-sm font-semibold text-gray-800">{t.orderNumber}: {order.orderNumber}</h3>
+          <p className="text-xs text-gray-600">{t.date}: {order.date}</p>
+          <p className="text-xs text-gray-600">{t.createdBy}: {order.createdBy}</p>
           <p className="text-xs text-gray-600">
-            {t('priority')}: <span className={`px-2 py-1 rounded-full text-xs ${priorityStyles[order.priority]}`}>{t(order.priority)}</span>
+            {t.priority}: <span className={`px-2 py-1 rounded-full text-xs ${priorityStyles[order.priority]}`}>{t[order.priority]}</span>
           </p>
         </div>
         <div className={isRtl ? 'text-right' : 'text-left'}>
           <p className="text-xs text-gray-600">
-            {t('status')}: <span className={`px-2 py-1 rounded-full text-xs ${statusStyles[displayStatus]}`}>{t(displayStatus)}</span>
+            {t.status}: <span className={`px-2 py-1 rounded-full text-xs ${statusStyles[displayStatus]}`}>{t[displayStatus]}</span>
           </p>
-          <p className="text-xs text-gray-600">{t('quantity')}: {calculateTotalQuantity(order)}</p>
-          <p className="text-xs text-gray-600">{t('notes')}: {order.notes || '—'}</p>
+          <p className="text-xs text-gray-600">{t.quantity}: {calculateTotalQuantity(order)}</p>
+          <p className="text-xs text-gray-600">{t.notes}: {order.notes || '—'}</p>
         </div>
       </div>
       <div className="mt-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">{t('items')}</h4>
+        <h4 className="text-sm font-medium text-gray-700 mb-2">{t.items}</h4>
         <ul className="space-y-2">
           {order.items.map((item) => (
             <li key={item._id} className="text-xs text-gray-600 flex items-center justify-between gap-2">
               <span>
                 {item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})
-                {item.assignedTo && (
-                  <span className="text-gray-500 ml-2">
-                    ({t('assign')}: {item.assignedTo.displayName})
-                  </span>
-                )}
+                {item.assignedTo && <span className="text-gray-500 ml-2">({t.assign}: {item.assignedTo.displayName})</span>}
               </span>
               {order.status === 'in_production' && canComplete && item.assignedTo?._id === user?.id && item.status !== 'completed' && (
                 <Button
@@ -119,7 +170,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             disabled={submitting === order.id}
             className="px-3 py-1 text-xs"
           >
-            {submitting === order.id ? '...' : t('approve')}
+            {submitting === order.id ? '...' : t.approve}
           </Button>
         )}
         {order.status === 'approved' && !allAssigned && canAssign && order.createdByRole !== 'chef' && (
@@ -129,7 +180,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             disabled={submitting === order.id}
             className="px-3 py-1 text-xs"
           >
-            {submitting === order.id ? '...' : t('assign')}
+            {submitting === order.id ? '...' : t.assign}
           </Button>
         )}
         {order.status === 'in_production' && allAssigned && allCompleted && canComplete && (
@@ -139,7 +190,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             disabled={submitting === order.id}
             className="px-3 py-1 text-xs"
           >
-            {submitting === order.id ? '...' : t('complete')}
+            {submitting === order.id ? '...' : t.complete}
           </Button>
         )}
         {order.status === 'completed' && !order.inventoryProcessed && canConfirmStock && (
@@ -149,7 +200,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             disabled={submitting === order.id}
             className="px-3 py-1 text-xs"
           >
-            {submitting === order.id ? '...' : t('confirm_stock')}
+            {submitting === order.id ? '...' : t.confirmStock}
           </Button>
         )}
         {(order.status === 'requested' || order.status === 'pending' || order.status === 'approved' || order.status === 'in_production') && (
@@ -159,7 +210,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             disabled={submitting === order.id}
             className="px-3 py-1 text-xs"
           >
-            {submitting === order.id ? '...' : t('cancel')}
+            {submitting === order.id ? '...' : t.cancel}
           </Button>
         )}
       </div>
