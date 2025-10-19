@@ -6,6 +6,7 @@ import { Select } from '../../components/UI/Select';
 import { AlertCircle } from 'lucide-react';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { translateUnit } from '../../utils/translateUnit'; // دالة لترجمة الوحدات
 
 interface AssignChefsModalProps {
   isOpen: boolean;
@@ -32,7 +33,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   submitting,
   loading,
 }) => {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
 
   // تنظيم الشيفات حسب القسم
@@ -43,10 +44,17 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       if (!chefsByDept[deptId]) {
         chefsByDept[deptId] = [];
       }
-      chefsByDept[deptId].push(chef);
+      chefsByDept[deptId].push({
+        ...chef,
+        displayName: chef.displayName || chef.name || chef.nameEn || (isRtl ? 'غير معروف' : 'Unknown'),
+        department: {
+          ...chef.department,
+          displayName: chef.department?.displayName || chef.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        },
+      });
     });
     return chefsByDept;
-  }, [chefs]);
+  }, [chefs, isRtl]);
 
   // التحقق من صحة النموذج
   const isFormValid = useCallback(() => {
@@ -76,14 +84,14 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           .map((item) => ({
             itemId: item._id,
             assignedTo: '',
-            product: item.displayProductName || item.product?.name || 'Unknown Product',
+            product: item.displayProductName || item.productName || (isRtl ? 'غير معروف' : 'Unknown'),
             quantity: item.quantity,
-            unit: item.displayUnit || item.product?.unit || 'unit',
+            unit: item.displayUnit || translateUnit(item.unit || 'unit', isRtl),
             departmentId: item.department._id,
           })),
       });
     }
-  }, [isOpen, selectedOrder, setAssignForm]);
+  }, [isOpen, selectedOrder, setAssignForm, isRtl]);
 
   return (
     <Modal
@@ -149,7 +157,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                             { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
                             ...availableChefs.map((chef) => ({
                               value: chef.userId || chef._id,
-                              label: chef.displayName || chef.name || 'Unknown Chef',
+                              label: chef.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
                             })),
                           ]}
                           value={item.assignedTo}
