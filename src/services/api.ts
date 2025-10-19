@@ -2,8 +2,6 @@ import axios from 'axios';
 import { notificationsAPI } from './notifications';
 import { returnsAPI } from './returnsAPI';
 import { salesAPI } from './salesAPI';
-import { AxiosResponse } from 'axios';
-
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
 
@@ -1140,41 +1138,19 @@ export const factoryInventoryAPI = {
 
 
 
-interface FactoryOrderItem {
-  product: string;
-  quantity: number;
-  assignedTo?: string;
-}
-
-interface FactoryOrderData {
-  orderNumber: string;
-  items: FactoryOrderItem[];
-  notes?: string;
-  priority?: string;
-}
-
-interface AssignChefsData {
-  items: { itemId: string; assignedTo: string }[];
-}
-
-// Factory Orders API
 export const factoryOrdersAPI = {
   // Create a new factory order
-  create: async (data: FactoryOrderData): Promise<AxiosResponse> => {
+  create: async (data: { orderNumber: string; items: { product: string; quantity: number; assignedTo?: string }[]; notes?: string; priority?: string }) => {
     if (
-      !data.orderNumber?.trim() ||
+      !data.orderNumber ||
+      !data.orderNumber.trim() ||
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
-      data.items.some(
-        (item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1
-      )
+      data.items.some((item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1)
     ) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
-      throw new Error(
-        createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
     }
-
     try {
       const response = await api.post('/factoryOrders', {
         orderNumber: data.orderNumber.trim(),
@@ -1190,33 +1166,27 @@ export const factoryOrdersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('invalidData', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
   // Retrieve all factory orders with optional query parameters
-  getAll: async (query: Record<string, any> = {}): Promise<AxiosResponse> => {
+  getAll: async (query: Record<string, any> = {}) => {
     try {
       const response = await api.get('/factoryOrders', { params: query });
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('fetchError', localStorage.getItem('language') === 'ar')
-      );
+      throw error;
     }
   },
 
   // Retrieve a specific factory order by ID
-  getById: async (id: string): Promise<AxiosResponse['data']> => {
+  getById: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Invalid factory order ID:`, id);
-      throw new Error(
-        createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.get(`/factoryOrders/${id}`);
@@ -1224,19 +1194,15 @@ export const factoryOrdersAPI = {
       return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('fetchError', localStorage.getItem('language') === 'ar')
-      );
+      throw error;
     }
   },
 
   // Approve a factory order
-  approve: async (id: string): Promise<AxiosResponse> => {
+  approve: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - Invalid factory order ID:`, id);
-      throw new Error(
-        createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/approve`);
@@ -1244,14 +1210,12 @@ export const factoryOrdersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('actionError', localStorage.getItem('language') === 'ar')
-      );
+      throw error;
     }
   },
 
   // Assign chefs to items in a factory order
-  assignChefs: async (id: string, data: AssignChefsData): Promise<AxiosResponse> => {
+  assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
     if (
       !isValidObjectId(id) ||
       !Array.isArray(data.items) ||
@@ -1259,37 +1223,32 @@ export const factoryOrdersAPI = {
       data.items.some((item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))
     ) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Invalid data:`, { id, data });
-      throw new Error(
-        createErrorMessage('invalidData', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/assign`, {
-        items: data.items,
+        items: data.items.map((item) => ({
+          itemId: item.itemId,
+          assignedTo: item.assignedTo,
+        })),
       });
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Response:`, response);
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('actionError', localStorage.getItem('language') === 'ar')
-      );
+      throw error;
     }
   },
 
   // Update the status of a factory order item
-  updateItemStatus: async (id: string, itemId: string, data: { status: string }): Promise<AxiosResponse> => {
+  updateItemStatus: async (id: string, itemId: string, data: { status: string }) => {
     if (!isValidObjectId(id) || !isValidObjectId(itemId)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Invalid IDs:`, { id, itemId });
-      throw new Error(
-        createErrorMessage('invalidId', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidId', localStorage.getItem('language') === 'ar'));
     }
     if (!['pending', 'assigned', 'in_progress', 'completed'].includes(data.status)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Invalid status:`, data.status);
-      throw new Error(
-        createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/items/${itemId}/status`, data);
@@ -1297,25 +1256,19 @@ export const factoryOrdersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('actionError', localStorage.getItem('language') === 'ar')
-      );
+      throw error;
     }
   },
 
   // Update the status of a factory order
-  updateStatus: async (id: string, data: { status: string }): Promise<AxiosResponse> => {
+  updateStatus: async (id: string, data: { status: string }) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid factory order ID:`, id);
-      throw new Error(
-        createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
-    if (!['requested', 'pending', 'approved', 'in_production', 'completed', 'cancelled', 'stocked'].includes(data.status)) {
+    if (!['requested', 'pending', 'approved', 'in_production', 'completed', 'cancelled'].includes(data.status)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid status:`, data.status);
-      throw new Error(
-        createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/status`, data);
@@ -1323,19 +1276,15 @@ export const factoryOrdersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('actionError', localStorage.getItem('language') === 'ar')
-      );
+      throw error;
     }
   },
 
   // Confirm production for a factory order
-  confirmProduction: async (id: string): Promise<AxiosResponse> => {
+  confirmProduction: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Invalid factory order ID:`, id);
-      throw new Error(
-        createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar')
-      );
+      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/confirm-production`);
@@ -1343,9 +1292,32 @@ export const factoryOrdersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Error:`, error.message);
-      throw new Error(
-        createErrorMessage('actionError', localStorage.getItem('language') === 'ar')
-      );
+      throw error;
+    }
+  },
+
+  // Get available products for the current user
+  getAvailableProducts: async () => {
+    try {
+      const response = await api.get('/factoryOrders/available-products');
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Response:`, response);
+      return response.data.data;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Error:`, error.message);
+      throw error;
+    }
+  },
+
+  // Get available chefs, optionally filtered by department
+  getAvailableChefs: async (departmentId?: string) => {
+    try {
+      const params = departmentId ? { departmentId } : {};
+      const response = await api.get('/factoryOrders/available-chefs', { params });
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Response:`, response);
+      return response.data.data;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Error:`, error.message);
+      throw error;
     }
   },
 };
