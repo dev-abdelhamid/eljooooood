@@ -1002,143 +1002,7 @@ export const inventoryAPI = {
 
 
 
-
-export const factoryInventoryAPI = {
-  getAll: async (params = {}) => {
-    if (params.product && !isValidObjectId(params.product)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid product ID:`, params.product);
-      throw new Error(createErrorMessage('invalidProductId', params.lang === 'ar'));
-    }
-    if (params.department && !isValidObjectId(params.department)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid department ID:`, params.department);
-      throw new Error(createErrorMessage('invalidDepartmentId', params.lang === 'ar'));
-    }
-    const response = await api.get('/factoryInventory', { params: params });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
-    return response;
-  },
-  create: async (data) => {
-    if (!isValidObjectId(data.productId) || !isValidObjectId(data.userId) || (data.orderId && !isValidObjectId(data.orderId))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid data:`, data);
-      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.currentStock < 0) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid stock quantity:`, data.currentStock);
-      throw new Error(createErrorMessage('invalidStockQuantity', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.minStockLevel !== undefined && (data.minStockLevel < 0 || !Number.isInteger(data.minStockLevel))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid minStockLevel:`, data.minStockLevel);
-      throw new Error(createErrorMessage('invalidMinStockLevel', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.maxStockLevel !== undefined && (data.maxStockLevel < 0 || !Number.isInteger(data.maxStockLevel))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid maxStockLevel:`, data.maxStockLevel);
-      throw new Error(createErrorMessage('invalidMaxStockLevel', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.minStockLevel !== undefined && data.maxStockLevel !== undefined && data.maxStockLevel <= data.minStockLevel) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Max stock level less than min:`, { minStockLevel: data.minStockLevel, maxStockLevel: data.maxStockLevel });
-      throw new Error(createErrorMessage('maxLessThanMin', localStorage.getItem('language') === 'ar'));
-    }
-    const response = await api.post('/factoryInventory', {
-      productId: data.productId,
-      userId: data.userId,
-      currentStock: data.currentStock,
-      minStockLevel: data.minStockLevel ?? 0,
-      maxStockLevel: data.maxStockLevel ?? 1000,
-      orderId: data.orderId,
-    });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.create - Response:`, response);
-    return response;
-  },
-  bulkCreate: async (data) => {
-    if (!isValidObjectId(data.userId) || (data.orderId && !isValidObjectId(data.orderId)) || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.productId))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid data:`, data);
-      throw new Error(createErrorMessage('invalidUserId', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.items.some(item => item.currentStock < 0)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid stock quantity:`, data.items);
-      throw new Error(createErrorMessage('invalidStockQuantity', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.items.some(item => item.minStockLevel !== undefined && (item.minStockLevel < 0 || !Number.isInteger(item.minStockLevel)))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid minStockLevel:`, data.items);
-      throw new Error(createErrorMessage('invalidMinStockLevel', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.items.some(item => item.maxStockLevel !== undefined && (item.maxStockLevel < 0 || !Number.isInteger(item.maxStockLevel)))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid maxStockLevel:`, data.items);
-      throw new Error(createErrorMessage('invalidMaxStockLevel', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.items.some(item => item.minStockLevel !== undefined && item.maxStockLevel !== undefined && item.maxStockLevel <= item.minStockLevel)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Max stock level less than min:`, data.items);
-      throw new Error(createErrorMessage('maxLessThanMin', localStorage.getItem('language') === 'ar'));
-    }
-    const response = await api.post('/factoryInventory/bulk', {
-      userId: data.userId,
-      orderId: data.orderId,
-      items: data.items.map(item => ({
-        productId: item.productId,
-        currentStock: item.currentStock,
-        minStockLevel: item.minStockLevel ?? 0,
-        maxStockLevel: item.maxStockLevel ?? 1000,
-      })),
-    });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Response:`, response);
-    return response;
-  },
-  updateStock: async (id, data) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid inventory ID:`, id);
-      throw new Error(createErrorMessage('invalidInventoryId', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.currentStock !== undefined && (data.currentStock < 0 || !Number.isInteger(data.currentStock))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid stock quantity:`, data.currentStock);
-      throw new Error(createErrorMessage('invalidStockQuantity', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.minStockLevel !== undefined && (data.minStockLevel < 0 || !Number.isInteger(data.minStockLevel))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid minStockLevel:`, data.minStockLevel);
-      throw new Error(createErrorMessage('invalidMinStockLevel', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.maxStockLevel !== undefined && (data.maxStockLevel < 0 || !Number.isInteger(data.maxStockLevel))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid maxStockLevel:`, data.maxStockLevel);
-      throw new Error(createErrorMessage('invalidMaxStockLevel', localStorage.getItem('language') === 'ar'));
-    }
-    if (data.minStockLevel !== undefined && data.maxStockLevel !== undefined && data.maxStockLevel <= data.minStockLevel) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Max stock level less than min:`, { minStockLevel: data.minStockLevel, maxStockLevel: data.maxStockLevel });
-      throw new Error(createErrorMessage('maxLessThanMin', localStorage.getItem('language') === 'ar'));
-    }
-    const response = await api.put(`/factoryInventory/${id}`, {
-      currentStock: data.currentStock,
-      minStockLevel: data.minStockLevel,
-      maxStockLevel: data.maxStockLevel,
-    });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Response:`, response);
-    return response;
-  },
-  getHistory: async (params = {}) => {
-    if (params.productId && !isValidObjectId(params.productId)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid product ID:`, params.productId);
-      throw new Error(createErrorMessage('invalidProductId', params.lang === 'ar'));
-    }
-    if (params.department && !isValidObjectId(params.department)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid department ID:`, params.department);
-      throw new Error(createErrorMessage('invalidDepartmentId', params.lang === 'ar'));
-    }
-    if (params.period && !['daily', 'weekly', 'monthly'].includes(params.period)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid period:`, params.period);
-      throw new Error(createErrorMessage('invalidStatus', params.lang === 'ar'));
-    }
-    const response = await api.get('/factoryInventory/history', { params: params });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
-    return response;
-  },
-  getAvailableProducts: async (params = {}) => {
-    const response = await api.get('/products', { params: params });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
-    return response;
-  },
-};
-
-
 export const factoryOrdersAPI = {
-  // إنشاء طلب إنتاج جديد
   create: async (data: {
     orderNumber: string;
     items: { product: string; quantity: number; assignedTo?: string }[];
@@ -1152,7 +1016,11 @@ export const factoryOrdersAPI = {
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
       data.items.some(
-        (item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1
+        (item) =>
+          !isValidObjectId(item.product) ||
+          !Number.isInteger(item.quantity) ||
+          item.quantity < 1 ||
+          (item.assignedTo && !isValidObjectId(item.assignedTo))
       )
     ) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - البيانات غير صالحة:`, data);
@@ -1164,32 +1032,36 @@ export const factoryOrdersAPI = {
         items: data.items.map((item) => ({
           product: item.product,
           quantity: item.quantity,
-          assignedTo: item.assignedTo,
+          assignedTo: item.assignedTo || undefined,
         })),
         notes: data.notes?.trim() || '',
         priority: data.priority?.trim() || 'medium',
       });
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - الاستجابة:`, response);
-      return response;
+      return response.data; // تأكد من أن الـ backend يرجع البيانات بشكل صحيح
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - خطأ:`, error.message);
-      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - خطأ:`, error.message, error.response?.data);
+      const errorMessage =
+        error.response?.status === 429
+          ? createErrorMessage('tooManyRequests', localStorage.getItem('language') === 'ar')
+          : error.response?.data?.message ||
+            error.response?.data?.errors?.map((e: any) => e.msg).join(', ') ||
+            createErrorMessage('invalidData', localStorage.getItem('language') === 'ar');
+      throw new Error(errorMessage);
     }
   },
 
-  // استرجاع جميع طلبات الإنتاج مع معايير اختيارية
   getAll: async (query: Record<string, any> = {}) => {
     try {
       const response = await api.get('/factoryOrders', { params: query });
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - الاستجابة:`, response);
-      return response;
+      return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - خطأ:`, error.message);
-      throw error;
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // استرجاع طلب إنتاج محدد باستخدام المعرف
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - معرف طلب غير صالح:`, id);
@@ -1201,11 +1073,10 @@ export const factoryOrdersAPI = {
       return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - خطأ:`, error.message);
-      throw error;
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // الموافقة على طلب إنتاج
   approve: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - معرف طلب غير صالح:`, id);
@@ -1214,14 +1085,13 @@ export const factoryOrdersAPI = {
     try {
       const response = await api.patch(`/factoryOrders/${id}/approve`);
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.approve - الاستجابة:`, response);
-      return response;
+      return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - خطأ:`, error.message);
-      throw error;
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // تعيين شيفات لعناصر طلب الإنتاج
   assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
     if (
       !isValidObjectId(id) ||
@@ -1240,14 +1110,13 @@ export const factoryOrdersAPI = {
         })),
       });
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - الاستجابة:`, response);
-      return response;
+      return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - خطأ:`, error.message);
-      throw error;
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // تحديث حالة عنصر في طلب الإنتاج
   updateItemStatus: async (id: string, itemId: string, data: { status: string }) => {
     if (!isValidObjectId(id) || !isValidObjectId(itemId)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - معرفات غير صالحة:`, { id, itemId });
@@ -1260,14 +1129,13 @@ export const factoryOrdersAPI = {
     try {
       const response = await api.patch(`/factoryOrders/${id}/items/${itemId}/status`, data);
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - الاستجابة:`, response);
-      return response;
+      return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - خطأ:`, error.message);
-      throw error;
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // تحديث حالة طلب الإنتاج
   updateStatus: async (id: string, data: { status: string }) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - معرف طلب غير صالح:`, id);
@@ -1280,14 +1148,13 @@ export const factoryOrdersAPI = {
     try {
       const response = await api.patch(`/factoryOrders/${id}/status`, data);
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - الاستجابة:`, response);
-      return response;
+      return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - خطأ:`, error.message);
-      throw error;
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // تأكيد الإنتاج لطلب الإنتاج
   confirmProduction: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - معرف طلب غير صالح:`, id);
@@ -1296,14 +1163,13 @@ export const factoryOrdersAPI = {
     try {
       const response = await api.patch(`/factoryOrders/${id}/confirm-production`);
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - الاستجابة:`, response);
-      return response;
+      return response.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - خطأ:`, error.message);
-      throw error;
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 
-  // استرجاع المنتجات المتاحة للمستخدم الحالي
   getAvailableProducts: async () => {
     try {
       const response = await api.get('/factoryOrders/available-products');
@@ -1311,23 +1177,7 @@ export const factoryOrdersAPI = {
       return response.data.data;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - خطأ:`, error.message);
-      throw error;
-    }
-  },
-
-  // استرجاع الشيفات المتاحين، مع إمكانية التصفية حسب القسم
-  getAvailableChefs: async (departmentId?: string) => {
-    try {
-      const params = departmentId && isValidObjectId(departmentId)
-        ? { departmentId, lang: localStorage.getItem('language') || 'ar' }
-        : { lang: localStorage.getItem('language') || 'ar' };
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - معايير الطلب:`, params);
-      const response = await api.get('/factoryOrders/available-chefs', { params });
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - الاستجابة:`, response);
-      return response.data.data || [];
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - خطأ:`, error.message);
-      throw new Error(createErrorMessage('fetchChefsFailed', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
 };
