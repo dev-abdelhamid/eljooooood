@@ -42,9 +42,9 @@ const Button: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+    className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-all duration-200 ${
       variant === 'primary' && !disabled
-        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-md hover:shadow-lg'
+        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-lg hover:shadow-xl'
         : 'bg-gray-200 text-gray-500 cursor-not-allowed'
     } ${className}`}
   >
@@ -75,14 +75,14 @@ const ProductSearchInput: React.FC<{
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
-        <Search className="w-4 h-4" />
+        <Search className="w-5 h-5" />
       </motion.div>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-base placeholder-gray-500 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -94,7 +94,7 @@ const ProductSearchInput: React.FC<{
           className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </motion.button>
       )}
     </div>
@@ -130,14 +130,14 @@ const ProductDropdown: React.FC<{
     <div className={`relative group w-full ${className}`} ref={dropdownRef}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white shadow-md hover:shadow-lg text-sm text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && !disabled && (
-        <div className={`absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}>
+        <div className={`absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl max-h-52 overflow-y-auto ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}>
           {options.map((option) => (
             <button
               key={option.value}
@@ -145,7 +145,7 @@ const ProductDropdown: React.FC<{
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className="w-full px-3 py-2 text-xs hover:bg-amber-50 transition-colors text-left"
+              className="w-full px-4 py-2 text-sm hover:bg-amber-50 transition-colors text-left"
             >
               {option.label}
             </button>
@@ -164,16 +164,13 @@ const toArabicNumerals = (number: string | number): string => {
 
 const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
-  let formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+  const formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  if (isStats) {
-    formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
-  } else {
-    formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
-  }
-  return formatted;
+  return isStats
+    ? isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`
+    : isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
 };
 
 const formatNumber = (num: number, isRtl: boolean): string => {
@@ -193,17 +190,17 @@ const exportToExcel = (dataRows: any[], headers: string[], monthName: string, is
     toastId: 'excel-export',
   });
   try {
-    const sheetData = isRtl ? dataRows.map(row => row.reverse()) : dataRows;
+    const sheetData = isRtl ? dataRows.map(row => row.slice().reverse()) : dataRows;
     const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
     const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 12 },
-      { wch: 12 },
-      ...Array(headers.length - 4).fill({ wch: 12 }),
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 25 },
+      { wch: 15 },
+      { wch: 15 },
+      ...Array(headers.length - 4).fill({ wch: 15 }),
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 30 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `DailyOrdersSummary_${monthName}`);
@@ -236,7 +233,7 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
 
     const pageWidth = doc.internal.pageSize.width;
     doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-    doc.setFontSize(18);
+    doc.setFontSize(20);
     doc.setTextColor(33, 33, 33);
     doc.text(title, isRtl ? pageWidth - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
@@ -252,11 +249,11 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
     }).replace(/am|pm/i, match => match === 'am' ? 'ص' : 'م');
     doc.text(`${isRtl ? 'تاريخ الإنشاء: ' : 'Generated on: '}${currentDate}`, isRtl ? pageWidth - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
 
-    doc.setLineWidth(0.5);
+    doc.setLineWidth(0.7);
     doc.setDrawColor(245, 158, 11);
     doc.line(20, 30, pageWidth - 20, 30);
 
-    const tableData = isRtl ? dataRows.map(row => row.reverse()) : dataRows;
+    const tableData = isRtl ? dataRows.map(row => row.slice().reverse()) : dataRows;
     const tableHeaders = isRtl ? headers.slice().reverse() : headers;
 
     autoTable(doc, {
@@ -264,25 +261,25 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
       body: tableData,
       startY: 40,
       theme: 'grid',
-      margin: { top: 10, bottom: 20, left: 20, right: 20 },
+      margin: { top: 10, bottom: 20, left: 15, right: 15 },
       tableWidth: 'auto',
       headStyles: {
         fillColor: [245, 158, 11],
         textColor: [255, 255, 255],
-        fontSize: 10,
+        fontSize: 12,
         font: fontLoaded ? fontName : 'helvetica',
         fontStyle: 'bold',
         halign: 'center',
-        cellPadding: 3,
+        cellPadding: 4,
       },
       bodyStyles: {
-        fontSize: 9,
+        fontSize: 10,
         textColor: [33, 33, 33],
         font: fontLoaded ? fontName : 'helvetica',
         halign: 'center',
-        lineColor: [200, 200, 200],
+        lineColor: [180, 180, 180],
         fillColor: [255, 255, 255],
-        cellPadding: 2,
+        cellPadding: 3,
       },
       alternateRowStyles: { fillColor: [245, 245, 245] },
       didParseCell: (data) => {
@@ -294,18 +291,18 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
         }
       },
       didDrawPage: (data) => {
-        doc.setFontSize(8);
-        doc.setTextColor(150, 150, 150);
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
         doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
         const footerText = isRtl
           ? `تم الإنشاء بواسطة نظام إدارة متقدم - ${toArabicNumerals(new Date().toLocaleDateString('ar-EG'))}`
           : `Generated by Advanced Management System - ${new Date().toLocaleDateString('en-US')}`;
-        doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+        doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 15, { align: 'center' });
 
         if (data.pageNumber === doc.getNumberOfPages()) {
-          doc.setFontSize(10);
+          doc.setFontSize(11);
           doc.setTextColor(33, 33, 33);
-          const summaryY = data.cursor.y + 10;
+          const summaryY = data.cursor.y + 15;
           doc.text(
             isRtl ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)}` : `Total Products: ${totalItems}`,
             20,
@@ -315,13 +312,13 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
           doc.text(
             isRtl ? `إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة` : `Total Quantity: ${totalQuantity} units`,
             20,
-            summaryY + 5,
+            summaryY + 6,
             { align: isRtl ? 'right' : 'left' }
           );
           doc.text(
             isRtl ? `إجمالي المبلغ: ${formatPrice(totalPrice, isRtl, true)}` : `Total Amount: ${formatPrice(totalPrice, isRtl, true)}`,
             20,
-            summaryY + 10,
+            summaryY + 12,
             { align: isRtl ? 'right' : 'left' }
           );
         }
@@ -566,13 +563,13 @@ const DailyOrdersSummary: React.FC = () => {
   };
 
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
-    return <div className="text-center py-12 text-sm font-medium text-gray-700">{isRtl ? 'لا يوجد صلاحية' : 'No access'}</div>;
+    return <div className="text-center py-16 text-lg font-medium text-gray-800">{isRtl ? 'لا يوجد صلاحية' : 'No access'}</div>;
   }
 
   return (
-    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
-      <div className="mb-8 bg-white shadow-lg rounded-xl p-6">
-        <div className={`flex flex-wrap gap-3 mb-6 justify-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+    <div className={`min-h-screen px-8 py-10 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
+      <div className="mb-10 bg-white shadow-xl rounded-2xl p-8">
+        <div className={`flex flex-wrap gap-4 mb-8 justify-center ${isRtl ? 'flex-row-reverse' : ''}`}>
           {months.map((month) => (
             <Button
               key={month.value}
@@ -585,16 +582,16 @@ const DailyOrdersSummary: React.FC = () => {
           ))}
         </div>
       </div>
-      <div className={`mb-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
-          <h2 className="text-xl font-bold text-gray-900">{isRtl ? `ملخص الطلبات اليومية - ${monthName}` : `Daily Orders Summary - ${monthName}`}</h2>
-          <div className="flex gap-3">
+      <div className={`mb-10 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6`}>
+          <h2 className="text-2xl font-bold text-gray-900">{isRtl ? `ملخص الطلبات اليومية - ${monthName}` : `Daily Orders Summary - ${monthName}`}</h2>
+          <div className="flex gap-4">
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
               disabled={filteredData.length === 0}
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="w-5 h-5" />
               {isRtl ? 'تصدير إكسل' : 'Export Excel'}
             </Button>
             <Button
@@ -602,7 +599,7 @@ const DailyOrdersSummary: React.FC = () => {
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
               disabled={filteredData.length === 0}
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="w-5 h-5" />
               {isRtl ? 'تصدير PDF' : 'Export PDF'}
             </Button>
           </div>
@@ -612,7 +609,7 @@ const DailyOrdersSummary: React.FC = () => {
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder={isRtl ? 'ابحث عن منتج...' : 'Search for product...'}
           ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
-          className="mt-6 w-full sm:w-1/2"
+          className="mt-8 w-full lg:w-1/3"
         />
       </div>
       {loading ? (
@@ -621,55 +618,55 @@ const DailyOrdersSummary: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="overflow-x-auto rounded-xl shadow-lg border border-gray-200 bg-white"
+          transition={{ duration: 0.4 }}
+          className="overflow-x-auto rounded-2xl shadow-xl border border-gray-200 bg-white"
         >
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <table className="min-w-full divide-y divide-gray-200 text-base">
             <thead className="bg-amber-50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'وحدة' : 'Unit'}</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
+                <th className="px-6 py-4 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'وحدة' : 'Unit'}</th>
+                <th className="px-6 py-4 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
                 {allBranches.map((branch) => (
-                  <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[110px]">
+                  <th key={branch} className="px-6 py-4 font-semibold text-gray-700 text-center min-w-[120px]">
                     {branch}
                   </th>
                 ))}
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'الكود' : 'Code'}</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[90px]">{isRtl ? 'السعر' : 'Price'}</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[160px]">{isRtl ? 'الاسم' : 'Name'}</th>
+                <th className="px-6 py-4 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-6 py-4 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'السعر' : 'Price'}</th>
+                <th className="px-6 py-4 font-semibold text-gray-700 text-center min-w-[180px]">{isRtl ? 'الاسم' : 'Name'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredData.map((row) => (
                 <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-4 py-3 text-gray-700 text-center">{row.unit}</td>
-                  <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                  <td className="px-6 py-4 text-gray-700 text-center">{row.unit}</td>
+                  <td className="px-6 py-4 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
-                      className={`px-4 py-3 text-center font-medium ${row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
+                      className={`px-6 py-4 text-center font-medium ${row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
                       data-tooltip-id="branch-tooltip"
                       data-tooltip-content={getTooltipContent(row.branchQuantities[branch] || 0, isRtl)}
                     >
                       {row.branchQuantities[branch] !== 0 ? formatNumber(row.branchQuantities[branch] || 0, isRtl) : '0'}
                     </td>
                   ))}
-                  <td className="px-4 py-3 text-gray-700 text-center">{row.code}</td>
-                  <td className="px-4 py-3 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                  <td className="px-6 py-4 text-gray-700 text-center">{row.code}</td>
+                  <td className="px-6 py-4 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
+                  <td className="px-6 py-4 text-gray-700 text-center truncate">{row.product}</td>
                 </tr>
               ))}
               <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-4 py-3 text-gray-800 text-center"></td>
-                <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                <td className="px-6 py-4 text-gray-800 text-center"></td>
+                <td className="px-6 py-4 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
                 {allBranches.map((branch) => (
-                  <td key={branch} className="px-4 py-3 text-gray-800 text-center">
+                  <td key={branch} className="px-6 py-4 text-gray-800 text-center">
                     {formatNumber(filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0), isRtl)}
                   </td>
                 ))}
-                <td className="px-4 py-3 text-gray-800 text-center"></td>
-                <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                <td className="px-6 py-4 text-gray-800 text-center"></td>
+                <td className="px-6 py-4 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+                <td className="px-6 py-4 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
               </tr>
             </tbody>
           </table>
