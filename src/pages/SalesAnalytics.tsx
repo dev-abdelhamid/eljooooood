@@ -576,7 +576,7 @@ const SalesAnalytics: React.FC = () => {
             totalSpent: safeNumber(customer.totalSpent),
             purchaseCount: safeNumber(customer.purchaseCount),
           })),
-        };
+        });
       } else if (type === 'orders') {
         response = await ordersAPI.getAll(params);
         setOrders(response.orders.map((order: any) => ({
