@@ -118,7 +118,6 @@ export const OrderTable: React.FC<OrderTableProps> = ({
             const allAssigned = order.items.every((item) => item.assignedTo);
             const allCompleted = order.items.every((item) => item.status === 'completed');
             const displayStatus = order.status === 'completed' && order.inventoryProcessed ? 'stocked' : order.status;
-
             return (
               <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-200">
                 <td className="px-6 py-4 text-xs text-gray-900">{startIndex + index}</td>
@@ -133,7 +132,7 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                           ({isRtl ? 'معين إلى' : 'Assigned to'}: {item.assignedTo.displayName})
                         </span>
                       )}
-                      {order.status === 'in_production' && canComplete && item.assignedTo?._id === order.createdBy && item.status !== 'completed' && (
+                      {order.status === 'in_production' && currentUserRole === 'chef' && item.assignedTo?._id === user?.id && item.status !== 'completed' && (
                         <Button
                           variant="success"
                           onClick={() => confirmItemCompletion(order.id, item._id)}
