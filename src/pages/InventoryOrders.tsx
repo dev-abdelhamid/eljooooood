@@ -101,7 +101,7 @@ interface State {
   isAssignModalOpen: boolean;
   isCreateModalOpen: boolean;
   assignFormData: AssignChefsForm;
-  createFormData: { notes: string; items: { productId: string; quantity: number; assignedTo?: string }[] };
+  createFormData: { notes: string; items: { productId: string; quantity: number; assignedTo?: string }[]; priority: string };
   filterStatus: string;
   filterDepartment: string;
   searchQuery: string;
@@ -127,7 +127,7 @@ const initialState: State = {
   isAssignModalOpen: false,
   isCreateModalOpen: false,
   assignFormData: { items: [] },
-  createFormData: { notes: '', items: [{ productId: '', quantity: 1 }] },
+  createFormData: { notes: '', items: [{ productId: '', quantity: 1 }], priority: 'medium' },
   filterStatus: '',
   filterDepartment: '',
   searchQuery: '',
@@ -398,7 +398,7 @@ export const InventoryOrders: React.FC = () => {
           departmentAPI.getAll({ lang: language }),
         ]);
 
-        const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+        const ordersData = Array.isArray(ordersResponse) ? ordersResponse : [];
         const mappedOrders: FactoryOrder[] = ordersData
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -452,7 +452,7 @@ export const InventoryOrders: React.FC = () => {
           type: 'SET_CHEFS',
           payload: Array.isArray(chefsResponse)
             ? chefsResponse
-                .filter((chef: any) => chef && chef.userId)
+                .filter((chef: any) => chef && chef.userId && chef.department?._id)
                 .map((chef: any) => ({
                   _id: chef._id,
                   userId: chef.userId,
@@ -475,7 +475,7 @@ export const InventoryOrders: React.FC = () => {
           type: 'SET_PRODUCTS',
           payload: Array.isArray(productsResponse)
             ? productsResponse
-                .filter((product: any) => product && product._id)
+                .filter((product: any) => product && product._id && product.department?._id)
                 .map((product: any) => ({
                   _id: product._id,
                   name: product.name || t('unknown'),
@@ -675,8 +675,10 @@ export const InventoryOrders: React.FC = () => {
         errors[`item_${index}_quantity`] = item.quantity === 0 ? tMessages.quantityRequired : tMessages.quantityInvalid;
       }
       if (['admin', 'production'].includes(user.role)) {
-        const product = state.products.find(p => p._id === item.productId);
-        const availableChefs = state.chefs.filter(chef => chef.department._id === product?.department._id);
+        const product = state.products.find((p) => p._id === item.productId);
+        const availableChefs = product
+          ? state.chefs.filter((chef) => chef.department?._id === product.department?._id)
+          : [];
         if (product && !availableChefs.length) {
           errors[`item_${index}_assignedTo`] = tMessages.noChefsAvailable;
         } else if (!item.assignedTo && availableChefs.length > 0) {
@@ -698,19 +700,22 @@ export const InventoryOrders: React.FC = () => {
     try {
       const orderNumber = `ORD-${Date.now()}`;
       const isAdminOrProduction = ['admin', 'production'].includes(user.role);
-      const initialStatus = isAdminOrProduction && state.createFormData.items.every(i => i.assignedTo) ? 'in_production' : isAdminOrProduction ? 'pending' : 'requested';
+      const initialStatus = isAdminOrProduction && state.createFormData.items.every((i) => i.assignedTo) ? 'in_production' : isAdminOrProduction ? 'pending' : 'requested';
       const items = state.createFormData.items.map((i) => ({
         product: i.productId,
         quantity: i.quantity,
         assignedTo: user.role === 'chef' ? user.id : i.assignedTo,
       }));
 
-      const response = await factoryOrdersAPI.create({
-        orderNumber,
-        items,
-        notes: state.createFormData.notes,
-        priority: 'medium',
-      }, language);
+      const response = await factoryOrdersAPI.create(
+        {
+          orderNumber,
+          items,
+          notes: state.createFormData.notes,
+          priority: state.createFormData.priority,
+        },
+        language
+      );
 
       const newOrder: FactoryOrder = {
         id: response.data._id,
@@ -726,23 +731,23 @@ export const InventoryOrders: React.FC = () => {
           unitEn: item.product.unitEn,
           displayUnit: translateUnit(item.product.unit, isRtl),
           department: {
-            _id: item.product.department._id,
-            name: item.product.department.name,
-            nameEn: item.product.department.nameEn,
-            displayName: item.product.department.displayName || (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name),
+            _id: item.product.department?._id || 'no-department',
+            name: item.product.department?.name || t('unknown'),
+            nameEn: item.product.department?.nameEn,
+            displayName: item.product.department?.displayName || (isRtl ? item.product.department?.name : item.product.department?.nameEn || item.product.department?.name) || t('unknown'),
           },
           assignedTo: item.assignedTo
             ? {
                 _id: item.assignedTo._id,
                 username: item.assignedTo.username,
-                name: item.assignedTo.name,
+                name: item.assignedTo.name || t('unknown'),
                 nameEn: item.assignedTo.nameEn,
-                displayName: item.assignedTo.displayName || (isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name),
+                displayName: item.assignedTo.displayName || (isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name) || t('unknown'),
                 department: {
-                  _id: item.assignedTo.department._id,
-                  name: item.assignedTo.department.name,
-                  nameEn: item.assignedTo.department.nameEn,
-                  displayName: item.assignedTo.department.displayName || (isRtl ? item.assignedTo.department.name : item.assignedTo.department.nameEn || item.assignedTo.department.name),
+                  _id: item.assignedTo.department?._id || 'no-department',
+                  name: item.assignedTo.department?.name || t('unknown'),
+                  nameEn: item.assignedTo.department?.nameEn,
+                  displayName: item.assignedTo.department?.displayName || (isRtl ? item.assignedTo.department?.name : item.assignedTo.department?.nameEn || item.assignedTo.department?.name) || t('unknown'),
                 },
               }
             : undefined,
@@ -759,7 +764,7 @@ export const InventoryOrders: React.FC = () => {
 
       dispatch({ type: 'ADD_ORDER', payload: newOrder });
       dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-      dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }] } });
+      dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }], priority: 'medium' } });
       dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
 
       if (socket && isConnected) {
@@ -770,7 +775,7 @@ export const InventoryOrders: React.FC = () => {
         position: isRtl ? 'top-left' : 'top-right',
       });
 
-      if (isAdminOrProduction && state.createFormData.items.some(i => !i.assignedTo)) {
+      if (isAdminOrProduction && state.createFormData.items.some((i) => !i.assignedTo)) {
         dispatch({ type: 'SET_SELECTED_ORDER', payload: newOrder });
         dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
       }
@@ -952,8 +957,7 @@ export const InventoryOrders: React.FC = () => {
     listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
- 
-    const filteredOrders = useMemo(() => {
+  const filteredOrders = useMemo(() => {
     const normalizedQuery = normalizeText(state.debouncedSearchQuery);
     return state.orders
       .filter((order) => order) // التأكد من أن الطلب ليس null أو undefined
@@ -1049,9 +1053,9 @@ export const InventoryOrders: React.FC = () => {
       // إعادة تعيين الشيف إذا تغير المنتج
       if (field === 'productId' && ['admin', 'production'].includes(user.role)) {
         const product = state.products.find((p) => p._id === value);
-        const availableChefs = state.chefs.filter(
-          (chef) => chef.department._id === product?.department._id
-        );
+        const availableChefs = product
+          ? state.chefs.filter((chef) => chef.department?._id === product.department?._id)
+          : [];
         if (availableChefs.length === 1) {
           updatedItems[index].assignedTo = availableChefs[0].userId;
         } else {
@@ -1061,9 +1065,16 @@ export const InventoryOrders: React.FC = () => {
           type: 'SET_CREATE_FORM',
           payload: { ...state.createFormData, items: updatedItems },
         });
+        if (!product) {
+          console.warn(`Product not found for ID: ${value}`);
+        }
+        if (!availableChefs.length && product) {
+          console.warn(`No chefs available for department: ${product.department?._id}`);
+          toast.warn(t('no_chefs_available'), { position: isRtl ? 'top-left' : 'top-right' });
+        }
       }
     },
-    [state.createFormData, state.products, state.chefs, user.role]
+    [state.createFormData, state.products, state.chefs, user.role, isRtl, t]
   );
 
   const departmentOptions = useMemo(
@@ -1082,7 +1093,7 @@ export const InventoryOrders: React.FC = () => {
       state.products
         .filter(
           (product) =>
-            !state.filterDepartment || product.department._id === state.filterDepartment
+            !state.filterDepartment || product.department?._id === state.filterDepartment
         )
         .map((product) => ({
           value: product._id,
@@ -1338,7 +1349,7 @@ export const InventoryOrders: React.FC = () => {
               {state.createFormData.items.map((item, index) => {
                 const product = state.products.find((p) => p._id === item.productId);
                 const availableChefs = product
-                  ? state.chefs.filter((chef) => chef.department._id === product.department._id)
+                  ? state.chefs.filter((chef) => chef.department?._id === product.department?._id)
                   : [];
                 const chefOptions = [
                   { value: '', label: t('select_chef') },
@@ -1432,7 +1443,7 @@ export const InventoryOrders: React.FC = () => {
                 );
               })}
             </AnimatePresence>
-            <Button
+<Button
               variant="secondary"
               onClick={addItemToForm}
               className="mt-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm flex items-center gap-2"
