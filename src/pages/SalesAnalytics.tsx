@@ -1612,7 +1612,7 @@ const ReportsAnalytics: React.FC = () => {
                     { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },  
                     { key: 'totalOrders', label: t.totalOrders, width: 'w-1/4' },
                     { key: 'totalValue', label: t.totalValue, width: 'w-1/4' },
-                    
+
                   ]}
                   isRtl={isRtl}
                   currency={t.currency}
@@ -1669,12 +1669,11 @@ const ReportsAnalytics: React.FC = () => {
                 <DataTable
                   title={t.leastBranchReturns}
                   data={filteredData.leastBranchReturns}
-                  columns=[
+                  columns={[
                     { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
                     { key: 'totalReturns', label: t.totalReturns, width: 'w-1/4' },
                     { key: 'totalValue', label: t.totalValue, width: 'w-1/4' },
-                    { key: 'averageReturnValue', label: t.averageReturnValue, width: 'w-1/4' },
-                  ]
+                  ]}
                   isRtl={isRtl}
                   currency={t.currency}
                 />
