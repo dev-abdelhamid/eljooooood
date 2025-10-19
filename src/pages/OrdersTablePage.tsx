@@ -86,65 +86,59 @@ export const ProductSearchInput: React.FC<{
 };
 
 // ProductDropdown component with close on outside click
-export const ProductDropdown: React.FC<{
+export const ProductDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  disabled = false,
+}: {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-  className?: string;
-}> = ({ value, onChange, options, ariaLabel, disabled = false, className }) => {
+}) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
+  // Log options for debugging
+  console.log(`[${new Date().toISOString()}] ProductDropdown options:`, options);
+  const selectedOption =
+    options.find((opt) => opt.value === value) ||
+    options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
   return (
-    <div className={`relative group w-full ${className}`} ref={dropdownRef}>
+    <div className="relative group">
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-left' : 'text-right'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
-        <span className="truncate">{selectedOption.label}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="truncate">{selectedOption.label || (isRtl ? 'غير معروف' : 'Unknown')}</span>
+        <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </div>
       </button>
       {isOpen && !disabled && (
-        <div className={`absolute z-50 w-full mt-1 bg-white border border-gray-300 ${isRtl ? 'text-left' : 'text-right'} rounded-lg shadow-lg max-h-48 overflow-y-auto`}>
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
           {options.map((option) => (
-            <button
+            <div
               key={option.value}
-              dir={isRtl ? 'rtl' : 'ltr'}
               onClick={() => {
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className="w-full px-3 py-2 text-xs text-left hover:bg-amber-100 transition-colors"
+              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
             >
-              {option.label}
-            </button>
+              {option.label || (isRtl ? 'غير معروف' : 'Unknown')}
+            </div>
           ))}
         </div>
       )}
     </div>
   );
 };
-
 // Utility functions
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
