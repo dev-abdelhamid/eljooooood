@@ -1079,7 +1079,6 @@ export const InventoryOrders: React.FC = () => {
     },
   };
 
-  const t = translations[isRtl ? 'ar' : 'en'];
 
   return (
     <div className="container mx-auto p-4">
