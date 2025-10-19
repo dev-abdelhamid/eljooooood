@@ -1137,9 +1137,13 @@ export const factoryInventoryAPI = {
 };
 
 
+// Factory Orders API
 export const factoryOrdersAPI = {
   // Create a new factory order
   create: async (data: { orderNumber: string; items: { product: string; quantity: number; assignedTo?: string }[]; notes?: string; priority?: string }) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
+    
+    // Validate input data
     if (
       !data.orderNumber ||
       !data.orderNumber.trim() ||
@@ -1148,15 +1152,22 @@ export const factoryOrdersAPI = {
       data.items.some((item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1)
     ) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
-      throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidItems', isArabic));
     }
+
+    // Validate that assigned chefs have departments
+    if (data.items.some(item => item.assignedTo && !isValidObjectId(item.assignedTo))) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid chef ID in items:`, data.items);
+      throw new Error(createErrorMessage('invalidData', isArabic));
+    }
+
     try {
       const response = await api.post('/factoryOrders', {
         orderNumber: data.orderNumber.trim(),
         items: data.items.map((item) => ({
           product: item.product,
           quantity: item.quantity,
-          assignedTo: item.assignedTo,
+          assignedTo: item.assignedTo || undefined, // Ensure undefined if not provided
         })),
         notes: data.notes?.trim() || '',
         priority: data.priority?.trim() || 'medium',
@@ -1164,8 +1175,9 @@ export const factoryOrdersAPI = {
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Error:`, error.message);
-      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Error:`, error.response?.data?.message || error.message);
+      const errorMessage = error.response?.data?.message || createErrorMessage('invalidData', isArabic);
+      throw new Error(errorMessage);
     }
   },
 
@@ -1183,9 +1195,10 @@ export const factoryOrdersAPI = {
 
   // Retrieve a specific factory order by ID
   getById: async (id: string) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Invalid factory order ID:`, id);
-      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidFactoryOrderId', isArabic));
     }
     try {
       const response = await api.get(`/factoryOrders/${id}`);
@@ -1199,9 +1212,10 @@ export const factoryOrdersAPI = {
 
   // Approve a factory order
   approve: async (id: string) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.approve - Invalid factory order ID:`, id);
-      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidFactoryOrderId', isArabic));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/approve`);
@@ -1215,6 +1229,9 @@ export const factoryOrdersAPI = {
 
   // Assign chefs to items in a factory order
   assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
+    
+    // Validate input data
     if (
       !isValidObjectId(id) ||
       !Array.isArray(data.items) ||
@@ -1222,9 +1239,23 @@ export const factoryOrdersAPI = {
       data.items.some((item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))
     ) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Invalid data:`, { id, data });
-      throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidData', isArabic));
     }
+
     try {
+      // Fetch chefs to validate department assignments
+      const chefsResponse = await api.get('/factoryOrders/available-chefs');
+      const chefs = chefsResponse.data.data || [];
+      
+      // Validate that each assigned chef has a department
+      for (const item of data.items) {
+        const chef = chefs.find((c: any) => c._id === item.assignedTo || c.user?._id === item.assignedTo);
+        if (!chef || !chef.department?._id) {
+          console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - No department for chef:`, item.assignedTo);
+          throw new Error(createErrorMessage('chefNoDepartment', isArabic));
+        }
+      }
+
       const response = await api.patch(`/factoryOrders/${id}/assign`, {
         items: data.items.map((item) => ({
           itemId: item.itemId,
@@ -1234,20 +1265,22 @@ export const factoryOrdersAPI = {
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Response:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Error:`, error.message);
-      throw error;
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Error:`, error.response?.data?.message || error.message);
+      const errorMessage = error.response?.data?.message || createErrorMessage('invalidData', isArabic);
+      throw new Error(errorMessage);
     }
   },
 
   // Update the status of a factory order item
   updateItemStatus: async (id: string, itemId: string, data: { status: string }) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
     if (!isValidObjectId(id) || !isValidObjectId(itemId)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Invalid IDs:`, { id, itemId });
-      throw new Error(createErrorMessage('invalidId', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidId', isArabic));
     }
     if (!['pending', 'assigned', 'in_progress', 'completed'].includes(data.status)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateItemStatus - Invalid status:`, data.status);
-      throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidStatus', isArabic));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/items/${itemId}/status`, data);
@@ -1261,13 +1294,14 @@ export const factoryOrdersAPI = {
 
   // Update the status of a factory order
   updateStatus: async (id: string, data: { status: string }) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid factory order ID:`, id);
-      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidFactoryOrderId', isArabic));
     }
-    if (!['requested', 'pending', 'approved', 'in_production', 'completed', 'cancelled'].includes(data.status)) {
+    if (!['requested', 'pending', 'approved', 'in_production', 'completed', 'cancelled', 'stocked'].includes(data.status)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid status:`, data.status);
-      throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidStatus', isArabic));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/status`, data);
@@ -1281,9 +1315,10 @@ export const factoryOrdersAPI = {
 
   // Confirm production for a factory order
   confirmProduction: async (id: string) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Invalid factory order ID:`, id);
-      throw new Error(createErrorMessage('invalidFactoryOrderId', localStorage.getItem('language') === 'ar'));
+      throw new Error(createErrorMessage('invalidFactoryOrderId', isArabic));
     }
     try {
       const response = await api.patch(`/factoryOrders/${id}/confirm-production`);
