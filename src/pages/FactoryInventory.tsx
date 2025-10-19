@@ -2,22 +2,23 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId } from '../services/api';
+import { Package, Plus, X, Eye, Edit, AlertCircle, MinusCircle } from 'lucide-react';
+import { factoryOrdersAPI, factoryInventoryAPI, chefsAPI, isValidObjectId } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
+import { Button } from '../components/UI/Button';
+import { Select } from '../components/UI/Select';
 
-// Enums for type safety
+// Enums and Interfaces
 enum InventoryStatus {
   LOW = 'low',
   NORMAL = 'normal',
   FULL = 'full',
 }
 
-// Interfaces aligned with backend
 interface FactoryInventoryItem {
   _id: string;
   product: {
@@ -38,9 +39,20 @@ interface FactoryInventoryItem {
   inProduction: boolean;
 }
 
+interface Chef {
+  _id: string;
+  user: {
+    name: string;
+    nameEn?: string;
+    username: string;
+  };
+  department: string;
+}
+
 interface ProductionItem {
   product: string;
   quantity: number;
+  assignedTo?: string;
 }
 
 interface ProductionFormState {
@@ -71,7 +83,7 @@ interface AvailableProduct {
 interface FactoryOrder {
   _id: string;
   orderNumber: string;
-  items: { productId: string; quantity: number; status: string }[];
+  items: { productId: string; quantity: number; status: string; assignedTo?: string }[];
   status: 'pending' | 'in_production' | 'completed' | 'cancelled';
 }
 
@@ -94,6 +106,7 @@ const translations = {
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
     selectProduct: 'اختر منتج',
+    selectChef: 'اختر شيف',
     filterByStatus: 'تصفية حسب الحالة',
     filterByDepartment: 'تصفية حسب القسم',
     allStatuses: 'جميع الحالات',
@@ -102,9 +115,9 @@ const translations = {
     notesPlaceholder: 'أدخل ملاحظات إضافية (اختياري)',
     items: 'العناصر',
     addItem: 'إضافة عنصر',
-    removeItem: 'إزالة العنصر',
+    remove: 'إزالة',
     submit: 'إرسال',
-    submitting: 'جاري الإرسال...',
+    submitting: 'جارٍ الإرسال...',
     cancel: 'إلغاء',
     save: 'حفظ',
     saving: 'جاري الحفظ...',
@@ -116,8 +129,11 @@ const translations = {
     produced_stock: 'إنتاج مخزون',
     adjustment: 'تعديل',
     inProduction: 'في الإنتاج',
+    availableProducts: 'المنتجات المتوفرة',
+    allProducts: 'جميع المنتجات',
     errors: {
       fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
+      fetchChefs: 'خطأ في جلب بيانات الشيفات',
       createProduction: 'خطأ في إنشاء طلب الإنتاج',
       updateInventory: 'خطأ في تحديث المخزون',
       invalidForm: 'البيانات المدخلة غير صالحة',
@@ -130,6 +146,7 @@ const translations = {
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
+      noChefSelected: 'لم يتم اختيار شيف',
     },
     notifications: {
       productionCreated: 'تم إنشاء طلب الإنتاج بنجاح',
@@ -155,6 +172,7 @@ const translations = {
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
     selectProduct: 'Select Product',
+    selectChef: 'Select Chef',
     filterByStatus: 'Filter by Status',
     filterByDepartment: 'Filter by Department',
     allStatuses: 'All Statuses',
@@ -163,7 +181,7 @@ const translations = {
     notesPlaceholder: 'Enter additional notes (optional)',
     items: 'Items',
     addItem: 'Add Item',
-    removeItem: 'Remove Item',
+    remove: 'Remove',
     submit: 'Submit',
     submitting: 'Submitting...',
     cancel: 'Cancel',
@@ -177,8 +195,11 @@ const translations = {
     produced_stock: 'Produced Stock',
     adjustment: 'Adjustment',
     inProduction: 'In Production',
+    availableProducts: 'Available Products',
+    allProducts: 'All Products',
     errors: {
       fetchInventory: 'Error fetching factory inventory data',
+      fetchChefs: 'Error fetching chefs data',
       createProduction: 'Error creating production order',
       updateInventory: 'Error updating inventory',
       invalidForm: 'Invalid form data',
@@ -191,6 +212,7 @@ const translations = {
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
+      noChefSelected: 'No chef selected',
     },
     notifications: {
       productionCreated: 'Production order created successfully',
@@ -228,14 +250,15 @@ const QuantityInput = ({
 
   return (
     <div className="flex items-center gap-2">
-      <button
+      <Button
+        variant="secondary"
         onClick={onDecrement}
-        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
-        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
+        className="w-8 h-8 rounded-full disabled:opacity-50"
+        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
       >
-        <Minus className="w-4 h-4" />
-      </button>
+        <MinusCircle className="w-4 h-4" />
+      </Button>
       <input
         type="number"
         value={value}
@@ -245,13 +268,592 @@ const QuantityInput = ({
         style={{ appearance: 'none', MozAppearance: 'textfield' }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
-      <button
+      <Button
+        variant="primary"
         onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
       >
         <Plus className="w-4 h-4 text-white" />
-      </button>
+      </Button>
+    </div>
+  );
+};
+
+// InventoryCard Component
+const InventoryCard = ({
+  item,
+  onOpenProductionModal,
+  onOpenEditModal,
+  onOpenDetailsModal,
+  isRtl,
+  t,
+}: {
+  item: FactoryInventoryItem;
+  onOpenProductionModal: (item: FactoryInventoryItem) => void;
+  onOpenEditModal: (item: FactoryInventoryItem) => void;
+  onOpenDetailsModal: (item: FactoryInventoryItem) => void;
+  isRtl: boolean;
+  t: typeof translations['ar'] | typeof translations['en'];
+}) => {
+  if (!item.product) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
+    >
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
+            {item.product.displayName}
+          </h3>
+          <p className="text-sm text-gray-500">{item.product.code}</p>
+        </div>
+        <p className="text-sm text-amber-600">
+          {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
+        </p>
+        <p className="text-sm text-gray-600">
+          {t.stock}: {item.currentStock}
+        </p>
+        <p className="text-sm text-gray-600">
+          {t.minStock}: {item.minStockLevel}
+        </p>
+        <p className="text-sm text-gray-600">
+          {t.maxStock}: {item.maxStockLevel}
+        </p>
+        <p className="text-sm text-gray-600">
+          {t.unit}: {item.product.displayUnit}
+        </p>
+        <p
+          className={`text-sm font-medium ${
+            item.status === InventoryStatus.LOW
+              ? 'text-red-600'
+              : item.status === InventoryStatus.FULL
+              ? 'text-yellow-600'
+              : 'text-green-600'
+          }`}
+        >
+          {item.status === InventoryStatus.LOW
+            ? t.lowStock
+            : item.status === InventoryStatus.FULL
+            ? t.full
+            : t.normal}
+        </p>
+        {item.inProduction && (
+          <p className="text-sm text-blue-600 flex items-center gap-1">
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+              />
+            </svg>
+            {t.inProduction}
+          </p>
+        )}
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <Button
+          variant="secondary"
+          onClick={() => onOpenDetailsModal(item)}
+          className="p-2 text-green-600 hover:text-green-800"
+          aria-label={t.viewDetails}
+        >
+          <Eye className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => onOpenEditModal(item)}
+          className="p-2 text-blue-600 hover:text-blue-800"
+          aria-label={t.editStockLimits}
+        >
+          <Edit className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => onOpenProductionModal(item)}
+          className="p-2 text-amber-600 hover:text-amber-800"
+          aria-label={t.create}
+        >
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+    </motion.div>
+  );
+};
+
+// ProductionModal Component
+const ProductionModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  formData,
+  setFormData,
+  errors,
+  setErrors,
+  products,
+  chefs,
+  isSubmitting,
+  isRtl,
+  t,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+  formData: ProductionFormState;
+  setFormData: React.Dispatch<ProductionFormAction>;
+  errors: Record<string, string>;
+  setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  products: AvailableProduct[];
+  chefs: Chef[];
+  isSubmitting: boolean;
+  isRtl: boolean;
+  t: typeof translations['ar'] | typeof translations['en'];
+}) => {
+  const productOptions = useMemo(
+    () => [
+      { value: '', label: t.selectProduct },
+      ...products.map((product) => ({
+        value: product.productId,
+        label: `${product.productName} (${t.unit}: ${product.unit}) - ${product.departmentName}`,
+      })),
+    ],
+    [products, t]
+  );
+
+  const chefOptions = useMemo(
+    () => [
+      { value: '', label: t.selectChef },
+      ...chefs.map((chef) => ({
+        value: chef._id,
+        label: isRtl ? chef.user.name : chef.user.nameEn || chef.user.name,
+      })),
+    ],
+    [chefs, t, isRtl]
+  );
+
+  const handleProductChange = (index: number, productId: string) => {
+    if (!isValidObjectId(productId)) {
+      setErrors((prev) => ({
+        ...prev,
+        [`item_${index}_product`]: t.errors.invalidProductId,
+      }));
+      return;
+    }
+    if (formData.items.some((item, i) => i !== index && item.product === productId)) {
+      setErrors((prev) => ({
+        ...prev,
+        [`item_${index}_product`]: t.errors.duplicateProduct,
+      }));
+      return;
+    }
+    setFormData({
+      type: 'UPDATE_ITEM',
+      payload: { index, field: 'product', value: productId },
+    });
+  };
+
+  const handleQuantityChange = (index: number, value: string) => {
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue) || numValue < 1) {
+      setErrors((prev) => ({
+        ...prev,
+        [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
+      }));
+      return;
+    }
+    setFormData({
+      type: 'UPDATE_ITEM',
+      payload: { index, field: 'quantity', value: numValue },
+    });
+  };
+
+  const handleChefChange = (index: number, chefId: string) => {
+    if (!isValidObjectId(chefId)) {
+      setErrors((prev) => ({
+        ...prev,
+        [`item_${index}_assignedTo`]: t.errors.noChefSelected,
+      }));
+      return;
+    }
+    setFormData({
+      type: 'UPDATE_ITEM',
+      payload: { index, field: 'assignedTo', value: chefId },
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isOpen ? 1 : 0 }}
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+        isOpen ? '' : 'pointer-events-none'
+      }`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t.create}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: isOpen ? 1 : 0.95, y: isOpen ? 0 : 20 }}
+        className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            className="p-2"
+            aria-label={t.cancel}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({ type: 'SET_NOTES', payload: e.target.value })}
+              placeholder={t.notesPlaceholder}
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+              rows={3}
+              aria-label={t.notes}
+            />
+            {errors.form && <p className="text-red-600 text-xs mt-1">{errors.form}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
+            {formData.items.map((item, index) => (
+              <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <Select
+                  value={item.product}
+                  options={productOptions}
+                  onChange={(value) => handleProductChange(index, value)}
+                  placeholder={t.selectProduct}
+                  ariaLabel={`${t.items} ${index + 1}`}
+                  className="w-full"
+                />
+                {errors[`item_${index}_product`] && (
+                  <p className="text-red-600 text-xs">{errors[`item_${index}_product`]}</p>
+                )}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                    <QuantityInput
+                      value={item.quantity}
+                      onChange={(val) => handleQuantityChange(index, val)}
+                      onIncrement={() =>
+                        setFormData({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'quantity', value: item.quantity + 1 },
+                        })
+                      }
+                      onDecrement={() =>
+                        setFormData({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'quantity', value: Math.max(item.quantity - 1, 1) },
+                        })
+                      }
+                    />
+                    {errors[`item_${index}_quantity`] && (
+                      <p className="text-red-600 text-xs mt-1">{errors[`item_${index}_quantity`]}</p>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.selectChef}</label>
+                    <Select
+                      value={item.assignedTo || ''}
+                      options={chefOptions}
+                      onChange={(value) => handleChefChange(index, value)}
+                      placeholder={t.selectChef}
+                      ariaLabel={`${t.selectChef} ${index + 1}`}
+                      className="w-full"
+                    />
+                    {errors[`item_${index}_assignedTo`] && (
+                      <p className="text-red-600 text-xs mt-1">{errors[`item_${index}_assignedTo`]}</p>
+                    )}
+                  </div>
+                </div>
+                {formData.items.length > 1 && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setFormData({ type: 'REMOVE_ITEM', payload: index })}
+                    className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                    aria-label={t.remove}
+                  >
+                    <MinusCircle className="w-4 h-4" />
+                    {t.remove}
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="secondary"
+              onClick={() =>
+                setFormData({
+                  type: 'ADD_ITEM',
+                  payload: { product: '', quantity: 1, assignedTo: '' },
+                })
+              }
+              className="flex items-center gap-2 text-amber-600 hover:text-amber-800"
+              aria-label={t.addItem}
+            >
+              <Plus className="w-4 h-4" />
+              {t.addItem}
+            </Button>
+            {errors.items && <p className="text-red-600 text-xs">{errors.items}</p>}
+          </div>
+          <div className={`flex gap-3 ${isRtl ? 'justify-start' : 'justify-end'}`}>
+            <Button
+              variant="secondary"
+              onClick={onClose}
+              className="px-4 py-2"
+              aria-label={t.cancel}
+            >
+              {t.cancel}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
+              aria-label={isSubmitting ? t.submitting : t.submit}
+            >
+              {isSubmitting ? t.submitting : t.submit}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// EditModal Component
+const EditModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  formData,
+  setFormData,
+  errors,
+  isSubmitting,
+  isRtl,
+  t,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+  formData: EditForm;
+  setFormData: React.Dispatch<React.SetStateAction<EditForm>>;
+  errors: Record<string, string>;
+  isSubmitting: boolean;
+  isRtl: boolean;
+  t: typeof translations['ar'] | typeof translations['en'];
+}) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isOpen ? 1 : 0 }}
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+        isOpen ? '' : 'pointer-events-none'
+      }`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t.editStockLimits}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: isOpen ? 1 : 0.95, y: isOpen ? 0 : 20 }}
+        className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            className="p-2"
+            aria-label={t.cancel}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
+            <input
+              type="number"
+              value={formData.minStockLevel}
+              onChange={(e) => setFormData({ ...formData, minStockLevel: parseInt(e.target.value) || 0 })}
+              min={0}
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+              aria-label={t.minStock}
+            />
+            {errors.minStockLevel && <p className="text-red-600 text-xs mt-1">{errors.minStockLevel}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
+            <input
+              type="number"
+              value={formData.maxStockLevel}
+              onChange={(e) => setFormData({ ...formData, maxStockLevel: parseInt(e.target.value) || 0 })}
+              min={0}
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+              aria-label={t.maxStock}
+            />
+            {errors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{errors.maxStockLevel}</p>}
+          </div>
+          {errors.form && <p className="text-red-600 text-xs">{errors.form}</p>}
+          <div className={`flex gap-3 ${isRtl ? 'justify-start' : 'justify-end'}`}>
+            <Button
+              variant="secondary"
+              onClick={onClose}
+              className="px-4 py-2"
+              aria-label={t.cancel}
+            >
+              {t.cancel}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
+              aria-label={isSubmitting ? t.saving : t.save}
+            >
+              {isSubmitting ? t.saving : t.save}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// DetailsModal Component
+const DetailsModal = ({
+  isOpen,
+  onClose,
+  history,
+  isLoading,
+  isRtl,
+  t,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  history: ProductHistoryEntry[];
+  isLoading: boolean;
+  isRtl: boolean;
+  t: typeof translations['ar'] | typeof translations['en'];
+}) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isOpen ? 1 : 0 }}
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+        isOpen ? '' : 'pointer-events-none'
+      }`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t.productDetails}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 20 }}
+        animate={{ scale: isOpen ? 1 : 0.95, y: isOpen ? 0 : 20 }}
+        className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            className="p-2"
+            aria-label={t.cancel}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+        {isLoading ? (
+          <div className="space-y-4 animate-pulse">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-10 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+        ) : history.length === 0 ? (
+          <p className="text-gray-600 text-sm">{t.noHistory}</p>
+        ) : (
+          <div className="space-y-4">
+            {history.map((entry) => (
+              <div key={entry._id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <p className="text-sm text-gray-600">
+                  {t.date}: {new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {t.type}: {entry.type === 'produced_stock' ? t.produced_stock : t.adjustment}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {t.quantity}: {entry.quantity}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {t.reference}: {entry.reference}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className={`mt-4 flex ${isRtl ? 'justify-start' : 'justify-end'}`}>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            className="px-4 py-2"
+            aria-label={t.cancel}
+          >
+            {t.cancel}
+          </Button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// Custom Tabs Component
+const CustomTabs = ({
+  selectedTab,
+  setSelectedTab,
+  tabs,
+  children,
+}: {
+  selectedTab: number;
+  setSelectedTab: React.Dispatch<React.SetStateAction<number>>;
+  tabs: string[];
+  children: React.ReactNode[];
+}) => {
+  return (
+    <div className="mb-6">
+      <div className="flex space-x-1 rounded-xl bg-gray-100 p-1">
+        {tabs.map((tab, index) => (
+          <button
+            key={index}
+            onClick={() => setSelectedTab(index)}
+            className={`w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-amber-600 ${
+              selectedTab === index ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/[0.12] hover:text-amber-700'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+      <div>{children[selectedTab]}</div>
     </div>
   );
 };
@@ -291,6 +893,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
       aggregated[item.product] = {
         product: item.product,
         quantity: 0,
+        assignedTo: item.assignedTo,
       };
     }
     aggregated[item.product].quantity += item.quantity;
@@ -299,7 +902,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
 };
 
 export const FactoryInventory: React.FC = () => {
-  const { t: languageT, language } = useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
@@ -315,12 +918,16 @@ export const FactoryInventory: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<FactoryInventoryItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [] });
+  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, {
+    notes: '',
+    items: [{ product: '', quantity: 1, assignedTo: '' }],
+  });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
-
+  const [allProducts, setAllProducts] = useState<AvailableProduct[]>([]);
+  const [selectedTab, setSelectedTab] = useState(0);
   const ITEMS_PER_PAGE = 10;
 
   // Custom debounce hook
@@ -335,6 +942,28 @@ export const FactoryInventory: React.FC = () => {
   };
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
+
+  // Chefs Query
+  const { data: chefsData, isLoading: chefsLoading, error: chefsError } = useQuery<Chef[], Error>({
+    queryKey: ['chefs', language],
+    queryFn: async () => {
+      const response = await chefsAPI.getAll();
+      console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
+      const data = Array.isArray(response) ? response : response?.data || response?.chefs || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
+      return data.filter((chef): chef is Chef => !!chef && isValidObjectId(chef._id));
+    },
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
+    onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
+      toast.error(err.message || t.errors.fetchChefs, { position: isRtl ? 'top-right' : 'top-left' });
+    },
+  });
 
   // Inventory Query
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
@@ -403,27 +1032,33 @@ export const FactoryInventory: React.FC = () => {
     retryDelay: (attempt) => (attempt + 1) * 1000,
   });
 
-  // Product History Query
-  const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
-    queryKey: ['factoryProductHistory', selectedProductId, language],
+  // All Products Query
+  const { data: allProductsData, isLoading: allProductsLoading } = useQuery<AvailableProduct[], Error>({
+    queryKey: ['allProducts', language],
     queryFn: async () => {
-      if (!selectedProductId || !isValidObjectId(selectedProductId)) {
-        throw new Error(t.errors.invalidProductId);
-      }
-      const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid data format, expected array, got:`, data);
+      const response = await factoryInventoryAPI.getAllProducts();
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAllProducts - Response:`, response);
+      const products = Array.isArray(response) ? response : response?.data || response?.products || [];
+      if (!Array.isArray(products)) {
+        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAllProducts - Invalid data format, expected array, got:`, products);
         return [];
       }
-      return data;
+      return products
+        .filter((product: any) => product && product._id && isValidObjectId(product._id))
+        .map((product: any) => ({
+          productId: product._id,
+          productName: isRtl ? product.name : product.nameEn || product.name,
+          unit: isRtl ? (product.unit || t.unit) : product.unitEn || product.unit || 'N/A',
+          departmentName: isRtl
+            ? product.department?.name || t.allDepartments
+            : product.department?.nameEn || product.department?.name || 'Unknown',
+        }));
     },
-    enabled: isDetailsModalOpen && !!selectedProductId && isValidObjectId(selectedProductId),
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Product history query error:`, err.message);
+      console.error(`[${new Date().toISOString()}] All products query error:`, err.message);
       toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
@@ -450,37 +1085,51 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  // Available products
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const response = await factoryInventoryAPI.getAvailableProducts();
-        console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
-        const products = Array.isArray(response) ? response : response?.data || response?.products || [];
-        if (!Array.isArray(products)) {
-          console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
-          setAvailableProducts([]);
-          return;
-        }
-        setAvailableProducts(
-          products
-            .filter((product: any) => product && product._id && isValidObjectId(product._id))
-            .map((product: any) => ({
-              productId: product._id,
-              productName: isRtl ? product.name : product.nameEn || product.name,
-              unit: isRtl ? (product.unit || t.unit) : product.unitEn || product.unit || 'N/A',
-              departmentName: isRtl
-                ? product.department?.name || t.allDepartments
-                : product.department?.nameEn || product.department?.name || 'Unknown',
-            }))
-        );
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Error fetching products:`, err.message);
-        toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
+  // Product History Query
+  const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
+    queryKey: ['factoryProductHistory', selectedProductId, language],
+    queryFn: async () => {
+      if (!selectedProductId || !isValidObjectId(selectedProductId)) {
+        throw new Error(t.errors.invalidProductId);
       }
-    };
-    fetchProducts();
-  }, [isRtl, t]);
+      const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
+      const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid data format, expected array, got:`, data);
+        return [];
+      }
+      return data;
+    },
+    enabled: isDetailsModalOpen && !!selectedProductId && isValidObjectId(selectedProductId),
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
+    onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Product history query error:`, err.message);
+      toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
+    },
+  });
+
+  // Set available and all products
+  useEffect(() => {
+    if (inventoryData) {
+      setAvailableProducts(
+        inventoryData
+          .filter((item) => item.currentStock > 0)
+          .map((item) => ({
+            productId: item.product!._id,
+            productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
+            unit: isRtl ? (item.product!.unit || t.unit) : item.product!.unitEn || item.product!.unit || 'N/A',
+            departmentName: isRtl
+              ? item.product!.department?.name || t.allDepartments
+              : item.product!.department?.nameEn || item.product!.department?.name || 'Unknown',
+          }))
+      );
+    }
+    if (allProductsData) {
+      setAllProducts(allProductsData);
+    }
+  }, [inventoryData, allProductsData, isRtl, t]);
 
   // Socket Events
   useEffect(() => {
@@ -589,7 +1238,6 @@ export const FactoryInventory: React.FC = () => {
     socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
 
-    // WebSocket reconnection logic
     const reconnectInterval = setInterval(() => {
       if (!isConnected && socket) {
         console.log(`[${new Date().toISOString()}] Attempting to reconnect WebSocket...`);
@@ -643,18 +1291,6 @@ export const FactoryInventory: React.FC = () => {
     [t]
   );
 
-  // Product options
-  const productOptions = useMemo(
-    () => [
-      { value: '', label: t.selectProduct },
-      ...availableProducts.map((product) => ({
-        value: product.productId,
-        label: `${product.productName} (${t.unit}: ${product.unit}) - ${product.departmentName}`,
-      })),
-    ],
-    [availableProducts, t]
-  );
-
   // Filtered and paginated inventory
   const filteredInventory = useMemo(
     () =>
@@ -670,12 +1306,28 @@ export const FactoryInventory: React.FC = () => {
     [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment]
   );
 
+  const filteredAllProducts = useMemo(
+    () =>
+      (allProducts || []).filter(
+        (product) =>
+          product.productName.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          product.departmentName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+      ),
+    [allProducts, debouncedSearchQuery]
+  );
+
   const paginatedInventory = useMemo(
     () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
     [filteredInventory, currentPage]
   );
 
+  const paginatedAllProducts = useMemo(
+    () => filteredAllProducts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredAllProducts, currentPage]
+  );
+
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+  const totalAllProductsPages = Math.ceil(filteredAllProducts.length / ITEMS_PER_PAGE);
 
   // Handlers
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -688,15 +1340,12 @@ export const FactoryInventory: React.FC = () => {
     if (item?.product) {
       dispatchProductionForm({
         type: 'ADD_ITEM',
-        payload: {
-          product: item.product._id,
-          quantity: 1,
-        },
+        payload: { product: item.product._id, quantity: 1, assignedTo: '' },
       });
     } else {
       dispatchProductionForm({
         type: 'ADD_ITEM',
-        payload: { product: '', quantity: 1 },
+        payload: { product: '', quantity: 1, assignedTo: '' },
       });
     }
     setProductionErrors({});
@@ -719,63 +1368,6 @@ export const FactoryInventory: React.FC = () => {
     }
   }, [t, isRtl]);
 
-  const addItemToForm = useCallback(() => {
-    dispatchProductionForm({
-      type: 'ADD_ITEM',
-      payload: { product: '', quantity: 1 },
-    });
-  }, []);
-
-  const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
-    if (field === 'quantity' && typeof value === 'string') {
-      const numValue = parseInt(value, 10);
-      if (isNaN(numValue) || numValue < 1) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
-        }));
-        return;
-      }
-      value = numValue;
-    }
-    dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-  }, [t]);
-
-  const handleProductChange = useCallback(
-    (index: number, productId: string) => {
-      if (!isValidObjectId(productId)) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_product`]: t.errors.invalidProductId,
-        }));
-        return;
-      }
-      if (productionForm.items.some((item, i) => i !== index && item.product === productId)) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_product`]: t.errors.duplicateProduct,
-        }));
-        return;
-      }
-      dispatchProductionForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'product', value: productId },
-      });
-    },
-    [t, productionForm.items]
-  );
-
-  const removeItemFromForm = useCallback((index: number) => {
-    dispatchProductionForm({ type: 'REMOVE_ITEM', payload: index });
-    setProductionErrors((prev) => {
-      const newErrors = { ...prev };
-      Object.keys(newErrors).forEach((key) => {
-        if (key.startsWith(`item_${index}_`)) delete newErrors[key];
-      });
-      return newErrors;
-    });
-  }, []);
-
   const validateProductionForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (productionForm.items.length === 0) {
@@ -789,6 +1381,11 @@ export const FactoryInventory: React.FC = () => {
       }
       if (item.quantity < 1 || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax;
+      }
+      if (!item.assignedTo) {
+        errors[`item_${index}_assignedTo`] = t.errors.noChefSelected;
+      } else if (!isValidObjectId(item.assignedTo)) {
+        errors[`item_${index}_assignedTo`] = t.errors.noChefSelected;
       }
     });
     setProductionErrors(errors);
@@ -824,7 +1421,11 @@ export const FactoryInventory: React.FC = () => {
       }
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
-        items: aggregatedItems,
+        items: aggregatedItems.map((item) => ({
+          productId: item.product,
+          quantity: item.quantity,
+          assignedTo: item.assignedTo,
+        })),
         notes: productionForm.notes || undefined,
         priority: 'medium',
       };
@@ -917,7 +1518,7 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  const errorMessage = inventoryError?.message || '';
+  const errorMessage = inventoryError?.message || chefsError?.message || '';
 
   return (
     <div className="mx-auto px-4 py-4 max-w-7xl">
@@ -929,14 +1530,15 @@ export const FactoryInventory: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.description}</p>
           </div>
         </div>
-        <button
+        <Button
+          variant="primary"
           onClick={() => handleOpenProductionModal()}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
           aria-label={t.create}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 mr-2" />
           {t.create}
-        </button>
+        </Button>
       </div>
 
       {errorMessage && (
@@ -985,457 +1587,256 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </div>
         <div className="mt-4 text-center text-sm text-gray-600 font-medium">
-          {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
+          {isRtl ? `عدد العناصر: ${selectedTab === 0 ? filteredInventory.length : filteredAllProducts.length}` : `Items Count: ${selectedTab === 0 ? filteredInventory.length : filteredAllProducts.length}`}
         </div>
       </div>
 
-      {inventoryLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="space-y-3 animate-pulse">
-                <div className="flex items-center justify-between">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                </div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="mt-4 flex justify-end">
-                  <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : paginatedInventory.length === 0 ? (
-        <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
-          <button
-            onClick={() => handleOpenProductionModal()}
-            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.create}
-          >
-            {t.create}
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <AnimatePresence>
-            {paginatedInventory.map((item) =>
-              item.product ? (
-                <motion.div
-                  key={item._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                        {item.product.displayName}
-                      </h3>
-                      <p className="text-sm text-gray-500">{item.product.code}</p>
-                    </div>
-                    <p className="text-sm text-amber-600">
-                      {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.stock}: {item.currentStock}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.minStock}: {item.minStockLevel}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.maxStock}: {item.maxStockLevel}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.unit}: {item.product.displayUnit}
-                    </p>
-                    <p
-                      className={`text-sm font-medium ${
-                        item.status === InventoryStatus.LOW
-                          ? 'text-red-600'
-                          : item.status === InventoryStatus.FULL
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                      }`}
-                    >
-                      {item.status === InventoryStatus.LOW
-                        ? t.lowStock
-                        : item.status === InventoryStatus.FULL
-                        ? t.full
-                        : t.normal}
-                    </p>
-                    {item.inProduction && (
-                      <p className="text-sm text-blue-600 flex items-center gap-1">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-                          />
-                        </svg>
-                        {t.inProduction}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-4 flex justify-end gap-2">
-                    <button
-                      onClick={() => handleOpenDetailsModal(item)}
-                      className="p-2 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
-                      aria-label={t.viewDetails}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleOpenEditModal(item)}
-                      className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
-                      aria-label={t.editStockLimits}
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleOpenProductionModal(item)}
-                      className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
-                      aria-label={t.create}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              ) : null
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {totalInventoryPages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <button
-            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-            disabled={currentPage === 1}
-            aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
-          >
-            {isRtl ? 'السابق' : 'Previous'}
-          </button>
-          <span className="text-gray-700 font-medium">
-            {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
-          </span>
-          <button
-            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-            disabled={currentPage === totalInventoryPages}
-            aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-          >
-            {isRtl ? 'التالي' : 'Next'}
-          </button>
-        </div>
-      )}
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isProductionModalOpen ? '' : 'pointer-events-none'
-        }`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.create}
+      <CustomTabs
+        selectedTab={selectedTab}
+        setSelectedTab={setSelectedTab}
+        tabs={[t.availableProducts, t.allProducts]}
       >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isProductionModalOpen ? 1 : 0.95, y: isProductionModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
-        >
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
-            <button
-              onClick={() => {
-                setIsProductionModalOpen(false);
-                dispatchProductionForm({ type: 'RESET' });
-                setProductionErrors({});
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
-              <textarea
-                value={productionForm.notes}
-                onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
-                placeholder={t.notesPlaceholder}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                rows={3}
-                aria-label={t.notes}
-              />
-              {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-              {productionForm.items.map((item, index) => (
-                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <ProductDropdown
-                    value={item.product}
-                    onChange={(value) => handleProductChange(index, value)}
-                    options={productOptions}
-                    ariaLabel={`${t.items} ${index + 1}`}
-                    placeholder={t.selectProduct}
-                    className="w-full"
-                  />
-                  {productionErrors[`item_${index}_product`] && (
-                    <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
-                  )}
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
-                      <QuantityInput
-                        value={item.quantity}
-                        onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                        onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                        onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
-                      />
-                      {productionErrors[`item_${index}_quantity`] && (
-                        <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
-                      )}
+        <div>
+          {inventoryLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+                  <div className="space-y-3 animate-pulse">
+                    <div className="flex items-center justify-between">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
                     </div>
-                    {productionForm.items.length > 1 && (
-                      <button
-                        onClick={() => removeItemFromForm(index)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
-                        aria-label={t.removeItem}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    <div className="mt-4 flex justify-end">
+                      <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
+                    </div>
                   </div>
                 </div>
               ))}
-              <button
-                onClick={addItemToForm}
-                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                aria-label={t.addItem}
-              >
-                <Plus className="w-4 h-4" />
-                {t.addItem}
-              </button>
-              {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
             </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setIsProductionModalOpen(false);
-                  dispatchProductionForm({ type: 'RESET' });
-                  setProductionErrors({});
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
+          ) : paginatedInventory.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
+              <Button
+                variant="primary"
+                onClick={() => handleOpenProductionModal()}
+                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
+                aria-label={t.create}
               >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => createProductionMutation.mutate()}
-                disabled={createProductionMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
-              >
-                {createProductionMutation.isLoading ? t.submitting : t.submit}
-              </button>
+                {t.create}
+              </Button>
             </div>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isEditModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isEditModalOpen ? '' : 'pointer-events-none'
-        }`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.editStockLimits}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-        >
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
-              <button
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditErrors({});
-                  setSelectedItem(null);
-                }}
-                className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {selectedItem?.product && (
-              <p className="text-sm text-gray-600">
-                {t.productDetails}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-              </p>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
-              <input
-                type="number"
-                value={editForm.minStockLevel}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value, 10);
-                  setEditForm((prev) => ({ ...prev, minStockLevel: isNaN(value) ? 0 : value }));
-                  setEditErrors((prev) => ({ ...prev, minStockLevel: undefined }));
-                }}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
-                aria-label={t.minStock}
-              />
-              {editErrors.minStockLevel && (
-                <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
-              <input
-                type="number"
-                value={editForm.maxStockLevel}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value, 10);
-                  setEditForm((prev) => ({ ...prev, maxStockLevel: isNaN(value) ? 0 : value }));
-                  setEditErrors((prev) => ({ ...prev, maxStockLevel: undefined }));
-                }}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
-                aria-label={t.maxStock}
-              />
-              {editErrors.maxStockLevel && (
-                <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>
-              )}
-            </div>
-            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditErrors({});
-                  setSelectedItem(null);
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => updateInventoryMutation.mutate()}
-                disabled={updateInventoryMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
-              >
-                {updateInventoryMutation.isLoading ? t.saving : t.save}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isDetailsModalOpen ? '' : 'pointer-events-none'
-        }`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.productDetails}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
-        >
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
-              <button
-                onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
-                }}
-                className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+                {paginatedInventory.map((item) => (
+                  <InventoryCard
+                    key={item._id}
+                    item={item}
+                    onOpenProductionModal={handleOpenProductionModal}
+                    onOpenEditModal={handleOpenEditModal}
+                    onOpenDetailsModal={handleOpenDetailsModal}
+                    isRtl={isRtl}
+                    t={t}
+                  />
                 ))}
-              </div>
-            ) : productHistory && productHistory.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-600">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2 px-4 text-left font-medium">{t.date}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.type}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.reference}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b border-gray-100">
-                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                        <td className="py-2 px-4">{t[entry.type]}</td>
-                        <td className="py-2 px-4">{entry.quantity}</td>
-                        <td className="py-2 px-4">{entry.reference || 'N/A'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-gray-600 text-sm">{t.noHistory}</p>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
+              </AnimatePresence>
             </div>
-          </div>
-        </motion.div>
-      </motion.div>
+          )}
+          {totalInventoryPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2"
+                aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
+              >
+                {isRtl ? 'السابق' : 'Previous'}
+              </Button>
+              <span className="text-gray-700 font-medium">
+                {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
+                disabled={currentPage === totalInventoryPages}
+                className="px-4 py-2"
+                aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
+              >
+                {isRtl ? 'التالي' : 'Next'}
+              </Button>
+            </div>
+          )}
+        </div>
+        <div>
+          {allProductsLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+                  <div className="space-y-3 animate-pulse">
+                    <div className="flex items-center justify-between">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                    </div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    <div className="mt-4 flex justify-end">
+                      <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : paginatedAllProducts.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
+              <Button
+                variant="primary"
+                onClick={() => handleOpenProductionModal()}
+                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
+                aria-label={t.create}
+              >
+                {t.create}
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+                {paginatedAllProducts.map((product) => (
+                  <motion.div
+                    key={product.productId}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200  p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
+                  >
+                    <div className="space-y-2">
+                      <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
+                        {product.productName}
+                      </h3>
+                      <p className="text-sm text-amber-600">
+                        {t.filterByDepartment}: {product.departmentName}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {t.unit}: {product.unit}
+                      </p>
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleOpenProductionModal({ 
+                          product: { 
+                            _id: product.productId, 
+                            name: product.productName, 
+                            displayName: product.productName, 
+                            unit: product.unit, 
+                            displayUnit: product.unit, 
+                            department: null, 
+                            code: '', 
+                            nameEn: '', 
+                            unitEn: '' 
+                          }, 
+                          _id: product.productId, 
+                          currentStock: 0, 
+                          minStockLevel: 0, 
+                          maxStockLevel: 0, 
+                          status: InventoryStatus.NORMAL, 
+                          inProduction: false 
+                        })}
+                        className="p-2 text-amber-600 hover:text-amber-800"
+                        aria-label={t.create}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+          {totalAllProductsPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2"
+                aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
+              >
+                {isRtl ? 'السابق' : 'Previous'}
+              </Button>
+              <span className="text-gray-700 font-medium">
+                {isRtl ? `الصفحة ${currentPage} من ${totalAllProductsPages}` : `Page ${currentPage} of ${totalAllProductsPages}`}
+              </span>
+              <Button
+                variant="secondary"
+                onClick={() => setCurrentPage(Math.min(currentPage + 1, totalAllProductsPages))}
+                disabled={currentPage === totalAllProductsPages}
+                className="px-4 py-2"
+                aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
+              >
+                {isRtl ? 'التالي' : 'Next'}
+              </Button>
+            </div>
+          )}
+        </div>
+      </CustomTabs>
+
+      <ProductionModal
+        isOpen={isProductionModalOpen}
+        onClose={() => {
+          setIsProductionModalOpen(false);
+          dispatchProductionForm({ type: 'RESET' });
+          setProductionErrors({});
+        }}
+        onSubmit={() => createProductionMutation.mutate()}
+        formData={productionForm}
+        setFormData={dispatchProductionForm}
+        errors={productionErrors}
+        setErrors={setProductionErrors}
+        products={allProducts}
+        chefs={chefsData || []}
+        isSubmitting={createProductionMutation.isLoading}
+        isRtl={isRtl}
+        t={t}
+      />
+
+      <EditModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+          setEditErrors({});
+          setSelectedItem(null);
+        }}
+        onSubmit={() => updateInventoryMutation.mutate()}
+        formData={editForm}
+        setFormData={setEditForm}
+        errors={editErrors}
+        isSubmitting={updateInventoryMutation.isLoading}
+        isRtl={isRtl}
+        t={t}
+      />
+
+      <DetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedProductId('');
+        }}
+        history={productHistory || []}
+        isLoading={historyLoading}
+        isRtl={isRtl}
+        t={t}
+      />
     </div>
   );
 };
 
-export default FactoryInventory ;
+export default FactoryInventory;
