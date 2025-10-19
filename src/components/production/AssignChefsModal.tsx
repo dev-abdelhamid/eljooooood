@@ -23,7 +23,8 @@ interface AssignChefsModalProps {
   loading: boolean;
 }
 
-const translateUnit = (unit: string, isRtl: boolean): string => {
+const translateUnit = (unit: string | undefined, isRtl: boolean): string => {
+  if (!unit) return isRtl ? 'وحدة' : 'unit';
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
     'قطعة': { ar: 'قطعة', en: 'piece' },
@@ -52,6 +53,18 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const { user } = useAuth();
 
+  const availableChefsByDepartment = useMemo(() => {
+    const map = new Map<string, Chef[]>();
+    chefs.forEach((chef) => {
+      const departmentId = chef.department?._id.toString() || 'no-department';
+      if (!map.has(departmentId)) {
+        map.set(departmentId, []);
+      }
+      map.get(departmentId)!.push(chef);
+    });
+    return map;
+  }, [chefs]);
+
   const updateAssignment = useCallback(
     (index: number, value: string) => {
       setAssignForm({
@@ -67,23 +80,23 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     if (!selectedOrder || !user) return;
 
     const updatedItems = selectedOrder.items.filter(item => !item.assignedTo).map((item) => {
-      const departmentId = item.department._id;
-      const deptChefs = chefs.filter(chef => chef.department._id === departmentId);
+      const departmentId = item.department?._id?.toString() || 'no-department';
+      const availableChefs = availableChefsByDepartment.get(departmentId) || [];
       let assignedTo = '';
-      if (deptChefs.length === 1) {
-        assignedTo = deptChefs[0].userId;
+      if (availableChefs.length === 1) {
+        assignedTo = availableChefs[0].userId;
       }
       return {
         itemId: item._id,
         assignedTo,
-        product: item.displayProductName,
+        product: item.displayProductName || (isRtl ? 'غير معروف' : 'Unknown'),
         quantity: item.quantity,
         unit: translateUnit(item.unit, isRtl),
       };
     });
 
     setAssignForm({ items: updatedItems });
-  }, [chefs, selectedOrder, setAssignForm, isRtl, user]);
+  }, [availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user]);
 
   return (
     <Modal
@@ -114,14 +127,16 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         ) : (
           assignFormData.items.map((item, index) => {
             const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
-            const departmentId = orderItem?.department?._id;
-            const availableChefs = chefs.filter(chef => chef.department._id === departmentId);
+            const departmentId = orderItem?.department?._id?.toString() || 'no-department';
+            const availableChefs = availableChefsByDepartment.get(departmentId) || [];
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-              ...availableChefs.map((chef) => ({
-                value: chef.userId,
-                label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
-              })),
+              ...availableChefs
+                .sort((a, b) => a.displayName.localeCompare(b.displayName))
+                .map((chef) => ({
+                  value: chef.userId,
+                  label: `${chef.displayName} (${chef.department.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+                })),
             ];
 
             return (
