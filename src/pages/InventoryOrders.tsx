@@ -21,19 +21,13 @@ import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
-const QuantityInput = ({
-  value,
-  onChange,
-  onIncrement,
-  onDecrement,
-  max,
-}: {
+const QuantityInput: React.FC<{
   value: number;
   onChange: (val: string) => void;
   onIncrement: () => void;
   onDecrement: () => void;
   max?: number;
-}) => {
+}> = ({ value, onChange, onIncrement, onDecrement, max }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
@@ -81,7 +75,7 @@ const QuantityInput = ({
   );
 };
 
-const normalizeText = (text: string) => {
+const normalizeText = (text: string): string => {
   return text
     .normalize('NFD')
     .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '')
@@ -331,7 +325,7 @@ const sortOptions = [
   { value: 'totalQuantity', label: 'sort_total_quantity' },
 ];
 
-const translateUnit = (unit: string, isRtl: boolean) => {
+const translateUnit = (unit: string, isRtl: boolean): string => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
     'قطعة': { ar: 'قطعة', en: 'piece' },
@@ -367,7 +361,7 @@ export const InventoryOrders: React.FC = () => {
     stateRef.current = state;
   }, [state]);
 
-  const calculateTotalQuantity = useCallback((order: FactoryOrder) => {
+  const calculateTotalQuantity = useCallback((order: FactoryOrder): number => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
@@ -387,14 +381,16 @@ export const InventoryOrders: React.FC = () => {
           lang: language,
         };
 
+        if (state.filterStatus) query.status = state.filterStatus;
+        if (state.filterDepartment) query.department = state.filterDepartment;
+
         const [ordersResponse, chefsResponse, departmentsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
           chefsAPI.getAll({ lang: language }),
           departmentAPI.getAll({ lang: language }),
         ]);
 
-        // Fetch all products by looping through pages
-        let allProducts = [];
+        let allProducts: Product[] = [];
         let page = 1;
         let totalPages = 1;
         do {
@@ -404,7 +400,7 @@ export const InventoryOrders: React.FC = () => {
           page++;
         } while (page <= totalPages);
 
-        const departmentMap = new Map(departmentsResponse.data.map(d => [d._id, d]));
+        const departmentMap = new Map(departmentsResponse.data.map((d: any) => [d._id, d]));
 
         const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
         const mappedOrders: FactoryOrder[] = ordersData
@@ -447,6 +443,7 @@ export const InventoryOrders: React.FC = () => {
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
             createdByRole: order.createdBy?.role || 'unknown',
+            inventoryProcessed: order.inventoryProcessed || false,
           }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -522,7 +519,7 @@ export const InventoryOrders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, isRtl, language]
+    [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, state.filterStatus, state.filterDepartment, isRtl, language]
   );
 
   useEffect(() => {
@@ -603,6 +600,7 @@ export const InventoryOrders: React.FC = () => {
         priority: order.priority || 'medium',
         createdBy: order.createdBy?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
         createdByRole: order.createdBy?.role || 'unknown',
+        inventoryProcessed: order.inventoryProcessed || false,
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
@@ -676,849 +674,703 @@ export const InventoryOrders: React.FC = () => {
       if (!item.quantity || item.quantity < 1) {
         errors[`item_${index}_quantity`] = item.quantity === 0 ? t.quantityRequired : t.quantityInvalid;
       }
-      if (['admin', 'production'].includes(user.role) && !item.assignedTo) {
+      if (['admin', 'production'].includes(user?.role) && !item.assignedTo) {
         errors[`item_${index}_assignedTo`] = t.chefRequired;
       }
     });
 
     dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
     return Object.keys(errors).length === 0;
-  }, [state.createFormData, isRtl, user.role]);
+  }, [state.createFormData.items, user?.role, isRtl]);
 
-  const createOrder = useCallback(async () => {
-    if (!user?.id || !validateCreateForm()) {
-      return;
-    }
-
-    dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
-    try {
-      const orderNumber = `ORD-${Date.now()}`;
-      const isAdminOrProduction = ['admin', 'production'].includes(user.role);
-      const initialStatus = isAdminOrProduction ? 'approved' : 'requested';
-      const items = state.createFormData.items.map((i) => ({
-        product: i.productId,
-        quantity: i.quantity,
-        assignedTo: user.role === 'chef' ? user.id : i.assignedTo,
-      }));
-
-      const response = await factoryOrdersAPI.create({
-        orderNumber,
-        items,
-        notes: state.createFormData.notes,
-        priority: 'medium',
-      });
-
-      const newOrder: FactoryOrder = {
-        id: response.data._id,
-        orderNumber: response.data.orderNumber,
-        items: response.data.items.map((item: any) => ({
-          _id: item._id,
-          productId: item.product._id,
-          productName: item.product.name,
-          productNameEn: item.product.nameEn,
-          displayProductName: item.product.displayName || (isRtl ? item.product.name : item.product.nameEn || item.product.name),
-          quantity: Number(item.quantity),
-          unit: item.product.unit,
-          unitEn: item.product.unitEn,
-          displayUnit: translateUnit(item.product.unit, isRtl),
-          department: {
-            _id: item.product.department._id,
-            name: item.product.department.name,
-            nameEn: item.product.department.nameEn,
-            displayName: item.product.department.displayName || (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name),
-          },
-          assignedTo: item.assignedTo
-            ? {
-                _id: item.assignedTo._id,
-                username: item.assignedTo.username,
-                name: item.assignedTo.name,
-                nameEn: item.assignedTo.nameEn,
-                displayName: item.assignedTo.displayName || (isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name),
-                department: {
-                  _id: item.assignedTo.department._id,
-                  name: item.assignedTo.department.name,
-                  nameEn: item.assignedTo.department.nameEn,
-                  displayName: item.assignedTo.department.displayName || (isRtl ? item.assignedTo.department.name : item.assignedTo.department.nameEn || item.assignedTo.department.name),
-                },
-              }
-            : undefined,
-          status: item.status || 'pending',
-        })),
-        status: response.data.status || initialStatus,
-        date: formatDate(new Date(response.data.createdAt), language),
-        notes: response.data.notes || '',
-        priority: response.data.priority || 'medium',
-        createdBy: response.data.createdBy?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
-        createdByRole: response.data.createdBy?.role || 'unknown',
-      };
-
-      dispatch({ type: 'ADD_ORDER', payload: newOrder });
-      dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-      dispatch({ type: 'SET_CREATE_FORM', payload: { notes: '', items: [{ productId: '', quantity: 1 }] } });
-      dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
-
-      if (socket && isConnected) {
-        emit('newFactoryOrder', newOrder);
-      }
-
-      toast.success(isRtl ? 'تم إنشاء طلب الإنتاج بنجاح' : 'Production order created successfully', {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-
-      if (isAdminOrProduction && state.createFormData.items.some(i => !i.assignedTo)) {
-        dispatch({ type: 'SET_SELECTED_ORDER', payload: newOrder });
-        dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
-      }
-    } catch (err: any) {
-      console.error('Create order error:', err.message);
-      const errorMessage = isRtl ? `فشل في إنشاء الطلب: ${err.message}` : `Failed to create order: ${err.message}`;
-      dispatch({ type: 'SET_FORM_ERRORS', payload: { form: errorMessage } });
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
-    } finally {
-      dispatch({ type: 'SET_SUBMITTING', payload: null });
-    }
-  }, [user, state.createFormData, isRtl, socket, isConnected, emit, language, validateCreateForm]);
-
-  const updateOrderStatus = useCallback(
-    async (orderId: string, newStatus: FactoryOrder['status']) => {
-      const order = state.orders.find((o) => o.id === orderId);
-      if (!order || !validTransitions[order.status].includes(newStatus)) {
-        toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
+  const handleCreateOrder = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!validateCreateForm()) {
+        toast.error(isRtl ? 'يرجى تصحيح الأخطاء في النموذج' : 'Please fix form errors', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
         return;
       }
+
+      dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
+      try {
+        const orderNumber = `FO-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        const data = {
+          orderNumber,
+          items: state.createFormData.items.map((item) => ({
+            product: item.productId,
+            quantity: item.quantity,
+            assignedTo: item.assignedTo || undefined,
+          })),
+          notes: state.createFormData.notes.trim(),
+          priority: 'medium',
+        };
+
+        await factoryOrdersAPI.create(data);
+        dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+        dispatch({
+          type: 'SET_CREATE_FORM',
+          payload: { notes: '', items: [{ productId: '', quantity: 1 }] },
+        });
+        dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
+        toast.success(isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } catch (err: any) {
+        console.error('Create order error:', err.message);
+        const errorMessage = isRtl ? `خطأ في إنشاء الطلب: ${err.message}` : `Error creating order: ${err.message}`;
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [state.createFormData, isRtl, validateCreateForm]
+  );
+
+  const handleApproveOrder = useCallback(
+    async (orderId: string) => {
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
-        if (newStatus === 'stocked') {
-          const items = order.items.map((item) => ({
-            productId: item.productId,
-            currentStock: item.quantity,
-          }));
-          await factoryInventoryAPI.bulkCreate({
-            userId: user.id,
-            orderId,
-            items,
-          });
-        }
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
-        if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status: newStatus });
-        }
-        toast.success(isRtl ? `تم تحديث الحالة إلى: ${newStatus}` : `Order status updated to: ${newStatus}`, {
+        await factoryOrdersAPI.approve(orderId);
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: 'approved' });
+        toast.success(isRtl ? 'تمت الموافقة على الطلب' : 'Order approved successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } catch (err: any) {
+        console.error('Approve order error:', err.message);
+        const errorMessage = isRtl ? `خطأ في الموافقة على الطلب: ${err.message}` : `Error approving order: ${err.message}`;
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [isRtl]
+  );
+
+  const handleUpdateOrderStatus = useCallback(
+    async (orderId: string, status: FactoryOrder['status']) => {
+      if (!validTransitions[state.orders.find((o) => o.id === orderId)?.status || 'requested'].includes(status)) {
+        toast.error(isRtl ? 'انتقال الحالة غير صالح' : 'Invalid status transition', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await factoryOrdersAPI.updateStatus(orderId, { status });
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+        toast.success(isRtl ? `تم تحديث حالة الطلب إلى ${status}` : `Order status updated to ${status}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } catch (err: any) {
         console.error('Update order status error:', err.message);
-        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
+        const errorMessage = isRtl ? `خطأ في تحديث حالة الطلب: ${err.message}` : `Error updating order status: ${err.message}`;
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [state.orders, isRtl, socket, isConnected, emit, user]
+    [isRtl, state.orders]
   );
 
-  const confirmItemCompletion = useCallback(
+  const handleConfirmItemCompletion = useCallback(
     async (orderId: string, itemId: string) => {
-      if (!user?.id || user.role !== 'chef') {
-        toast.error(isRtl ? 'غير مصرح بتأكيد الإنتاج' : 'Not authorized to confirm production', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-        return;
-      }
-      const order = state.orders.find((o) => o.id === orderId);
-      if (!order) {
-        toast.error(isRtl ? 'الطلب غير موجود' : 'Order not found', { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      const item = order.items.find((i) => i._id === itemId);
-      if (!item || item.assignedTo?._id !== user.id) {
-        toast.error(isRtl ? 'غير مصرح بتأكيد هذا العنصر' : 'Not authorized to confirm this item', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-        return;
-      }
       dispatch({ type: 'SET_SUBMITTING', payload: itemId });
       try {
         await factoryOrdersAPI.updateItemStatus(orderId, itemId, { status: 'completed' });
         dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status: 'completed' } });
-        if (socket && isConnected) {
-          emit('itemStatusUpdated', { orderId, itemId, status: 'completed' });
-        }
-        toast.success(isRtl ? 'تم تأكيد إكمال الإنتاج' : 'Production completion confirmed', {
+        toast.success(isRtl ? 'تم إكمال العنصر' : 'Item completed successfully', {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } catch (err: any) {
         console.error('Confirm item completion error:', err.message);
-        toast.error(isRtl ? `فشل في تأكيد الإنتاج: ${err.message}` : `Failed to confirm production: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
+        const errorMessage = isRtl ? `خطأ في إكمال العنصر: ${err.message}` : `Error completing item: ${err.message}`;
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [user, state.orders, isRtl, socket, isConnected, emit]
+    [isRtl]
   );
 
-  const assignChefs = useCallback(
+  const handleAssignChefs = useCallback(
     async (orderId: string) => {
-      if (!user?.id || state.assignFormData.items.some((item) => !item.assignedTo)) {
-        toast.error(isRtl ? 'يرجى تعيين شيف لكل عنصر' : 'Please assign a chef to each item', {
+      const errors: Record<string, string> = {};
+      state.assignFormData.items.forEach((item, index) => {
+        if (!item.assignedTo) {
+          errors[`item_${index}_assignedTo`] = isRtl ? 'الشيف مطلوب' : 'Chef is required';
+        }
+      });
+
+      if (Object.keys(errors).length > 0) {
+        dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
+        toast.error(isRtl ? 'يرجى تعيين شيف لجميع العناصر' : 'Please assign a chef to all items', {
           position: isRtl ? 'top-left' : 'top-right',
         });
         return;
       }
+
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
-        const items = state.assignFormData.items.map((item) => ({
-          _id: item.itemId,
-          assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
-            _id: item.assignedTo,
-            username: 'unknown',
-            name: isRtl ? 'غير معروف' : 'Unknown',
-            displayName: isRtl ? 'غير معروف' : 'Unknown',
-            department: {
-              _id: 'no-department',
-              name: isRtl ? 'غير معروف' : 'Unknown',
-              displayName: isRtl ? 'غير معروف' : 'Unknown',
-            },
-          },
-          status: 'assigned' as FactoryOrderItem['status'],
-        }));
-        dispatch({ type: 'TASK_ASSIGNED', orderId, items });
+        await factoryOrdersAPI.assignChefs(orderId, {
+          items: state.assignFormData.items.map((item) => ({
+            itemId: item.itemId,
+            assignedTo: item.assignedTo,
+          })),
+        });
         dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-        if (socket && isConnected) {
-          emit('taskAssigned', { orderId, items });
-        }
+        dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
         toast.success(isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully', {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } catch (err: any) {
         console.error('Assign chefs error:', err.message);
-        toast.error(isRtl ? `فشل في تعيين الشيفات: ${err.message}` : `Failed to assign chefs: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
+        const errorMessage = isRtl ? `خطأ في تعيين الشيفات: ${err.message}` : `Error assigning chefs: ${err.message}`;
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
+    [state.assignFormData, isRtl]
   );
 
-  const openAssignModal = useCallback(
-    (order: FactoryOrder) => {
-      if (order.createdByRole === 'chef') {
-        toast.info(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it', {
+  const handleConfirmFactoryProduction = useCallback(
+    async (orderId: string) => {
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await factoryOrdersAPI.confirmProduction(orderId);
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: 'stocked' });
+        toast.success(isRtl ? 'تم تأكيد الإضافة إلى المخزون' : 'Inventory addition confirmed', {
           position: isRtl ? 'top-left' : 'top-right',
         });
-        return;
+      } catch (err: any) {
+        console.error('Confirm production error:', err.message);
+        const errorMessage = isRtl ? `خطأ في تأكيد الإنتاج: ${err.message}` : `Error confirming production: ${err.message}`;
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
-      if (order.status !== 'approved') {
-        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-        return;
-      }
-      dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-      dispatch({
-        type: 'SET_ASSIGN_FORM',
-        payload: {
-          items: order.items
-            .filter((item) => !item.assignedTo)
-            .map((item) => ({
-              itemId: item._id,
-              assignedTo: '',
-              product: item.displayProductName,
-              quantity: item.quantity,
-              unit: translateUnit(item.unit, isRtl),
-            })),
-        },
-      });
-      dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
     },
     [isRtl]
   );
 
-  const handlePageChange = useCallback((page: number) => {
-    dispatch({ type: 'SET_PAGE', payload: page });
-    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const handleOpenAssignModal = useCallback((order: FactoryOrder) => {
+    dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
+    dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
   }, []);
 
   const filteredOrders = useMemo(() => {
-    const normalizedQuery = normalizeText(state.debouncedSearchQuery);
-    return state.orders
-      .filter((order) => order)
-      .filter(
-        (order) =>
-          normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
-          normalizeText(order.notes || '').includes(normalizedQuery) ||
-          normalizeText(order.createdBy || '').includes(normalizedQuery) ||
-          order.items.some((item) => normalizeText(item.displayProductName || '').includes(normalizedQuery))
-      )
-      .filter(
-        (order) =>
-          (!state.filterStatus || order.status === state.filterStatus) &&
-          (!state.filterDepartment || order.items.some(item => item.department._id === state.filterDepartment)) &&
-          (user?.role === 'production' && user?.department
-            ? order.items.some((item) => item.department._id === user.department._id)
-            : true) &&
-          (user?.role === 'chef' ? order.items.some((item) => item.assignedTo?._id === user.id) : true)
-      );
-  }, [state.orders, state.debouncedSearchQuery, state.filterStatus, state.filterDepartment, user]);
+    let result = [...state.orders];
 
-  const sortedOrders = useMemo(() => {
-    return [...filteredOrders].sort((a, b) => {
+    if (state.filterStatus) {
+      result = result.filter((order) => order.status === state.filterStatus);
+    }
+
+    if (state.filterDepartment) {
+      result = result.filter((order) =>
+        order.items.some((item) => item.department._id === state.filterDepartment)
+      );
+    }
+
+    if (state.debouncedSearchQuery) {
+      const query = normalizeText(state.debouncedSearchQuery);
+      result = result.filter((order) =>
+        normalizeText(order.orderNumber).includes(query) ||
+        order.items.some((item) => normalizeText(item.displayProductName).includes(query))
+      );
+    }
+
+    if (user?.role === 'chef') {
+      result = result.filter((order) =>
+        order.items.some((item) => item.assignedTo?._id === user.id)
+      );
+    }
+
+    result.sort((a, b) => {
+      const multiplier = state.sortOrder === 'asc' ? 1 : -1;
       if (state.sortBy === 'date') {
-        return state.sortOrder === 'asc'
-          ? new Date(a.date).getTime() - new Date(b.date).getTime()
-          : new Date(b.date).getTime() - new Date(a.date).getTime();
+        return multiplier * (new Date(a.date).getTime() - new Date(b.date).getTime());
       } else {
-        const totalA = calculateTotalQuantity(a);
-        const totalB = calculateTotalQuantity(b);
-        return state.sortOrder === 'asc' ? totalA - totalB : totalB - totalA;
+        return multiplier * (calculateTotalQuantity(a) - calculateTotalQuantity(b));
       }
     });
-  }, [filteredOrders, state.sortBy, state.sortOrder, calculateTotalQuantity]);
 
-  const paginatedOrders = useMemo(
-    () =>
-      sortedOrders.slice(
-        (state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode],
-        state.currentPage * ORDERS_PER_PAGE[state.viewMode]
-      ),
-    [sortedOrders, state.currentPage, state.viewMode]
+    return result;
+  }, [
+    state.orders,
+    state.filterStatus,
+    state.filterDepartment,
+    state.debouncedSearchQuery,
+    state.sortBy,
+    state.sortOrder,
+    user?.role,
+    user?.id,
+    calculateTotalQuantity,
+  ]);
+
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode];
+    return filteredOrders.slice(startIndex, startIndex + ORDERS_PER_PAGE[state.viewMode]);
+  }, [filteredOrders, state.currentPage, state.viewMode]);
+
+  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE[state.viewMode]);
+
+  const handleAddItem = useCallback(() => {
+    dispatch({
+      type: 'SET_CREATE_FORM',
+      payload: {
+        ...state.createFormData,
+        items: [...state.createFormData.items, { productId: '', quantity: 1 }],
+      },
+    });
+  }, [state.createFormData]);
+
+  const handleRemoveItem = useCallback(
+    (index: number) => {
+      dispatch({
+        type: 'SET_CREATE_FORM',
+        payload: {
+          ...state.createFormData,
+          items: state.createFormData.items.filter((_, i) => i !== index),
+        },
+      });
+      const newErrors = { ...state.formErrors };
+      Object.keys(newErrors).forEach((key) => {
+        if (key.startsWith(`item_${index}_`)) {
+          delete newErrors[key];
+        }
+      });
+      dispatch({ type: 'SET_FORM_ERRORS', payload: newErrors });
+    },
+    [state.createFormData, state.formErrors]
   );
 
-  const totalPages = useMemo(
-    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.viewMode]
+  const handleUpdateItem = useCallback(
+    (index: number, field: 'productId' | 'quantity' | 'assignedTo', value: string | number) => {
+      const newItems = [...state.createFormData.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
+
+      const newErrors = { ...state.formErrors };
+      delete newErrors[`item_${index}_${field}`];
+      dispatch({ type: 'SET_FORM_ERRORS', payload: newErrors });
+    },
+    [state.createFormData, state.formErrors]
   );
+
+  const departmentOptions = useMemo(
+    () => [
+      { value: '', label: isRtl ? 'جميع الأقسام' : 'All Departments' },
+      ...state.departments.map((dept) => ({
+        value: dept._id,
+        label: dept.displayName,
+      })),
+    ],
+    [state.departments, isRtl]
+  );
+
+  const translations = {
+    ar: {
+      title: 'طلبات الإنتاج',
+      createOrder: 'إنشاء طلب جديد',
+      searchPlaceholder: 'ابحث حسب رقم الطلب أو المنتج',
+      status: 'الحالة',
+      department: 'القسم',
+      sortBy: 'ترتيب حسب',
+      sortOrder: 'ترتيب',
+      ascending: 'تصاعدي',
+      ascendingShort: '↑',
+      descending: 'تنازلي',
+      descendingShort: '↓',
+      viewMode: 'وضع العرض',
+      cardView: 'عرض البطاقات',
+      tableView: 'عرض الجدول',
+      noOrders: 'لا توجد طلبات متاحة',
+      loading: 'جارٍ التحميل...',
+      error: 'حدث خطأ أثناء جلب البيانات',
+      createOrderTitle: 'إنشاء طلب إنتاج جديد',
+      notes: 'ملاحظات',
+      addItem: 'إضافة عنصر',
+      submit: 'إنشاء الطلب',
+      cancel: 'إلغاء',
+      items: 'العناصر',
+      selectProduct: 'اختر منتج',
+      quantity: 'الكمية',
+      assignChef: 'تعيين شيف',
+      selectChef: 'اختر شيف',
+    },
+    en: {
+      title: 'Production Orders',
+      createOrder: 'Create New Order',
+      searchPlaceholder: 'Search by order number or product',
+      status: 'Status',
+      department: 'Department',
+      sortBy: 'Sort By',
+      sortOrder: 'Sort Order',
+      ascending: 'Ascending',
+      ascendingShort: '↑',
+      descending: 'Descending',
+      descendingShort: '↓',
+      viewMode: 'View Mode',
+      cardView: 'Card View',
+      tableView: 'Table View',
+      noOrders: 'No orders available',
+      loading: 'Loading...',
+      error: 'An error occurred while fetching data',
+      createOrderTitle: 'Create New Production Order',
+      notes: 'Notes',
+      addItem: 'Add Item',
+      submit: 'Create Order',
+      cancel: 'Cancel',
+      items: 'Items',
+      selectProduct: 'Select Product',
+      quantity: 'Quantity',
+      assignChef: 'Assign Chef',
+      selectChef: 'Select Chef',
+    },
+  };
+
+  const t = translations[isRtl ? 'ar' : 'en'];
 
   return (
-    <div className="px-4 py-6 max-w-7xl mx-auto">
-      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-8">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <div className="w-full sm:w-auto text-center sm:text-start">
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
-                <ShoppingCart className="w-6 h-6 text-amber-600" />
-                {isRtl ? 'طلبات الإنتاج' : 'Production Orders'}
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">{isRtl ? 'إدارة طلبات إنتاج المخزون' : 'Manage inventory production orders'}</p>
-            </div>
-            <div className="flex gap-3 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
-              <Button
-                variant="primary"
-                onClick={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: true })}
-                className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-300"
-              >
-                <PlusCircle className="w-5 h-5" />
-                {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
-              </Button>
-            </div>
+    <div className="container mx-auto p-4">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-xl font-bold text-gray-800">{t.title}</h1>
+        <Button
+          variant="primary"
+          onClick={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: true })}
+          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm"
+        >
+          <PlusCircle className="w-4 h-4 mr-2" />
+          {t.createOrder}
+        </Button>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex-1">
+          <ProductSearchInput
+            value={searchInput}
+            onChange={(value) => setSearchInput(value)}
+            placeholder={t.searchPlaceholder}
+            className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+          />
+        </div>
+        <div className="flex gap-4">
+          <Select
+            options={statusOptions.map((opt) => ({
+              value: opt.value,
+              label: t[opt.label as keyof typeof t] || opt.label,
+            }))}
+            value={state.filterStatus}
+            onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
+            className="w-40 rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+            aria-label={t.status}
+          />
+          <Select
+            options={departmentOptions}
+            value={state.filterDepartment}
+            onChange={(value) => dispatch({ type: 'SET_FILTER_DEPARTMENT', payload: value })}
+            className="w-40 rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+            aria-label={t.department}
+          />
+          <Select
+            options={sortOptions.map((opt) => ({
+              value: opt.value,
+              label: t[opt.label as keyof typeof t] || opt.label,
+            }))}
+            value={state.sortBy}
+            onChange={(value) => dispatch({ type: 'SET_SORT', by: value })}
+            className="w-40 rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+            aria-label={t.sortBy}
+          />
+          <Select
+            options={[
+              { value: 'asc', label: `${t.ascending} ${t.ascendingShort}` },
+              { value: 'desc', label: `${t.descending} ${t.descendingShort}` },
+            ]}
+            value={state.sortOrder}
+            onChange={(value) => dispatch({ type: 'SET_SORT', order: value })}
+            className="w-32 rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+            aria-label={t.sortOrder}
+          />
+          <Select
+            options={[
+              { value: 'card', label: t.cardView },
+              { value: 'table', label: t.tableView },
+            ]}
+            value={state.viewMode}
+            onChange={(value) => dispatch({ type: 'SET_VIEW_MODE', payload: value })}
+            className="w-32 rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+            aria-label={t.viewMode}
+          />
+        </div>
+      </div>
+
+      {state.error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm">{state.error}</span>
+        </div>
+      )}
+
+      {state.loading ? (
+        state.viewMode === 'card' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: ORDERS_PER_PAGE.card }).map((_, index) => (
+              <OrderCardSkeleton key={index} />
+            ))}
           </div>
-          <Card className="p-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                  {isRtl ? 'بحث' : 'Search'}
-                </label>
-                <ProductSearchInput
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                  ariaLabel={isRtl ? 'بحث' : 'Search'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                  {isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
-                </label>
-                <ProductDropdown
-                  options={statusOptions.map((opt) => ({
-                    value: opt.value,
-                    label: isRtl
-                      ? {
-                          '': 'كل الحالات',
-                          requested: 'مطلوب',
-                          pending: 'قيد الانتظار',
-                          approved: 'تم الموافقة',
-                          in_production: 'في الإنتاج',
-                          completed: 'مكتمل',
-                          stocked: 'مخزن',
-                          cancelled: 'ملغى',
-                        }[opt.value]
-                      : opt.label,
-                  }))}
-                  value={state.filterStatus}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  ariaLabel={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                  {isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
-                </label>
-                <ProductDropdown
-                  options={[
-                    { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
-                    ...state.departments.map((dept) => ({
-                      value: dept._id,
-                      label: dept.displayName,
-                    })),
-                  ]}
-                  value={state.filterDepartment}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_DEPARTMENT', payload: value })}
-                  ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                />
-              </div>
-              <div>
-                <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                  {isRtl ? 'ترتيب حسب' : 'Sort By'}
-                </label>
-                <ProductDropdown
-                  options={sortOptions.map((opt) => ({
-                    value: opt.value,
-                    label: isRtl ? { date: 'التاريخ', totalQuantity: 'الكمية الإجمالية' }[opt.value] : opt.label,
-                  }))}
-                  value={state.sortBy}
-                  onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  ariaLabel={isRtl ? 'ترتيب حسب' : 'Sort By'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                />
-              </div>
-            </div>
-            <div className={`flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <div className="text-sm text-gray-600 font-medium">
-                {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
-              >
-                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
-                {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
-              </Button>
-            </div>
-          </Card>
-          <div ref={listRef} className="mt-8 min-h-[400px]">
-            <AnimatePresence>
-              {state.loading ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                  className="space-y-4"
-                >
-                  {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1 gap-4">
-                      {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.3, delay: i * 0.05 }}
-                        >
-                          <OrderCardSkeleton isRtl={isRtl} />
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : (
+        ) : (
+          <OrderTableSkeleton />
+        )
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-10">
+          <ShoppingCart className="mx-auto w-12 h-12 text-gray-400" />
+          <p className="mt-2 text-gray-600 text-sm">{t.noOrders}</p>
+        </div>
+      ) : (
+        <>
+          <div ref={listRef}>
+            {state.viewMode === 'card' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <AnimatePresence>
+                  {paginatedOrders.map((order) => (
                     <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
+                      key={order.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
+                      <OrderCard
+                        order={order}
+                        calculateTotalQuantity={calculateTotalQuantity}
+                        translateUnit={translateUnit}
+                        updateOrderStatus={handleUpdateOrderStatus}
+                        confirmItemCompletion={handleConfirmItemCompletion}
+                        openAssignModal={handleOpenAssignModal}
+                        confirmFactoryProduction={handleConfirmFactoryProduction}
+                        submitting={state.submitting}
+                        isRtl={isRtl}
+                        currentUserRole={user?.role as UserRole}
+                      />
                     </motion.div>
-                  )}
-                </motion.div>
-              ) : state.error ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="mt-8"
-                >
-                  <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
-                    <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                      <p className="text-sm font-medium text-red-600">{state.error}</p>
-                    </div>
-                    <Button
-                      variant="primary"
-                      onClick={() => fetchData()}
-                      className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
-                      aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
-                    >
-                      {isRtl ? 'إعادة المحاولة' : 'Retry'}
-                    </Button>
-                  </Card>
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="space-y-4"
-                >
-                  {paginatedOrders.length === 0 ? (
-                    <Card className="p-8 text-center bg-white shadow-md rounded-xl border border-gray-200">
-                      <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-700 mb-2">
-                        {isRtl ? 'لا توجد طلبات' : 'No Orders'}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {state.filterStatus || state.debouncedSearchQuery
-                          ? isRtl
-                            ? 'لا توجد طلبات مطابقة'
-                            : 'No matching orders'
-                          : isRtl
-                          ? 'لا توجد طلبات بعد'
-                          : 'No orders yet'}
-                      </p>
-                    </Card>
-                  ) : (
-                    <>
-                      {state.viewMode === 'table' ? (
-                        <OrderTable
-                          orders={paginatedOrders}
-                          calculateTotalQuantity={calculateTotalQuantity}
-                          translateUnit={translateUnit}
-                          updateOrderStatus={updateOrderStatus}
-                          confirmItemCompletion={confirmItemCompletion}
-                          openAssignModal={openAssignModal}
-                          submitting={state.submitting}
-                          isRtl={isRtl}
-                          startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                          currentUserRole={user.role}
-                        />
-                      ) : (
-                        <div className="grid grid-cols-1 gap-4">
-                          {paginatedOrders.map((order) => (
-                            <motion.div
-                              key={order.id}
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ duration: 0.3 }}
-                            >
-                              <OrderCard
-                                order={order}
-                                calculateTotalQuantity={calculateTotalQuantity}
-                                translateUnit={translateUnit}
-                                updateOrderStatus={updateOrderStatus}
-                                confirmItemCompletion={confirmItemCompletion}
-                                openAssignModal={openAssignModal}
-                                confirmFactoryProduction={(orderId) => updateOrderStatus(orderId, 'stocked')}  // استخدم factoryInventoryAPI هنا
-                                submitting={state.submitting}
-                                isRtl={isRtl}
-                                currentUserRole={user.role}
-                              />
-                            </motion.div>
-                          ))}
-                        </div>
-                      )}
-                      {totalPages > 1 && (
-                        <Pagination
-                          currentPage={state.currentPage}
-                          totalPages={totalPages}
-                          isRtl={isRtl}
-                          handlePageChange={handlePageChange}
-                        />
-                      )}
-                    </>
-                  )}
-                  <AssignChefsModal
-                    isOpen={state.isAssignModalOpen}
-                    onClose={() => {
-                      dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false });
-                      dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-                      dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-                    }}
-                    selectedOrder={state.selectedOrder}
-                    chefs={state.chefs}
-                    assignFormData={state.assignFormData}
-                    setAssignForm={(data) => dispatch({ type: 'SET_ASSIGN_FORM', payload: data })}
-                    assignChefs={assignChefs}
-                    error={state.error}
-                    submitting={state.submitting}
-                    isRtl={isRtl}
-                    loading={state.loading}
-                  />
-                  <Modal
-                    isOpen={state.isCreateModalOpen}
-                    onClose={() => {
-                      dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-                      dispatch({
-                        type: 'SET_CREATE_FORM',
-                        payload: { notes: '', items: [{ productId: '', quantity: 1 }] },
-                      });
-                      dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
-                    }}
-                    title={isRtl ? 'إنشاء طلب إنتاج جديد' : 'Create New Production Order'}
-                    size="md"
-                    className="bg-white rounded-xl shadow-xl border border-gray-100 max-h-[90vh] overflow-y-auto"
-                  >
-                    <div className="space-y-6">
-                      <div>
-                        <label className={`block text-sm font-medium text-gray-700 mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
-                          {isRtl ? 'ملاحظات' : 'Notes'}
-                        </label>
-                        <textarea
-                          value={state.createFormData.notes}
-                          onChange={(e) =>
-                            dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, notes: e.target.value } })
-                          }
-                          placeholder={isRtl ? 'أدخل ملاحظات (اختياري)' : 'Enter notes (optional)'}
-                          className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                          rows={3}
-                          aria-label={isRtl ? 'ملاحظات' : 'Notes'}
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-sm font-medium text-gray-700 mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
-                          {isRtl ? 'العناصر' : 'Items'}
-                        </label>
-                        {state.createFormData.items.map((item, index) => (
-                          <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100 shadow-sm">
-                            <ProductDropdown
-                              options={[
-                                { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
-                                ...state.products
-                                  .filter((product) => {
-                                    const productDepartmentId = typeof product.department === 'string' ? product.department : product.department._id;
-                                    if (user?.role === 'chef') {
-                                      const userDepartmentId = typeof user.department === 'string' ? user.department : user.department?._id;
-                                      return productDepartmentId === userDepartmentId;
-                                    }
-                                    return true;
-                                  })
-                                  .map((product) => ({
-                                    value: product._id,
-                                    label: `${product.displayName} (${product.displayUnit})`,
-                                  })),
-                              ]}
-                              value={item.productId}
-                              onChange={(value) =>
-                                dispatch({
-                                  type: 'SET_CREATE_FORM',
-                                  payload: {
-                                    ...state.createFormData,
-                                    items: state.createFormData.items.map((it, i) =>
-                                      i === index ? { ...it, productId: value } : it
-                                    ),
-                                  },
-                                })
-                              }
-                              ariaLabel={isRtl ? 'اختر منتج' : 'Select Product'}
-                              className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
-                                state.formErrors[`item_${index}_productId`] ? 'border-red-500' : ''
-                              }`}
-                            />
-                            {state.formErrors[`item_${index}_productId`] && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {state.formErrors[`item_${index}_productId`]}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1">
-                                <label
-                                  className={`block text-sm font-medium text-gray-700 mb-1 ${
-                                    isRtl ? 'text-right' : 'text-left'
-                                  }`}
-                                >
-                                  {isRtl ? 'الكمية' : 'Quantity'}
-                                </label>
-                                <QuantityInput
-                                  value={item.quantity}
-                                  onChange={(val) =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.map((it, i) =>
-                                          i === index ? { ...it, quantity: parseInt(val) || 1 } : it
-                                        ),
-                                      },
-                                    })
-                                  }
-                                  onIncrement={() =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.map((it, i) =>
-                                          i === index
-                                            ? {
-                                                ...it,
-                                                quantity: Math.min(
-                                                  it.quantity + 1,
-                                                  state.products.find((p) => p._id === it.productId)
-                                                    ?.maxStockLevel || 1000
-                                                ),
-                                              }
-                                            : it
-                                        ),
-                                      },
-                                    })
-                                  }
-                                  onDecrement={() =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.map((it, i) =>
-                                          i === index ? { ...it, quantity: Math.max(it.quantity - 1, 1) } : it
-                                        ),
-                                      },
-                                    })
-                                  }
-                                  max={state.products.find((p) => p._id === item.productId)?.maxStockLevel}
-                                />
-                                {state.formErrors[`item_${index}_quantity`] && (
-                                  <p className="text-xs text-red-600 mt-1">
-                                    {state.formErrors[`item_${index}_quantity`]}
-                                  </p>
-                                )}
-                              </div>
-                              {['admin', 'production'].includes(user.role) && (
-                                <div className="flex-1">
-                                  <label
-                                    className={`block text-sm font-medium text-gray-700 mb-1 ${
-                                      isRtl ? 'text-right' : 'text-left'
-                                    }`}
-                                  >
-                                    {isRtl ? 'تعيين إلى' : 'Assign To'}
-                                  </label>
-                                  <ProductDropdown
-                                    options={[
-                                      { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-                                      ...state.chefs
-                                        .filter(
-                                          (chef) => {
-                                            const product = state.products.find((p) => p._id === item.productId);
-                                            const productDepartmentId = typeof product?.department === 'string' ? product?.department : product?.department?._id || 'no-department';
-                                            const chefDepartmentId = typeof chef.department === 'string' ? chef.department : chef.department?._id || 'no-department';
-                                            return chefDepartmentId === productDepartmentId;
-                                          }
-                                        )
-                                        .map((chef) => ({
-                                          value: chef.userId,
-                                          label: chef.displayName,
-                                        })),
-                                    ]}
-                                    value={item.assignedTo || ''}
-                                    onChange={(value) =>
-                                      dispatch({
-                                        type: 'SET_CREATE_FORM',
-                                        payload: {
-                                          ...state.createFormData,
-                                          items: state.createFormData.items.map((it, i) =>
-                                            i === index ? { ...it, assignedTo: value } : it
-                                          ),
-                                        },
-                                      })
-                                    }
-                                    ariaLabel={isRtl ? 'تعيين إلى' : 'Assign To'}
-                                    className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
-                                      state.formErrors[`item_${index}_assignedTo`] ? 'border-red-500' : ''
-                                    }`}
-                                  />
-                                  {state.formErrors[`item_${index}_assignedTo`] && (
-                                    <p className="text-xs text-red-600 mt-1">
-                                      {state.formErrors[`item_${index}_assignedTo`]}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-                              {state.createFormData.items.length > 1 && (
-                                <button
-                                  onClick={() =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.filter((_, i) => i !== index),
-                                      },
-                                    })
-                                  }
-                                  className="mt-6 text-red-600 hover:text-red-800 transition-colors duration-200"
-                                  aria-label={isRtl ? 'إزالة العنصر' : 'Remove Item'}
-                                >
-                                  <MinusCircle className="w-5 h-5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                        <Button
-                          variant="secondary"
-                          onClick={() =>
-                            dispatch({
-                              type: 'SET_CREATE_FORM',
-                              payload: {
-                                ...state.createFormData,
-                                items: [...state.createFormData.items, { productId: '', quantity: 1 }],
-                              },
-                            })
-                          }
-                          className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200 mt-4"
-                        >
-                          <Plus className="w-5 h-5" />
-                          {isRtl ? 'إضافة عنصر' : 'Add Item'}
-                        </Button>
-                      </div>
-                      {state.formErrors.form && (
-                        <p className="text-sm text-red-600 mt-2">{state.formErrors.form}</p>
-                      )}
-                      <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-                            dispatch({
-                              type: 'SET_CREATE_FORM',
-                              payload: { notes: '', items: [{ productId: '', quantity: 1 }] },
-                            });
-                            dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
-                          }}
-                          className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
-                        >
-                          {isRtl ? 'إلغاء' : 'Cancel'}
-                        </Button>
-                        <Button
-                          variant="primary"
-                          onClick={createOrder}
-                          disabled={state.submitting === 'create'}
-                          className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200 disabled:opacity-50"
-                        >
-                          {state.submitting === 'create'
-                            ? isRtl
-                              ? 'جاري الإنشاء...'
-                              : 'Creating...'
-                            : isRtl
-                            ? 'إنشاء الطلب'
-                            : 'Create Order'}
-                        </Button>
-                      </div>
-                    </div>
-                  </Modal>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  ))}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <OrderTable
+                orders={paginatedOrders}
+                calculateTotalQuantity={calculateTotalQuantity}
+                translateUnit={translateUnit}
+                approveOrder={handleApproveOrder}
+                updateOrderStatus={handleUpdateOrderStatus}
+                confirmItemCompletion={handleConfirmItemCompletion}
+                openAssignModal={handleOpenAssignModal}
+                confirmFactoryProduction={handleConfirmFactoryProduction}
+                submitting={state.submitting}
+                isRtl={isRtl}
+                startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE.table + 1}
+                currentUserRole={user?.role as UserRole}
+              />
+            )}
           </div>
-        </motion.div>
-      </Suspense>
+          <Pagination
+            currentPage={state.currentPage}
+            totalPages={totalPages}
+            onPageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
+            isRtl={isRtl}
+          />
+        </>
+      )}
+
+      <AssignChefsModal
+        isOpen={state.isAssignModalOpen}
+        onClose={() => dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false })}
+        selectedOrder={state.selectedOrder}
+        assignFormData={state.assignFormData}
+        chefs={state.chefs}
+        error={state.error}
+        submitting={state.submitting}
+        assignChefs={handleAssignChefs}
+        setAssignForm={(formData) => dispatch({ type: 'SET_ASSIGN_FORM', payload: formData })}
+        isRtl={isRtl}
+        loading={state.loading}
+      />
+
+      <Modal
+        isOpen={state.isCreateModalOpen}
+        onClose={() => {
+          dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+          dispatch({
+            type: 'SET_CREATE_FORM',
+            payload: { notes: '', items: [{ productId: '', quantity: 1 }] },
+          });
+          dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
+        }}
+        title={t.createOrderTitle}
+        size="lg"
+      >
+        <form onSubmit={handleCreateOrder} className="space-y-4">
+          <div>
+            <label className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+              {t.notes}
+            </label>
+            <textarea
+              value={state.createFormData.notes}
+              onChange={(e) =>
+                dispatch({
+                  type: 'SET_CREATE_FORM',
+                  payload: { ...state.createFormData, notes: e.target.value },
+                })
+              }
+              className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+              rows={4}
+              aria-label={t.notes}
+            />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">{t.items}</h3>
+            {state.createFormData.items.map((item, index) => {
+              const product = state.products.find((p) => p._id === item.productId);
+              const availableChefs = state.chefs.filter(
+                (chef) =>
+                  chef.department._id ===
+                  (typeof product?.department === 'string' ? product.department : product?.department?._id || 'no-department')
+              );
+
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col gap-3 mb-4 p-4 bg-gray-50 rounded-md"
+                >
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex-1 min-w-[200px]">
+                      <label
+                        className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                        htmlFor={`product-${index}`}
+                      >
+                        {t.selectProduct}
+                      </label>
+                      <ProductDropdown
+                        products={state.products}
+                        value={item.productId}
+                        onChange={(value) => handleUpdateItem(index, 'productId', value)}
+                        placeholder={t.selectProduct}
+                        className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                        isRtl={isRtl}
+                      />
+                      {state.formErrors[`item_${index}_productId`] && (
+                        <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_productId`]}</p>
+                      )}
+                    </div>
+                    <div className="w-40">
+                      <label
+                        className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                        htmlFor={`quantity-${index}`}
+                      >
+                        {t.quantity}
+                      </label>
+                      <QuantityInput
+                        value={item.quantity}
+                        onChange={(value) => handleUpdateItem(index, 'quantity', parseInt(value) || 1)}
+                        onIncrement={() => handleUpdateItem(index, 'quantity', item.quantity + 1)}
+                        onDecrement={() => handleUpdateItem(index, 'quantity', Math.max(1, item.quantity - 1))}
+                        max={product?.maxStockLevel}
+                      />
+                      {state.formErrors[`item_${index}_quantity`] && (
+                        <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
+                      )}
+                    </div>
+                    {['admin', 'production'].includes(user?.role) && (
+                      <div className="w-40">
+                        <label
+                          className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                          htmlFor={`chef-${index}`}
+                        >
+                          {t.assignChef}
+                        </label>
+                        <Select
+                          id={`chef-${index}`}
+                          options={[
+                            { value: '', label: t.selectChef },
+                            ...availableChefs.map((chef) => ({
+                              value: chef.userId,
+                              label: chef.displayName,
+                            })),
+                          ]}
+                          value={item.assignedTo || ''}
+                          onChange={(value) => handleUpdateItem(index, 'assignedTo', value)}
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                          aria-label={t.assignChef}
+                          disabled={!product}
+                        />
+                        {state.formErrors[`item_${index}_assignedTo`] && (
+                          <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_assignedTo`]}</p>
+                        )}
+                      </div>
+                    )}
+                    {state.createFormData.items.length > 1 && (
+                      <button
+                        onClick={() => handleRemoveItem(index)}
+                        className="text-red-600 hover:text-red-800 text-xs mt-6"
+                        aria-label={isRtl ? 'إزالة العنصر' : 'Remove item'}
+                      >
+                        <MinusCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+            <Button
+              variant="secondary"
+              onClick={handleAddItem}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
+            >
+              <PlusCircle className="w-4 h-4 mr-2" />
+              {t.addItem}
+            </Button>
+          </div>
+          <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+                dispatch({
+                  type: 'SET_CREATE_FORM',
+                  payload: { notes: '', items: [{ productId: '', quantity: 1 }] },
+                });
+                dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
+              }}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-3 py-1 text-xs shadow-sm"
+            >
+              {t.cancel}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={state.submitting === 'create'}
+              className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm disabled:opacity-50"
+            >
+              {state.submitting === 'create' ? (isRtl ? 'جارٍ الإنشاء...' : 'Creating...') : t.submit}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
