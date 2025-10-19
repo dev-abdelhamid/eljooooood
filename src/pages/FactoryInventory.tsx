@@ -9,13 +9,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
 
-// Enums and Interfaces
+// Enums for type safety
 enum InventoryStatus {
   LOW = 'low',
   NORMAL = 'normal',
   FULL = 'full',
 }
 
+// Interfaces aligned with backend
 interface FactoryInventoryItem {
   _id: string;
   product: {
@@ -39,7 +40,7 @@ interface FactoryInventoryItem {
 interface ProductionItem {
   product: string;
   quantity: number;
-  assignedTo: string;
+  assignedTo: string; // Chef ID
 }
 
 interface ProductionFormState {
@@ -72,8 +73,7 @@ interface FactoryOrder {
   _id: string;
   orderNumber: string;
   items: { productId: string; quantity: number; status: string; assignedTo?: string }[];
-  status: 'pending' | 'in_production' | 'completed' | 'cancelled' | 'stocked';
-  createdBy: string;
+  status: 'pending' | 'in_production' | 'completed' | 'cancelled';
 }
 
 interface Chef {
@@ -93,6 +93,7 @@ interface Chef {
   createdAt: string;
 }
 
+// Translations
 const translations = {
   ar: {
     title: 'إدارة مخزون المصنع',
@@ -224,11 +225,155 @@ const translations = {
   },
 };
 
-// إصلاح دالة createErrorMessage
-const createErrorMessage = (key: string, isArabic: boolean): string => {
-  const t = isArabic ? translations.ar : translations.en;
-  const errorKey = key in t.errors ? key : 'invalidForm';
-  return t.errors[errorKey].replace('{field}', '');
+// ProductSearchInput Component
+export const ProductSearchInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <div
+        className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+      >
+        <Search className="w-4 h-4" />
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <div
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${value ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ProductDropdown Component
+export const ProductDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  // Log options for debugging
+  console.log(`[${new Date().toISOString()}] ProductDropdown options:`, options);
+  const selectedOption =
+    options.find((opt) => opt.value === value) ||
+    options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+
+  return (
+    <div className="relative group">
+      <button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label || (isRtl ? 'غير معروف' : 'Unknown')}</span>
+        <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </div>
+      </button>
+      {isOpen && !disabled && (
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+          {options.map((option) => (
+            <div
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+            >
+              {option.label || (isRtl ? 'غير معروف' : 'Unknown')}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// QuantityInput Component
+const QuantityInput = ({
+  value,
+  onChange,
+  onIncrement,
+  onDecrement,
+}: {
+  value: number;
+  onChange: (val: string) => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const handleChange = (val: string) => {
+    const num = parseInt(val, 10);
+    if (val === '' || isNaN(num) || num < 1) {
+      onChange('1');
+      return;
+    }
+    onChange(val);
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onDecrement}
+        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+        disabled={value <= 1}
+      >
+        <Minus className="w-4 h-4" />
+      </button>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        min={1}
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+        style={{ appearance: 'none', MozAppearance: 'textfield' }}
+        aria-label={isRtl ? 'الكمية' : 'Quantity'}
+      />
+      <button
+        onClick={onIncrement}
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
+        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+      >
+        <Plus className="w-4 h-4 text-white" />
+      </button>
+    </div>
+  );
 };
 
 // Reducer for production form
@@ -291,7 +436,6 @@ export const FactoryInventory: React.FC = () => {
   const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [isTasksModalOpen, setIsTasksModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FactoryInventoryItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -330,9 +474,13 @@ export const FactoryInventory: React.FC = () => {
       const response = await factoryInventoryAPI.getAll(params);
       console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
       return data;
     },
-    enabled: !!user?.role && ['production', 'admin', 'chef'].includes(user.role),
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     select: (data) => {
@@ -371,7 +519,7 @@ export const FactoryInventory: React.FC = () => {
     },
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Inventory query error:`, err.message);
-      toast.error(createErrorMessage('fetchInventory', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
@@ -379,12 +527,23 @@ export const FactoryInventory: React.FC = () => {
 
   // Chefs Query
   const { data: chefsData, isLoading: chefsLoading } = useQuery<Chef[], Error>({
-    queryKey: ['chefs', language, filterDepartment],
+    queryKey: ['chefs', language],
     queryFn: async () => {
-      const params = filterDepartment ? { departmentId: filterDepartment } : {};
-      const response = await chefsAPI.getAll(params);
+      const response = await chefsAPI.getAll();
       console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.chefs || response?.chefs || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
+      // Log raw data for each chef
+      data.forEach((chef, index) => {
+        console.log(`[${new Date().toISOString()}] Chef ${index + 1}:`, {
+          id: chef._id,
+          user: chef.user,
+          department: chef.department,
+        });
+      });
       return data;
     },
     enabled: isProductionModalOpen && !!user?.role && ['production', 'admin'].includes(user.role),
@@ -393,7 +552,7 @@ export const FactoryInventory: React.FC = () => {
     refetchOnMount: 'always',
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
-      toast.error(createErrorMessage('fetchInventory', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
 
@@ -407,6 +566,10 @@ export const FactoryInventory: React.FC = () => {
       const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
       console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid data format, expected array, got:`, data);
+        return [];
+      }
       return data;
     },
     enabled: isDetailsModalOpen && !!selectedProductId && isValidObjectId(selectedProductId),
@@ -414,26 +577,29 @@ export const FactoryInventory: React.FC = () => {
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Product history query error:`, err.message);
-      toast.error(createErrorMessage('productNotFound', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
 
-  // Factory Orders Query
-  const { data: factoryOrdersData, isLoading: ordersLoading } = useQuery<FactoryOrder[], Error>({
-    queryKey: ['factoryOrders', language, user?.id],
+  // Factory Orders Query for inProduction flag
+  const { data: factoryOrdersData } = useQuery<FactoryOrder[], Error>({
+    queryKey: ['factoryOrders', language],
     queryFn: async () => {
-      const params = user?.role === 'chef' ? { assignedTo: user.id } : {};
-      const response = await factoryOrdersAPI.getAll(params);
+      const response = await factoryOrdersAPI.getAll();
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
       return data;
     },
-    enabled: !!user?.role,
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Factory orders query error:`, err.message);
-      toast.error(createErrorMessage('fetchInventory', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
 
@@ -444,6 +610,11 @@ export const FactoryInventory: React.FC = () => {
         const response = await factoryInventoryAPI.getAvailableProducts();
         console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
         const products = Array.isArray(response) ? response : response?.data || response?.products || [];
+        if (!Array.isArray(products)) {
+          console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
+          setAvailableProducts([]);
+          return;
+        }
         setAvailableProducts(
           products
             .filter((product: any) => product && product._id && isValidObjectId(product._id))
@@ -459,7 +630,7 @@ export const FactoryInventory: React.FC = () => {
         );
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Error fetching products:`, err.message);
-        toast.error(createErrorMessage('productNotFound', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
+        toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
       }
     };
     fetchProducts();
@@ -469,7 +640,10 @@ export const FactoryInventory: React.FC = () => {
   useEffect(() => {
     if (!socket || !user?.role || !isConnected) return;
     const handleFactoryInventoryUpdated = ({ productId }: { productId: string }) => {
-      if (!isValidObjectId(productId)) return;
+      if (!isValidObjectId(productId)) {
+        console.warn(`[${new Date().toISOString()}] Invalid productId in factoryInventoryUpdated:`, productId);
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       if (selectedProductId === productId) {
         queryClient.invalidateQueries({ queryKey: ['factoryProductHistory'] });
@@ -487,7 +661,12 @@ export const FactoryInventory: React.FC = () => {
       });
     };
     const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
-      if (!isValidObjectId(orderId)) return;
+      if (!isValidObjectId(orderId)) {
+        console.warn(`[${new Date().toISOString()}] Invalid orderId in factoryOrderCreated:`, orderId);
+        return;
+      }
+      const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+      audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
@@ -513,8 +692,13 @@ export const FactoryInventory: React.FC = () => {
       chefId: string;
       productName: string;
     }) => {
-      if (!isValidObjectId(factoryOrderId) || !isValidObjectId(chefId)) return;
-      if (user.id === chefId) {
+      if (!isValidObjectId(factoryOrderId) || !isValidObjectId(chefId)) {
+        console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId or chefId in factoryTaskAssigned:`, { factoryOrderId, chefId });
+        return;
+      }
+      if (user._id === chefId) {
+        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
         addNotification({
           _id: crypto.randomUUID(),
           type: 'info',
@@ -526,11 +710,15 @@ export const FactoryInventory: React.FC = () => {
           vibrate: [200, 100, 200],
         });
         toast.info(t.notifications.taskAssigned, { position: isRtl ? 'top-right' : 'top-left' });
-        queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
       }
     };
     const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
-      if (!isValidObjectId(factoryOrderId)) return;
+      if (!isValidObjectId(factoryOrderId)) {
+        console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId in factoryOrderCompleted:`, factoryOrderId);
+        return;
+      }
+      const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+      audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
@@ -545,38 +733,21 @@ export const FactoryInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
-    const handleFactoryOrderApproved = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
-      if (!isValidObjectId(factoryOrderId)) return;
-      addNotification({
-        _id: crypto.randomUUID(),
-        type: 'success',
-        message: t.orderConfirmed,
-        data: { factoryOrderId, orderNumber, eventId: crypto.randomUUID(), isRtl },
-        read: false,
-        createdAt: new Date().toISOString(),
-        sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
-        vibrate: [200, 100, 200],
-      });
-      toast.success(t.orderConfirmed, { position: isRtl ? 'top-right' : 'top-left' });
-      queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
-    };
     socket.on('factoryInventoryUpdated', handleFactoryInventoryUpdated);
     socket.on('factoryOrderCreated', handleFactoryOrderCreated);
     socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
-    socket.on('factoryOrderApproved', handleFactoryOrderApproved);
     const reconnectInterval = setInterval(() => {
       if (!isConnected && socket) {
         console.log(`[${new Date().toISOString()}] Attempting to reconnect WebSocket...`);
         socket.connect();
       }
-    }, 10000);
+    }, 5000);
     return () => {
       socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
       socket.off('factoryOrderCreated', handleFactoryOrderCreated);
       socket.off('factoryTaskAssigned', handleFactoryTaskAssigned);
       socket.off('factoryOrderCompleted', handleFactoryOrderCompleted);
-      socket.off('factoryOrderApproved', handleFactoryOrderApproved);
       clearInterval(reconnectInterval);
     };
   }, [socket, user, isConnected, queryClient, addNotification, t, isRtl, selectedProductId]);
@@ -648,13 +819,21 @@ export const FactoryInventory: React.FC = () => {
         { value: '', label: t.selectChef },
         ...chefsData
           ?.filter((chef) => chef.department?._id === departmentId)
-          .map((chef) => ({
-            value: chef._id,
-            label: isRtl
-              ? chef.user.name || chef.user.nameEn || `شيف بدون اسم (${chef._id})`
-              : chef.user.nameEn || chef.user.name || `Unnamed Chef (${chef._id})`,
-          })) || [],
+          .map((chef) => {
+            console.log(`[${new Date().toISOString()}] Chef data for dept ${departmentId}:`, {
+              chefId: chef._id,
+              user: chef.user,
+              department: chef.department,
+            });
+            return {
+              value: chef._id,
+              label: isRtl
+                ? chef.user.name || chef.user.nameEn || `شيف بدون اسم (${chef._id})`
+                : chef.user.nameEn || chef.user.name || `Unnamed Chef (${chef._id})`,
+            };
+          }) || [],
       ];
+      console.log(`[${new Date().toISOString()}] chefOptions for dept ${departmentId}:`, options);
       return options;
     },
     [chefsData, isRtl, t]
@@ -681,18 +860,6 @@ export const FactoryInventory: React.FC = () => {
   );
 
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
-
-  // Tasks for chefs
-  const chefTasks = useMemo(() => {
-    if (user?.role !== 'chef') return [];
-    return (
-      factoryOrdersData?.filter(
-        (order) =>
-          order.items.some((item) => item.assignedTo === user.id) &&
-          ['pending', 'in_production'].includes(order.status)
-      ) || []
-    );
-  }, [factoryOrdersData, user]);
 
   // Handlers
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -733,13 +900,9 @@ export const FactoryInventory: React.FC = () => {
       setSelectedProductId(item.product._id);
       setIsDetailsModalOpen(true);
     } else {
-      toast.error(createErrorMessage('invalidProductId', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.errors.invalidProductId, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [t, isRtl]);
-
-  const handleOpenTasksModal = useCallback(() => {
-    setIsTasksModalOpen(true);
-  }, []);
 
   const addItemToForm = useCallback(() => {
     dispatchProductionForm({
@@ -872,14 +1035,13 @@ export const FactoryInventory: React.FC = () => {
           productId: item.product,
           quantity: item.quantity,
           assignedTo: item.assignedTo,
-          status: ['admin', 'production'].includes(user.role) ? 'in_production' : 'pending',
         })),
         notes: productionForm.notes || undefined,
         priority: 'medium',
-        createdBy: user.id,
       };
       console.log(`[${new Date().toISOString()}] Creating production order:`, data);
       const response = await factoryOrdersAPI.create(data);
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
       return {
         orderId: response?._id || crypto.randomUUID(),
         orderNumber: response?.orderNumber || data.orderNumber,
@@ -904,10 +1066,24 @@ export const FactoryInventory: React.FC = () => {
     },
     onError: (err: any) => {
       console.error(`[${new Date().toISOString()}] Create production order error:`, err.message);
-      const errorMessage =
-        err.response?.status === 429
-          ? t.errors.tooManyRequests
-          : err.message || t.errors.createProduction;
+      let errorMessage = err.message || t.errors.createProduction;
+      if (err.response?.status === 429) {
+        errorMessage = t.errors.tooManyRequests;
+      } else if (err.response?.data?.errors?.length > 0) {
+        errorMessage = err.response.data.errors.map((e: any) => e.msg).join(', ');
+        err.response.data.errors.forEach((e: any, index: number) => {
+          setProductionErrors((prev) => ({
+            ...prev,
+            [`item_${index}_${e.path}`]: e.msg,
+          }));
+        });
+      } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
+        errorMessage = t.errors.invalidProductId;
+      } else if (err.message.includes('معرف الشيف غير صالح') || err.message.includes('Invalid chef ID')) {
+        errorMessage = t.errors.invalidChefId;
+      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
+        errorMessage = t.errors.productNotFound;
+      }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setProductionErrors((prev) => ({ ...prev, form: errorMessage }));
     },
@@ -921,6 +1097,11 @@ export const FactoryInventory: React.FC = () => {
       if (!selectedItem || !isValidObjectId(selectedItem._id)) {
         throw new Error(t.errors.noItemSelected);
       }
+      console.log(`[${new Date().toISOString()}] Updating inventory:`, {
+        id: selectedItem._id,
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+      });
       await factoryInventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
@@ -949,92 +1130,6 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  const approveOrderMutation = useMutation<void, Error, { orderId: string }>({
-    mutationFn: async ({ orderId }) => {
-      if (!isValidObjectId(orderId)) {
-        throw new Error(t.errors.invalidFactoryOrderId);
-      }
-      await factoryOrdersAPI.updateStatus(orderId, 'in_production');
-    },
-    onSuccess: (_, { orderId }) => {
-      queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
-      toast.success(t.orderConfirmed, { position: isRtl ? 'top-right' : 'top-left' });
-      if (socket && isConnected) {
-        socket.emit('factoryOrderApproved', {
-          factoryOrderId: orderId,
-          orderNumber: factoryOrdersData?.find((o) => o._id === orderId)?.orderNumber,
-          eventId: crypto.randomUUID(),
-          isRtl,
-        });
-      }
-    },
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Approve order error:`, err.message);
-      toast.error(createErrorMessage('createProduction', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
-    },
-  });
-
-  const completeTaskMutation = useMutation<void, Error, { orderId: string; itemId: string }>({
-    mutationFn: async ({ orderId, itemId }) => {
-      if (!isValidObjectId(orderId) || !isValidObjectId(itemId)) {
-        throw new Error(t.errors.invalidFactoryOrderId);
-      }
-      await factoryOrdersAPI.updateItemStatus(orderId, itemId, 'completed');
-    },
-    onSuccess: (_, { orderId }) => {
-      queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
-      toast.success(t.notifications.orderCompleted, { position: isRtl ? 'top-right' : 'top-left' });
-      if (socket && isConnected) {
-        socket.emit('factoryOrderCompleted', {
-          factoryOrderId: orderId,
-          orderNumber: factoryOrdersData?.find((o) => o._id === orderId)?.orderNumber,
-          eventId: crypto.randomUUID(),
-          isRtl,
-        });
-      }
-    },
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Complete task error:`, err.message);
-      toast.error(createErrorMessage('createProduction', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
-    },
-  });
-
-  const confirmProductionMutation = useMutation<void, Error, { orderId: string }>({
-    mutationFn: async ({ orderId }) => {
-      if (!isValidObjectId(orderId)) {
-        throw new Error(t.errors.invalidFactoryOrderId);
-      }
-      const order = factoryOrdersData?.find((o) => o._id === orderId);
-      if (!order) {
-        throw new Error(t.errors.invalidFactoryOrderId);
-      }
-      await factoryOrdersAPI.updateStatus(orderId, 'stocked');
-      for (const item of order.items) {
-        await factoryInventoryAPI.updateStockByProduct(item.productId, {
-          quantity: item.quantity,
-          type: 'produced_stock',
-          reference: order.orderNumber,
-        });
-      }
-    },
-    onSuccess: (_, { orderId }) => {
-      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
-      queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
-      toast.success(t.orderConfirmed, { position: isRtl ? 'top-right' : 'top-left' });
-      if (socket && isConnected) {
-        socket.emit('factoryInventoryUpdated', {
-          productId: factoryOrdersData?.find((o) => o._id === orderId)?.items[0]?.productId,
-          eventId: crypto.randomUUID(),
-          isRtl,
-        });
-      }
-    },
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Confirm production error:`, err.message);
-      toast.error(createErrorMessage('updateInventory', isRtl), { position: isRtl ? 'top-right' : 'top-left' });
-    },
-  });
-
   const errorMessage = inventoryError?.message || '';
 
   return (
@@ -1047,30 +1142,14 @@ export const FactoryInventory: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.description}</p>
           </div>
         </div>
-        <div className="flex gap-3">
-          {['admin', 'production'].includes(user?.role) && (
-            <button
-              onClick={() => handleOpenProductionModal()}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-              aria-label={t.create}
-            >
-              <Plus className="w-4 h-4" />
-              {t.create}
-            </button>
-          )}
-          {user?.role === 'chef' && (
-            <button
-              onClick={handleOpenTasksModal}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-              aria-label={t.tasks}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {t.tasks}
-            </button>
-          )}
-        </div>
+        <button
+          onClick={() => handleOpenProductionModal()}
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+          aria-label={t.create}
+        >
+          <Plus className="w-4 h-4" />
+          {t.create}
+        </button>
       </div>
       {errorMessage && (
         <motion.div
@@ -1122,7 +1201,10 @@ export const FactoryInventory: React.FC = () => {
           {[...Array(6)].map((_, i) => (
             <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="space-y-3 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                <div className="flex items-center justify-between">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                </div>
                 <div className="h-3 bg-gray-200 rounded w-1/2"></div>
                 <div className="h-3 bg-gray-200 rounded w-1/3"></div>
                 <div className="h-3 bg-gray-200 rounded w-1/3"></div>
@@ -1137,15 +1219,13 @@ export const FactoryInventory: React.FC = () => {
         <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
-          {['admin', 'production'].includes(user?.role) && (
-            <button
-              onClick={() => handleOpenProductionModal()}
-              className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-              aria-label={t.create}
-            >
-              {t.create}
-            </button>
-          )}
+          <button
+            onClick={() => handleOpenProductionModal()}
+            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            aria-label={t.create}
+          >
+            {t.create}
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1225,15 +1305,13 @@ export const FactoryInventory: React.FC = () => {
                     >
                       <Eye className="w-4 h-4" />
                     </button>
-                    {['admin', 'production'].includes(user?.role) && (
-                      <button
-                        onClick={() => handleOpenEditModal(item)}
-                        className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
-                        aria-label={t.editStockLimits}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleOpenEditModal(item)}
+                      className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.editStockLimits}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleOpenProductionModal(item)}
                       className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
@@ -1264,13 +1342,13 @@ export const FactoryInventory: React.FC = () => {
           <button
             onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
             className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+            disabled={currentPage === totalInventoryPages}
             aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
           >
             {isRtl ? 'التالي' : 'Next'}
           </button>
         </div>
       )}
-      {/* Production Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
@@ -1328,6 +1406,7 @@ export const FactoryInventory: React.FC = () => {
                         onChange={(value) => handleProductChange(index, value)}
                         options={productOptions}
                         ariaLabel={`${t.items} ${index + 1}`}
+                        placeholder={t.selectProduct}
                       />
                       {productionErrors[`item_${index}_product`] && (
                         <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
@@ -1337,6 +1416,7 @@ export const FactoryInventory: React.FC = () => {
                         onChange={(value) => handleChefChange(index, value)}
                         options={itemChefOptions}
                         ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
+                        placeholder={t.selectChef}
                       />
                       {productionErrors[`item_${index}_assignedTo`] && (
                         <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
@@ -1402,7 +1482,6 @@ export const FactoryInventory: React.FC = () => {
           )}
         </motion.div>
       </motion.div>
-      {/* Edit Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isEditModalOpen ? 1 : 0 }}
@@ -1499,7 +1578,6 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </motion.div>
       </motion.div>
-      {/* Details Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
@@ -1555,92 +1633,6 @@ export const FactoryInventory: React.FC = () => {
             </div>
           ) : (
             <p className="text-gray-600 text-sm">{t.noHistory}</p>
-          )}
-        </motion.div>
-      </motion.div>
-      {/* Tasks Modal */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isTasksModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isTasksModalOpen ? '' : 'pointer-events-none'
-        }`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.tasks}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isTasksModalOpen ? 1 : 0.95, y: isTasksModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
-        >
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">{t.tasks}</h2>
-            <button
-              onClick={() => setIsTasksModalOpen(false)}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          {ordersLoading ? (
-            <p className="text-gray-600 text-sm">{isRtl ? 'جاري تحميل المهام...' : 'Loading tasks...'}</p>
-          ) : chefTasks.length === 0 ? (
-            <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد مهام متاحة' : 'No tasks available'}</p>
-          ) : (
-            <div className="space-y-4">
-              {chefTasks.map((order) => (
-                <div key={order._id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <p className="text-sm font-medium text-gray-900">{t.orderNumber}: {order.orderNumber}</p>
-                  <p className="text-sm text-gray-600">
-                    {t.status}: {order.status === 'pending' ? t.pending : t.inProduction}
-                  </p>
-                  <div className="mt-2 space-y-2">
-                    {order.items
-                      .filter((item) => item.assignedTo === user?.id)
-                      .map((item, index) => (
-                        <div key={index} className="flex justify-between items-center">
-                          <p className="text-sm text-gray-600">
-                            {t.product}: {availableProducts.find((p) => p.productId === item.productId)?.productName || 'N/A'} -{' '}
-                            {t.quantity}: {item.quantity}
-                          </p>
-                          {item.status !== 'completed' && (
-                            <button
-                              onClick={() => completeTaskMutation.mutate({ orderId: order._id, itemId: item.productId })}
-                              disabled={completeTaskMutation.isLoading}
-                              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                              aria-label={t.completeTask}
-                            >
-                              {completeTaskMutation.isLoading ? t.submitting : t.completeTask}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                  {['admin', 'production'].includes(user?.role) && order.status === 'pending' && (
-                    <button
-                      onClick={() => approveOrderMutation.mutate({ orderId: order._id })}
-                      disabled={approveOrderMutation.isLoading}
-                      className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                      aria-label={approveOrderMutation.isLoading ? t.approving : t.approve}
-                    >
-                      {approveOrderMutation.isLoading ? t.approving : t.approve}
-                    </button>
-                  )}
-                  {['admin', 'production'].includes(user?.role) && order.status === 'completed' && (
-                    <button
-                      onClick={() => confirmProductionMutation.mutate({ orderId: order._id })}
-                      disabled={confirmProductionMutation.isLoading}
-                      className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                      aria-label={confirmProductionMutation.isLoading ? t.confirming : t.confirmProduction}
-                    >
-                      {confirmProductionMutation.isLoading ? t.confirming : t.confirmProduction}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
           )}
         </motion.div>
       </motion.div>
