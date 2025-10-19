@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { salesAPI, ordersAPI, returnsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, BarChart2, ChevronDown, Search, X } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { motion } from 'framer-motion';
-import { debounce } from 'lodash';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
+import { motion } from 'framer-motion';
+import { debounce } from 'lodash';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
@@ -197,18 +197,18 @@ const safeString = (value: any, defaultValue: string = ''): string =>
 const isValidDate = (date: string): boolean => !isNaN(new Date(date).getTime());
 
 const AnalyticsSkeleton: React.FC = () => (
-  <div className="space-y-4 animate-pulse">
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  <div className="space-y-6 animate-pulse">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
       {[...Array(3)].map((_, index) => (
-        <div key={index} className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-          <div className="h-6 bg-gray-200 rounded w-1/2" />
+        <div key={index} className="p-6 bg-white rounded-lg shadow-sm border border-gray-100">
+          <div className="h-5 bg-gray-200 rounded w-3/4 mb-3" />
+          <div className="h-7 bg-gray-200 rounded w-1/2" />
         </div>
       ))}
     </div>
-    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
-      <div className="h-40 bg-gray-200 rounded" />
+    <div className="p-6 bg-white rounded-lg shadow-sm border border-gray-100">
+      <div className="h-5 bg-gray-200 rounded w-1/2 mb-3" />
+      <div className="h-48 bg-gray-200 rounded" />
     </div>
   </div>
 );
@@ -217,117 +217,42 @@ const NoDataMessage: React.FC<{ message: string }> = ({ message }) => (
   <p className="text-center text-gray-500 py-4 text-sm font-alexandria">{message}</p>
 );
 
-const ProductSearchInput: React.FC<{
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-  className?: string;
-}> = ({ value, onChange, placeholder, ariaLabel, className }) => {
+const ReportsAnalytics: React.FC = () => {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const isRtl = language === 'ar';
-
-  const handleClear = () => {
-    onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
-  };
-
-  return (
-    <div className={`relative group w-full ${className}`}>
-      <motion.div
-        className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-600`}
-        initial={false}
-        animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
-        transition={{ duration: 0.2 }}
-      >
-        <Search className="w-5 h-5" />
-      </motion.div>
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      />
-      {value && (
-        <motion.button
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.2 }}
-          onClick={handleClear}
-          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-        >
-          <X className="w-5 h-5" />
-        </motion.button>
-      )}
-    </div>
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const [analytics, setAnalytics] = useState<SalesAnalytics>({
+    branchSales: [],
+    leastBranchSales: [],
+    productSales: [],
+    leastProductSales: [],
+    departmentSales: [],
+    leastDepartmentSales: [],
+    totalSales: 0,
+    totalCount: 0,
+    averageOrderValue: 0,
+    topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
+    salesTrends: [],
+    topCustomers: [],
+  });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [returns, setReturns] = useState<Return[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [startDate, setStartDate] = useState<string>(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
-};
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'sales' | 'orders' | 'returns'>('sales');
+  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
 
-const ProductDropdown: React.FC<{
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-  className?: string;
-}> = ({ value, onChange, options, ariaLabel, disabled = false, className }) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select', value: '' };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
 
-  return (
-    <div className={`relative group w-full ${className}`} ref={dropdownRef}>
-      <button
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full py-2.5 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md text-sm font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      {isOpen && !disabled && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className={`absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
-        >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              dir={isRtl ? 'rtl' : 'ltr'}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-amber-100 hover:text-amber-600 transition-colors"
-            >
-              {option.label}
-            </button>
-          ))}
-        </motion.div>
-      )}
-    </div>
-  );
-};
+
 
 const DataTable: React.FC<{
   title: string;
@@ -445,45 +370,10 @@ const ReturnsTable: React.FC<{
       <NoDataMessage message={translations[isRtl ? 'ar' : 'en'].noReturns} />
     )}
   </div>
-));
-
-const ReportsAnalytics: React.FC = () => {
-  const { language } = useLanguage();
-  const { user } = useAuth();
-  const isRtl = language === 'ar';
-  const t = translations[isRtl ? 'ar' : 'en'];
-  const [analytics, setAnalytics] = useState<SalesAnalytics>({
-    branchSales: [],
-    leastBranchSales: [],
-    productSales: [],
-    leastProductSales: [],
-    departmentSales: [],
-    leastDepartmentSales: [],
-    totalSales: 0,
-    totalCount: 0,
-    averageOrderValue: 0,
-    topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
-    salesTrends: [],
-    topCustomers: [],
-  });
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [returns, setReturns] = useState<Return[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [startDate, setStartDate] = useState<string>(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  );
-  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'sales' | 'orders' | 'returns'>('sales');
-  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
-
-  const fetchBranches = useCallback(async () => {
+));  const fetchBranches = useCallback(async () => {
     try {
       const response = await branchesAPI.getAll();
-      const branchesData = response.branches.map((b: any) => ({
+      const branchesData = response.map((b: any) => ({
         _id: b._id,
         name: b.name,
         nameEn: b.nameEn,
@@ -608,24 +498,24 @@ const ReportsAnalytics: React.FC = () => {
         });
       } else if (type === 'orders') {
         response = await ordersAPI.getAll(params);
-        setOrders(response.orders.map((order: any) => ({
+        setOrders(response.orders ? response.orders.map((order: any) => ({
           _id: safeString(order._id),
           orderNumber: safeString(order.orderNumber),
           date: safeString(order.date),
           total: safeNumber(order.total),
           status: safeString(order.status),
           branchName: safeString(order.branchName, t.noData),
-        })));
+        })) : []);
       } else if (type === 'returns') {
         response = await returnsAPI.getAll(params);
-        setReturns(response.returns.map((returnItem: any) => ({
+        setReturns(response.returns ? response.returns.map((returnItem: any) => ({
           _id: safeString(returnItem._id),
           returnNumber: safeString(returnItem.returnNumber),
           date: safeString(returnItem.date),
           total: safeNumber(returnItem.total),
           status: safeString(returnItem.status),
           branchName: safeString(returnItem.branchName, t.noData),
-        })));
+        })) : []);
       }
       setError('');
     } catch (err: any) {
@@ -752,7 +642,7 @@ const ReportsAnalytics: React.FC = () => {
           label: `${t.totalSales} (${t.currency})`,
           data: filteredData.branchSales.slice(0, 5).map((b) => safeNumber(b.totalSales)),
           backgroundColor: '#9966FF',
-          barThickness: 12, // Extra narrow for branch sales
+          barThickness: 12,
         },
         {
           label: `${t.totalOrders}`,
@@ -900,9 +790,9 @@ const ReportsAnalytics: React.FC = () => {
       {loading ? (
         <AnalyticsSkeleton />
       ) : (
-        <div className="space-y-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {activeTab === 'sales' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <>
               <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3">{t.salesTrends}</h3>
                 {analytics.salesTrends.length > 0 ? (
@@ -1064,26 +954,22 @@ const ReportsAnalytics: React.FC = () => {
                   <NoDataMessage message={t.noCustomers} />
                 )}
               </div>
-            </div>
+            </>
           )}
           {activeTab === 'orders' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <OrdersTable orders={filteredData.orders} isRtl={isRtl} currency={t.currency} />
-              </div>
+            <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <OrdersTable orders={filteredData.orders} isRtl={isRtl} currency={t.currency} language={language} />
             </div>
           )}
           {activeTab === 'returns' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <ReturnsTable returns={filteredData.returns} isRtl={isRtl} currency={t.currency} />
-              </div>
+            <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <ReturnsTable returns={filteredData.returns} isRtl={isRtl} currency={t.currency} language={language} />
             </div>
           )}
-        </div>
+        </motion.div>
       )}
     </div>
   );
 };
 
-export default React.memo(ReportsAnalytics);
+export default ReportsAnalytics;
