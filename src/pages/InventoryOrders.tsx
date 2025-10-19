@@ -1292,7 +1292,7 @@ const InventoryOrders: React.FC = () => {
                                     const productDepartmentId = typeof product.department === 'string' ? product.department : product.department._id;
                                     if (user?.role === 'chef') {
                                       const userDepartmentId = typeof user.department === 'string' ? user.department : user.department?._id;
-                                      return productDepartmentId === userDepartmentId;
+                                      return productDepartmentId.toString() === userDepartmentId.toString();
                                     }
                                     return true;
                                   })
@@ -1402,7 +1402,7 @@ const InventoryOrders: React.FC = () => {
                                             const product = state.products.find((p) => p._id === item.productId);
                                             const productDepartmentId = typeof product?.department === 'string' ? product?.department : product?.department?._id || 'no-department';
                                             const chefDepartmentId = typeof chef.department === 'string' ? chef.department : chef.department?._id || 'no-department';
-                                            return chefDepartmentId === productDepartmentId;
+                                            return chefDepartmentId.toString() === productDepartmentId.toString();
                                           }
                                         )
                                         .map((chef) => ({
