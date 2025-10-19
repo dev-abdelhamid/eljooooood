@@ -52,14 +52,15 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const { user } = useAuth();
 
-  const availableChefsByDepartment = useMemo(() => {
+ const availableChefsByDepartment = useMemo(() => {
     const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
-      const departmentId = typeof chef.department === 'string' ? chef.department : chef.department?._id || 'no-department';
-      if (!map.has(departmentId)) {
-        map.set(departmentId, []);
+      if (chef.department?._id) {
+        if (!map.has(chef.department._id)) {
+          map.set(chef.department._id, []);
+        }
+        map.get(chef.department._id)!.push(chef);
       }
-      map.get(departmentId)!.push(chef);
     });
     return map;
   }, [chefs]);
