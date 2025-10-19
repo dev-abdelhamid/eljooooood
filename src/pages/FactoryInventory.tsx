@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId } from '../services/api';
+import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId, chefsAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,7 +52,7 @@ interface Chef {
 interface ProductionFormState {
   notes: string;
   items: ProductionItem[];
-  chefId: string; // Added chefId to form state
+  chefId: string;
 }
 
 interface ProductHistoryEntry {
@@ -101,7 +101,7 @@ const translations = {
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
     selectProduct: 'اختر منتج',
-    selectChef: 'اختر شيف', // Added translation for chef
+    selectChef: 'اختر شيف',
     filterByStatus: 'تصفية حسب الحالة',
     filterByDepartment: 'تصفية حسب القسم',
     allStatuses: 'جميع الحالات',
@@ -126,7 +126,7 @@ const translations = {
     inProduction: 'في الإنتاج',
     errors: {
       fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
-      fetchChefs: 'خطأ في جلب بيانات الشيفات', // Added error for chefs
+      fetchChefs: 'خطأ في جلب بيانات الشيفات',
       createProduction: 'خطأ في إنشاء طلب الإنتاج',
       updateInventory: 'خطأ في تحديث المخزون',
       invalidForm: 'البيانات المدخلة غير صالحة',
@@ -136,7 +136,7 @@ const translations = {
       invalidQuantityMax: 'الكمية يجب أن تكون أكبر من 0',
       noItemSelected: 'لم يتم اختيار عنصر',
       invalidProductId: 'معرف المنتج غير صالح',
-      invalidChefId: 'معرف الشيف غير صالح', // Added error for chef
+      invalidChefId: 'معرف الشيف غير صالح',
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
@@ -165,7 +165,7 @@ const translations = {
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
     selectProduct: 'Select Product',
-    selectChef: 'Select Chef', // Added translation for chef
+    selectChef: 'Select Chef',
     filterByStatus: 'Filter by Status',
     filterByDepartment: 'Filter by Department',
     allStatuses: 'All Statuses',
@@ -190,7 +190,7 @@ const translations = {
     inProduction: 'In Production',
     errors: {
       fetchInventory: 'Error fetching factory inventory data',
-      fetchChefs: 'Error fetching chefs data', // Added error for chefs
+      fetchChefs: 'Error fetching chefs data',
       createProduction: 'Error creating production order',
       updateInventory: 'Error updating inventory',
       invalidForm: 'Invalid form data',
@@ -200,7 +200,7 @@ const translations = {
       invalidQuantityMax: 'Quantity must be greater than 0',
       noItemSelected: 'No item selected',
       invalidProductId: 'Invalid product ID',
-      invalidChefId: 'Invalid chef ID', // Added error for chef
+      invalidChefId: 'Invalid chef ID',
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
@@ -275,7 +275,7 @@ type ProductionFormAction =
   | { type: 'ADD_ITEM'; payload: ProductionItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ProductionItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
-  | { type: 'SET_CHEF'; payload: string } // Added action for chef
+  | { type: 'SET_CHEF'; payload: string }
   | { type: 'RESET' };
 
 const productionFormReducer = (state: ProductionFormState, action: ProductionFormAction): ProductionFormState => {
@@ -291,9 +291,9 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
     case 'SET_CHEF':
-      return { ...state, chefId: action.payload }; // Handle chef selection
+      return { ...state, chefId: action.payload };
     case 'RESET':
-      return { notes: '', items: [], chefId: '' }; // Reset includes chefId
+      return { notes: '', items: [], chefId: '' };
     default:
       return state;
   }
@@ -336,7 +336,7 @@ export const FactoryInventory: React.FC = () => {
   const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
-  const [availableChefs, setAvailableChefs] = useState<Chef[]>([]); // Added state for chefs
+  const [availableChefs, setAvailableChefs] = useState<Chef[]>([]);
 
   const ITEMS_PER_PAGE = 10;
 
@@ -424,14 +424,18 @@ export const FactoryInventory: React.FC = () => {
   const { data: chefsData, isLoading: chefsLoading } = useQuery<Chef[], Error>({
     queryKey: ['chefs', language],
     queryFn: async () => {
-      const response = await factoryOrdersAPI.getChefs();
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getChefs - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data || response?.chefs || [];
+      const response = await chefsAPI.getAll();
+      console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
+      const data = Array.isArray(response.data) ? response.data : response?.data?.chefs || response?.chefs || [];
       if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getChefs - Invalid data format, expected array, got:`, data);
+        console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
         return [];
       }
-      return data;
+      return data.map((chef: any) => ({
+        _id: chef._id,
+        name: chef.user.name,
+        nameEn: chef.user.nameEn || chef.user.name,
+      }));
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
@@ -803,7 +807,10 @@ export const FactoryInventory: React.FC = () => {
       }
       value = numValue;
     }
-    dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+    dispatchProductionForm({
+      type: 'UPDATE_ITEM',
+      payload: { index, field, value },
+    });
   }, [t]);
 
   const handleProductChange = useCallback(
@@ -910,7 +917,7 @@ export const FactoryInventory: React.FC = () => {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
         items: aggregatedItems,
         notes: productionForm.notes || undefined,
-        chefId: productionForm.chefId, // Include chefId
+        chefId: productionForm.chefId,
         priority: 'medium',
       };
       console.log(`[${new Date().toISOString()}] Creating production order:`, data);
