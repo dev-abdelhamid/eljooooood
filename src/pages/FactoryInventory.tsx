@@ -77,6 +77,7 @@ interface AvailableProduct {
   productId: string;
   productName: string;
   unit: string;
+  departmentId: string;
   departmentName: string;
 }
 
@@ -238,7 +239,6 @@ const QuantityInput = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
-
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
     if (val === '' || isNaN(num) || num < 1) {
@@ -247,7 +247,6 @@ const QuantityInput = ({
     }
     onChange(val);
   };
-
   return (
     <div className="flex items-center gap-2">
       <Button
@@ -297,7 +296,6 @@ const InventoryCard = ({
   t: typeof translations['ar'] | typeof translations['en'];
 }) => {
   if (!item.product) return null;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -432,17 +430,6 @@ const ProductionModal = ({
     [products, t]
   );
 
-  const chefOptions = useMemo(
-    () => [
-      { value: '', label: t.selectChef },
-      ...chefs.map((chef) => ({
-        value: chef._id,
-        label: isRtl ? chef.user.name : chef.user.nameEn || chef.user.name,
-      })),
-    ],
-    [chefs, t, isRtl]
-  );
-
   const handleProductChange = (index: number, productId: string) => {
     if (!isValidObjectId(productId)) {
       setErrors((prev) => ({
@@ -535,70 +522,82 @@ const ProductionModal = ({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-            {formData.items.map((item, index) => (
-              <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                <Select
-                  value={item.product}
-                  options={productOptions}
-                  onChange={(value) => handleProductChange(index, value)}
-                  placeholder={t.selectProduct}
-                  ariaLabel={`${t.items} ${index + 1}`}
-                  className="w-full"
-                />
-                {errors[`item_${index}_product`] && (
-                  <p className="text-red-600 text-xs">{errors[`item_${index}_product`]}</p>
-                )}
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
-                    <QuantityInput
-                      value={item.quantity}
-                      onChange={(val) => handleQuantityChange(index, val)}
-                      onIncrement={() =>
-                        setFormData({
-                          type: 'UPDATE_ITEM',
-                          payload: { index, field: 'quantity', value: item.quantity + 1 },
-                        })
-                      }
-                      onDecrement={() =>
-                        setFormData({
-                          type: 'UPDATE_ITEM',
-                          payload: { index, field: 'quantity', value: Math.max(item.quantity - 1, 1) },
-                        })
-                      }
-                    />
-                    {errors[`item_${index}_quantity`] && (
-                      <p className="text-red-600 text-xs mt-1">{errors[`item_${index}_quantity`]}</p>
-                    )}
+            {formData.items.map((item, index) => {
+              const selectedProduct = products.find((p) => p.productId === item.product);
+              const itemChefOptions = [
+                { value: '', label: t.selectChef },
+                ...chefs
+                  .filter((chef) => chef.department === selectedProduct?.departmentId)
+                  .map((chef) => ({
+                    value: chef._id,
+                    label: isRtl ? chef.user.name : chef.user.nameEn || chef.user.name,
+                  })),
+              ];
+              return (
+                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <Select
+                    value={item.product}
+                    options={productOptions}
+                    onChange={(value) => handleProductChange(index, value)}
+                    placeholder={t.selectProduct}
+                    ariaLabel={`${t.items} ${index + 1}`}
+                    className="w-full"
+                  />
+                  {errors[`item_${index}_product`] && (
+                    <p className="text-red-600 text-xs">{errors[`item_${index}_product`]}</p>
+                  )}
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                      <QuantityInput
+                        value={item.quantity}
+                        onChange={(val) => handleQuantityChange(index, val)}
+                        onIncrement={() =>
+                          setFormData({
+                            type: 'UPDATE_ITEM',
+                            payload: { index, field: 'quantity', value: item.quantity + 1 },
+                          })
+                        }
+                        onDecrement={() =>
+                          setFormData({
+                            type: 'UPDATE_ITEM',
+                            payload: { index, field: 'quantity', value: Math.max(item.quantity - 1, 1) },
+                          })
+                        }
+                      />
+                      {errors[`item_${index}_quantity`] && (
+                        <p className="text-red-600 text-xs mt-1">{errors[`item_${index}_quantity`]}</p>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.selectChef}</label>
+                      <Select
+                        value={item.assignedTo || ''}
+                        options={itemChefOptions}
+                        onChange={(value) => handleChefChange(index, value)}
+                        placeholder={t.selectChef}
+                        ariaLabel={`${t.selectChef} ${index + 1}`}
+                        className="w-full"
+                      />
+                      {errors[`item_${index}_assignedTo`] && (
+                        <p className="text-red-600 text-xs mt-1">{errors[`item_${index}_assignedTo`]}</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t.selectChef}</label>
-                    <Select
-                      value={item.assignedTo || ''}
-                      options={chefOptions}
-                      onChange={(value) => handleChefChange(index, value)}
-                      placeholder={t.selectChef}
-                      ariaLabel={`${t.selectChef} ${index + 1}`}
-                      className="w-full"
-                    />
-                    {errors[`item_${index}_assignedTo`] && (
-                      <p className="text-red-600 text-xs mt-1">{errors[`item_${index}_assignedTo`]}</p>
-                    )}
-                  </div>
+                  {formData.items.length > 1 && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => setFormData({ type: 'REMOVE_ITEM', payload: index })}
+                      className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                      aria-label={t.remove}
+                    >
+                      <MinusCircle className="w-4 h-4" />
+                      {t.remove}
+                    </Button>
+                  )}
                 </div>
-                {formData.items.length > 1 && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => setFormData({ type: 'REMOVE_ITEM', payload: index })}
-                    className="text-red-600 hover:text-red-800 flex items-center gap-1"
-                    aria-label={t.remove}
-                  >
-                    <MinusCircle className="w-4 h-4" />
-                    {t.remove}
-                  </Button>
-                )}
-              </div>
-            ))}
+              );
+            })}
             <Button
               variant="secondary"
               onClick={() =>
@@ -909,7 +908,6 @@ export const FactoryInventory: React.FC = () => {
   const { socket, isConnected } = useSocket();
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
-  const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
@@ -940,29 +938,19 @@ export const FactoryInventory: React.FC = () => {
     }, [value, delay]);
     return [value, setValue, debouncedValue] as const;
   };
-
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
   // Chefs Query
-  const { data: chefsData, isLoading: chefsLoading, error: chefsError } = useQuery<Chef[], Error>({
+  const { data: chefsData, error: chefsError } = useQuery<Chef[], Error>({
     queryKey: ['chefs', language],
     queryFn: async () => {
       const response = await chefsAPI.getAll();
-      console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data || response?.chefs || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
-        return [];
-      }
-      return data.filter((chef): chef is Chef => !!chef && isValidObjectId(chef._id));
+      return Array.isArray(data) ? data.filter((chef): chef is Chef => !!chef && isValidObjectId(chef._id)) : [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
-      toast.error(err.message || t.errors.fetchChefs, { position: isRtl ? 'top-right' : 'top-left' });
-    },
+    onError: (err) => toast.error(err.message || t.errors.fetchChefs, { position: isRtl ? 'top-right' : 'top-left' }),
   });
 
   // Inventory Query
@@ -970,7 +958,7 @@ export const FactoryInventory: React.FC = () => {
     FactoryInventoryItem[],
     Error
   >({
-    queryKey: ['factoryInventory', debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
+    queryKey: ['factoryInventory', debouncedSearchQuery, filterStatus, filterDepartment, language],
     queryFn: async () => {
       const params = {
         product: debouncedSearchQuery || undefined,
@@ -979,57 +967,33 @@ export const FactoryInventory: React.FC = () => {
         lang: language,
       };
       const response = await factoryInventoryAPI.getAll(params);
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
-        return [];
-      }
-      return data;
+      return Array.isArray(data) ? data : [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    select: (data) => {
-      return data
-        .filter((item): item is FactoryInventoryItem => !!item && !!item.product && isValidObjectId(item.product._id))
-        .map((item: FactoryInventoryItem) => ({
-          ...item,
-          product: item.product
-            ? {
-                ...item.product,
-                displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-                displayUnit: isRtl ? (item.product.unit || t.unit) : item.product.unitEn || item.product.unit || 'N/A',
-                department: item.product.department
-                  ? {
-                      ...item.product.department,
-                      displayName: isRtl
-                        ? item.product.department.name
-                        : item.product.department.nameEn || item.product.department.name,
-                    }
-                  : null,
-              }
-            : null,
-          status:
-            item.currentStock <= item.minStockLevel
-              ? InventoryStatus.LOW
-              : item.currentStock >= item.maxStockLevel
-              ? InventoryStatus.FULL
-              : InventoryStatus.NORMAL,
-          inProduction:
-            factoryOrdersData?.some(
-              (order) =>
-                (order.status === 'pending' || order.status === 'in_production') &&
-                order.items.some((i) => i.productId === item.product?._id)
-            ) || false,
-        }));
-    },
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Inventory query error:`, err.message);
-      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
-    },
-    retry: 3,
-    retryDelay: (attempt) => (attempt + 1) * 1000,
+    select: (data) => data
+      .filter((item): item is FactoryInventoryItem => !!item && !!item.product && isValidObjectId(item.product._id))
+      .map((item) => ({
+        ...item,
+        product: item.product ? {
+          ...item.product,
+          displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+          displayUnit: isRtl ? (item.product.unit || t.unit) : item.product.unitEn || item.product.unit || 'N/A',
+          department: item.product.department ? {
+            ...item.product.department,
+            displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+          } : null,
+        } : null,
+        status: item.currentStock <= item.minStockLevel ? InventoryStatus.LOW :
+          item.currentStock >= item.maxStockLevel ? InventoryStatus.FULL : InventoryStatus.NORMAL,
+        inProduction: factoryOrdersData?.some(
+          (order) =>
+            (order.status === 'pending' || order.status === 'in_production') &&
+            order.items.some((i) => i.productId === item.product?._id)
+        ) || false,
+      })),
+    onError: (err) => toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' }),
   });
 
   // All Products Query
@@ -1037,30 +1001,22 @@ export const FactoryInventory: React.FC = () => {
     queryKey: ['allProducts', language],
     queryFn: async () => {
       const response = await factoryInventoryAPI.getAllProducts();
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAllProducts - Response:`, response);
       const products = Array.isArray(response) ? response : response?.data || response?.products || [];
-      if (!Array.isArray(products)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAllProducts - Invalid data format, expected array, got:`, products);
-        return [];
-      }
-      return products
+      return Array.isArray(products) ? products
         .filter((product: any) => product && product._id && isValidObjectId(product._id))
         .map((product: any) => ({
           productId: product._id,
           productName: isRtl ? product.name : product.nameEn || product.name,
           unit: isRtl ? (product.unit || t.unit) : product.unitEn || product.unit || 'N/A',
+          departmentId: product.department?._id || '',
           departmentName: isRtl
             ? product.department?.name || t.allDepartments
             : product.department?.nameEn || product.department?.name || 'Unknown',
-        }));
+        })) : [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] All products query error:`, err.message);
-      toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
-    },
+    onError: (err) => toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' }),
   });
 
   // Factory Orders Query for inProduction flag
@@ -1068,21 +1024,12 @@ export const FactoryInventory: React.FC = () => {
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
       const response = await factoryOrdersAPI.getAll();
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Invalid data format, expected array, got:`, data);
-        return [];
-      }
-      return data;
+      return Array.isArray(data) ? data : [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Factory orders query error:`, err.message);
-      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
-    },
+    onError: (err) => toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' }),
   });
 
   // Product History Query
@@ -1093,21 +1040,12 @@ export const FactoryInventory: React.FC = () => {
         throw new Error(t.errors.invalidProductId);
       }
       const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid data format, expected array, got:`, data);
-        return [];
-      }
-      return data;
+      return Array.isArray(data) ? data : [];
     },
     enabled: isDetailsModalOpen && !!selectedProductId && isValidObjectId(selectedProductId),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Product history query error:`, err.message);
-      toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
-    },
+    onError: (err) => toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' }),
   });
 
   // Set available and all products
@@ -1115,11 +1053,12 @@ export const FactoryInventory: React.FC = () => {
     if (inventoryData) {
       setAvailableProducts(
         inventoryData
-          .filter((item) => item.currentStock > 0)
+          .filter((item) => item.currentStock > 0 && item.product)
           .map((item) => ({
             productId: item.product!._id,
             productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
             unit: isRtl ? (item.product!.unit || t.unit) : item.product!.unitEn || item.product!.unit || 'N/A',
+            departmentId: item.product!.department?._id || '',
             departmentName: isRtl
               ? item.product!.department?.name || t.allDepartments
               : item.product!.department?.nameEn || item.product!.department?.name || 'Unknown',
@@ -1136,10 +1075,7 @@ export const FactoryInventory: React.FC = () => {
     if (!socket || !user?.role || !isConnected) return;
 
     const handleFactoryInventoryUpdated = ({ productId }: { productId: string }) => {
-      if (!isValidObjectId(productId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid productId in factoryInventoryUpdated:`, productId);
-        return;
-      }
+      if (!isValidObjectId(productId)) return;
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       if (selectedProductId === productId) {
         queryClient.invalidateQueries({ queryKey: ['factoryProductHistory'] });
@@ -1158,12 +1094,9 @@ export const FactoryInventory: React.FC = () => {
     };
 
     const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
-      if (!isValidObjectId(orderId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid orderId in factoryOrderCreated:`, orderId);
-        return;
-      }
+      if (!isValidObjectId(orderId)) return;
       const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-      audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
+      audio.play().catch(console.error);
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
@@ -1190,13 +1123,10 @@ export const FactoryInventory: React.FC = () => {
       chefId: string;
       productName: string;
     }) => {
-      if (!isValidObjectId(factoryOrderId) || !isValidObjectId(chefId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId or chefId in factoryTaskAssigned:`, { factoryOrderId, chefId });
-        return;
-      }
+      if (!isValidObjectId(factoryOrderId) || !isValidObjectId(chefId)) return;
       if (user._id === chefId) {
         const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
+        audio.play().catch(console.error);
         addNotification({
           _id: crypto.randomUUID(),
           type: 'info',
@@ -1212,12 +1142,9 @@ export const FactoryInventory: React.FC = () => {
     };
 
     const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
-      if (!isValidObjectId(factoryOrderId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId in factoryOrderCompleted:`, factoryOrderId);
-        return;
-      }
+      if (!isValidObjectId(factoryOrderId)) return;
       const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-      audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
+      audio.play().catch(console.error);
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
@@ -1239,10 +1166,7 @@ export const FactoryInventory: React.FC = () => {
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
 
     const reconnectInterval = setInterval(() => {
-      if (!isConnected && socket) {
-        console.log(`[${new Date().toISOString()}] Attempting to reconnect WebSocket...`);
-        socket.connect();
-      }
+      if (!isConnected && socket) socket.connect();
     }, 5000);
 
     return () => {
@@ -1256,24 +1180,21 @@ export const FactoryInventory: React.FC = () => {
 
   // Department options
   const departmentOptions = useMemo(() => {
-    const depts = new Set<string>();
-    const deptMap: Record<string, { _id: string; name: string }> = {};
+    const deptMap = new Map<string, { _id: string; name: string }>();
     inventoryData?.forEach((item) => {
       if (item.product?.department?._id) {
         const deptKey = item.product.department._id;
-        if (!deptMap[deptKey]) {
-          deptMap[deptKey] = {
+        if (!deptMap.has(deptKey)) {
+          deptMap.set(deptKey, {
             _id: deptKey,
             name: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
-          };
-          depts.add(deptKey);
+          });
         }
       }
     });
-    const uniqueDepts = Array.from(depts).map((deptId) => deptMap[deptId]);
     return [
       { value: '', label: t.allDepartments },
-      ...uniqueDepts.map((dept) => ({
+      ...Array.from(deptMap.values()).map((dept) => ({
         value: dept._id,
         label: dept.name || t.allDepartments,
       })),
@@ -1333,7 +1254,7 @@ export const FactoryInventory: React.FC = () => {
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
     setCurrentPage(1);
-  }, []);
+  }, [setSearchInput]);
 
   const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
     dispatchProductionForm({ type: 'RESET' });
@@ -1407,7 +1328,7 @@ export const FactoryInventory: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  const createProductionMutation = useMutation<{ orderId: string; orderNumber: string }, Error, void>({
+  const createProductionMutation = useMutation<{ orderId: string; orderNumber: string }, Error>({
     mutationFn: async () => {
       if (!validateProductionForm()) {
         throw new Error(t.errors.invalidForm);
@@ -1429,9 +1350,7 @@ export const FactoryInventory: React.FC = () => {
         notes: productionForm.notes || undefined,
         priority: 'medium',
       };
-      console.log(`[${new Date().toISOString()}] Creating production order:`, data);
       const response = await factoryOrdersAPI.create(data);
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
       return {
         orderId: response?._id || crypto.randomUUID(),
         orderNumber: response?.orderNumber || data.orderNumber,
@@ -1455,7 +1374,6 @@ export const FactoryInventory: React.FC = () => {
       }
     },
     onError: (err: any) => {
-      console.error(`[${new Date().toISOString()}] Create production order error:`, err.message);
       let errorMessage = err.message || t.errors.createProduction;
       if (err.response?.status === 429) {
         errorMessage = t.errors.tooManyRequests;
@@ -1467,9 +1385,9 @@ export const FactoryInventory: React.FC = () => {
             [`item_${index}_${e.path}`]: e.msg,
           }));
         });
-      } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
+      } else if (err.message.includes('Invalid product ID')) {
         errorMessage = t.errors.invalidProductId;
-      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
+      } else if (err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
       }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -1477,7 +1395,7 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  const updateInventoryMutation = useMutation<void, Error, void>({
+  const updateInventoryMutation = useMutation<void, Error>({
     mutationFn: async () => {
       if (!validateEditForm()) {
         throw new Error(t.errors.invalidForm);
@@ -1485,11 +1403,6 @@ export const FactoryInventory: React.FC = () => {
       if (!selectedItem || !isValidObjectId(selectedItem._id)) {
         throw new Error(t.errors.noItemSelected);
       }
-      console.log(`[${new Date().toISOString()}] Updating inventory:`, {
-        id: selectedItem._id,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-      });
       await factoryInventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
@@ -1511,7 +1424,6 @@ export const FactoryInventory: React.FC = () => {
       }
     },
     onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Update inventory error:`, err.message);
       const errorMessage = err.response?.status === 429 ? t.errors.tooManyRequests : err.message || t.errors.updateInventory;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setEditErrors({ form: errorMessage });
@@ -1540,7 +1452,6 @@ export const FactoryInventory: React.FC = () => {
           {t.create}
         </Button>
       </div>
-
       {errorMessage && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -1551,7 +1462,6 @@ export const FactoryInventory: React.FC = () => {
           <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
         </motion.div>
       )}
-
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="w-full lg:w-1/2">
@@ -1590,7 +1500,6 @@ export const FactoryInventory: React.FC = () => {
           {isRtl ? `عدد العناصر: ${selectedTab === 0 ? filteredInventory.length : filteredAllProducts.length}` : `Items Count: ${selectedTab === 0 ? filteredInventory.length : filteredAllProducts.length}`}
         </div>
       </div>
-
       <CustomTabs
         selectedTab={selectedTab}
         setSelectedTab={setSelectedTab}
@@ -1714,7 +1623,7 @@ export const FactoryInventory: React.FC = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ duration: 0.3 }}
-                    className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200  p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
+                    className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
                   >
                     <div className="space-y-2">
                       <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
@@ -1730,24 +1639,24 @@ export const FactoryInventory: React.FC = () => {
                     <div className="mt-4 flex justify-end gap-2">
                       <Button
                         variant="secondary"
-                        onClick={() => handleOpenProductionModal({ 
-                          product: { 
-                            _id: product.productId, 
-                            name: product.productName, 
-                            displayName: product.productName, 
-                            unit: product.unit, 
-                            displayUnit: product.unit, 
-                            department: null, 
-                            code: '', 
-                            nameEn: '', 
-                            unitEn: '' 
-                          }, 
-                          _id: product.productId, 
-                          currentStock: 0, 
-                          minStockLevel: 0, 
-                          maxStockLevel: 0, 
-                          status: InventoryStatus.NORMAL, 
-                          inProduction: false 
+                        onClick={() => handleOpenProductionModal({
+                          _id: product.productId,
+                          product: {
+                            _id: product.productId,
+                            name: product.productName,
+                            nameEn: '',
+                            code: '',
+                            unit: product.unit,
+                            unitEn: '',
+                            department: { _id: product.departmentId, name: product.departmentName, nameEn: '', displayName: product.departmentName },
+                            displayName: product.productName,
+                            displayUnit: product.unit,
+                          },
+                          currentStock: 0,
+                          minStockLevel: 0,
+                          maxStockLevel: 0,
+                          status: InventoryStatus.NORMAL,
+                          inProduction: false,
                         })}
                         className="p-2 text-amber-600 hover:text-amber-800"
                         aria-label={t.create}
@@ -1787,7 +1696,6 @@ export const FactoryInventory: React.FC = () => {
           )}
         </div>
       </CustomTabs>
-
       <ProductionModal
         isOpen={isProductionModalOpen}
         onClose={() => {
@@ -1806,7 +1714,6 @@ export const FactoryInventory: React.FC = () => {
         isRtl={isRtl}
         t={t}
       />
-
       <EditModal
         isOpen={isEditModalOpen}
         onClose={() => {
@@ -1823,7 +1730,6 @@ export const FactoryInventory: React.FC = () => {
         isRtl={isRtl}
         t={t}
       />
-
       <DetailsModal
         isOpen={isDetailsModalOpen}
         onClose={() => {
