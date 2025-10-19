@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,10 +10,10 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI , } from '../services/api';
+import { factoryOrdersAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem , User } from '../types/types';
+import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem, User } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
@@ -391,10 +387,11 @@ export const InventoryOrders: React.FC = () => {
           lang: language,
         };
 
-        const [ordersResponse, chefsResponse, departmentsResponse] = await Promise.all([
+        // Fetch orders, departments, and available chefs
+        const [ordersResponse, departmentsResponse, chefsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
-          chefsAPI.getAll({ lang: language }),
           departmentAPI.getAll({ lang: language }),
+          factoryOrdersAPI.getAvailableChefs({ lang: language }), // Use getAvailableChefs instead of chefsAPI.getAll
         ]);
 
         // Fetch all products by looping through pages
@@ -887,7 +884,13 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
+        const payload = {
+          items: state.assignFormData.items.map((item) => ({
+            itemId: item.itemId,
+            assignedTo: item.assignedTo,
+          })),
+        };
+        await factoryOrdersAPI.assignChefs(orderId, payload);
         const items = state.assignFormData.items.map((item) => ({
           _id: item.itemId,
           assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
@@ -1235,7 +1238,7 @@ export const InventoryOrders: React.FC = () => {
                                 updateOrderStatus={updateOrderStatus}
                                 confirmItemCompletion={confirmItemCompletion}
                                 openAssignModal={openAssignModal}
-                                confirmFactoryProduction={(orderId) => updateOrderStatus(orderId, 'stocked')}  // استخدم factoryInventoryAPI هنا
+                                confirmFactoryProduction={(orderId) => updateOrderStatus(orderId, 'stocked')}
                                 submitting={state.submitting}
                                 isRtl={isRtl}
                                 currentUserRole={user.role}
@@ -1268,7 +1271,6 @@ export const InventoryOrders: React.FC = () => {
                     assignChefs={assignChefs}
                     error={state.error}
                     submitting={state.submitting}
-                    isRtl={isRtl}
                     loading={state.loading}
                   />
                   <Modal
@@ -1410,10 +1412,15 @@ export const InventoryOrders: React.FC = () => {
                                   <ProductDropdown
                                     options={[
                                       { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-                                      ...state.chefs.map((chef) => ({
-                                        value: chef.userId,
-                                        label: chef.displayName,
-                                      })),
+                                      ...state.chefs
+                                        .filter((chef) =>
+                                          state.products.find((p) => p._id === item.productId)?.department._id ===
+                                          chef.department?._id
+                                        )
+                                        .map((chef) => ({
+                                          value: chef.userId,
+                                          label: chef.displayName,
+                                        })),
                                     ]}
                                     value={item.assignedTo || ''}
                                     onChange={(value) =>
