@@ -9,6 +9,7 @@ import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { toast } from 'react-toastify';
 
 interface AssignChefsModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ interface AssignChefsModalProps {
   chefs: Chef[];
   error: string;
   submitting: string | null;
-  assignChefs: (orderId: string) => void;
+  assignChefs: (orderId: string) => Promise<void>;
   setAssignForm: (formData: AssignChefsForm) => void;
   loading: boolean;
 }
@@ -78,13 +79,22 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   );
 
   useEffect(() => {
-    if (!selectedOrder || !user) return;
+    if (!selectedOrder || !user) {
+      console.warn('No selected order or user found for chef assignment');
+      return;
+    }
 
     const updatedItems = selectedOrder.items
       .filter((item) => !item.assignedTo)
       .map((item) => {
         const departmentId = item.department?._id?.toString() || 'no-department';
         const availableChefs = availableChefsByDepartment.get(departmentId) || [];
+        if (!availableChefs.length && departmentId !== 'no-department') {
+          console.warn(`No chefs available for department: ${departmentId}, product: ${item.displayProductName}`);
+          toast.warn(t('no_chefs_available_for_department', { department: item.department?.displayName || 'غير معروف' }), {
+            position: isRtl ? 'top-left' : 'top-right',
+          });
+        }
         let assignedTo = '';
         if (availableChefs.length === 1) {
           assignedTo = availableChefs[0].userId;
@@ -99,7 +109,32 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       });
 
     setAssignForm({ items: updatedItems });
-  }, [availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user]);
+  }, [availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user, t]);
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedOrder?.id) {
+        console.error('No order selected for chef assignment');
+        toast.error(t('no_order_selected'), { position: isRtl ? 'top-left' : 'top-right' });
+        return;
+      }
+      if (assignFormData.items.some((item) => !item.assignedTo)) {
+        console.warn('Some items are missing assigned chefs');
+        toast.error(t('assign_chef_required'), { position: isRtl ? 'top-left' : 'top-right' });
+        return;
+      }
+      try {
+        await assignChefs(selectedOrder.id);
+      } catch (err: any) {
+        console.error('Error assigning chefs:', err.message);
+        toast.error(t('error_assigning_chefs', { message: err.message }), {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      }
+    },
+    [selectedOrder, assignFormData.items, assignChefs, isRtl, t]
+  );
 
   return (
     <Modal
@@ -112,33 +147,25 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       }
       size="md"
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (selectedOrder?.id) {
-            assignChefs(selectedOrder.id);
-          }
-        }}
-        className="space-y-4"
-      >
+      <form onSubmit={handleSubmit} className="space-y-4">
         {loading ? (
-          <Skeleton count={assignFormData.items.length} height={40} />
+          <Skeleton count={assignFormData.items.length || 3} height={40} />
+        ) : !selectedOrder ? (
+          <p className="text-gray-600 text-xs">{t('no_order_selected')}</p>
         ) : assignFormData.items.length === 0 ? (
-          <p className="text-gray-600 text-xs">
-            {t('no_unassigned_items')}
-          </p>
+          <p className="text-gray-600 text-xs">{t('no_unassigned_items')}</p>
         ) : (
           assignFormData.items.map((item, index) => {
-            const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
+            const orderItem = selectedOrder.items.find((i) => i._id === item.itemId);
             const departmentId = orderItem?.department?._id?.toString() || 'no-department';
             const availableChefs = availableChefsByDepartment.get(departmentId) || [];
             const chefOptions = [
               { value: '', label: t('select_chef') },
               ...availableChefs
-                .sort((a, b) => a.displayName.localeCompare(b.displayName))
+                .sort((a, b) => a.displayName.localeCompare(b.displayName, language))
                 .map((chef) => ({
                   value: chef.userId,
-                  label: `${chef.displayName} (${chef.department.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+                  label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
                 })),
             ];
 
@@ -148,29 +175,34 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
+                className="flex items-start gap-2 mb-3 p-2 border border-gray-200 rounded-md bg-gray-50"
               >
-                <label
-                  className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
-                  htmlFor={`chef-select-${index}`}
-                >
-                  {isRtl
-                    ? `تعيين شيف لـ ${orderItem?.displayProductName || 'غير معروف'} (${item.quantity} ${item.unit})`
-                    : `Assign chef to ${orderItem?.displayProductName || 'Unknown'} (${item.quantity} ${item.unit})`}
-                </label>
-                <Select
-                  id={`chef-select-${index}`}
-                  options={chefOptions}
-                  value={item.assignedTo}
-                  onChange={(value) => updateAssignment(index, value)}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
-                  aria-label={t('select_chef')}
-                  disabled={availableChefs.length === 0}
-                />
-                {availableChefs.length === 0 && (
-                  <p className="text-red-600 text-xs mt-1">
-                    {t('no_chefs_available')}
-                  </p>
-                )}
+                <div className="flex-1">
+                  <label
+                    className={`block text-xs font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                    htmlFor={`chef-select-${index}`}
+                  >
+                    {isRtl
+                      ? `تعيين شيف لـ ${orderItem?.displayProductName || 'غير معروف'} (${item.quantity} ${item.unit})`
+                      : `Assign chef to ${orderItem?.displayProductName || 'Unknown'} (${item.quantity} ${item.unit})`}
+                  </label>
+                  <Select
+                    id={`chef-select-${index}`}
+                    options={chefOptions}
+                    value={item.assignedTo}
+                    onChange={(value) => updateAssignment(index, value)}
+                    className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                    aria-label={t('select_chef')}
+                    disabled={availableChefs.length === 0}
+                  />
+                  {availableChefs.length === 0 && (
+                    <p className="text-red-600 text-xs mt-1">
+                      {t('no_chefs_available_for_department', {
+                        department: orderItem?.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
+                      })}
+                    </p>
+                  )}
+                </div>
               </motion.div>
             );
           })
@@ -196,7 +228,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           <Button
             type="submit"
             variant="primary"
-            disabled={submitting !== null || loading || assignFormData.items.some((item) => !item.assignedTo)}
+            disabled={submitting !== null || loading || !selectedOrder || assignFormData.items.some((item) => !item.assignedTo)}
             className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-xs shadow-sm disabled:opacity-50"
           >
             {submitting ? t('assigning') : t('assign')}
