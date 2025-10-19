@@ -1,22 +1,23 @@
-import { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { factoryOrdersAPI, factoryInventoryAPI, chefsAPI, isValidObjectId } from '../services/api';
+import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
 
-// تعريف الأنواع باستخدام TypeScript
+// Enums for type safety
 enum InventoryStatus {
   LOW = 'low',
   NORMAL = 'normal',
   FULL = 'full',
 }
 
+// Interfaces aligned with backend
 interface FactoryInventoryItem {
   _id: string;
   product: {
@@ -40,13 +41,18 @@ interface FactoryInventoryItem {
 interface ProductionItem {
   product: string;
   quantity: number;
-  chefId?: string; // معرف الشيف المسؤول
+}
+
+interface Chef {
+  _id: string;
+  name: string;
+  nameEn: string;
 }
 
 interface ProductionFormState {
   notes: string;
   items: ProductionItem[];
-  selectedChef?: string; // الشيف المختار
+  chefId: string; // Added chefId to form state
 }
 
 interface ProductHistoryEntry {
@@ -76,17 +82,7 @@ interface FactoryOrder {
   status: 'pending' | 'in_production' | 'completed' | 'cancelled';
 }
 
-interface Chef {
-  _id: string;
-  user: {
-    name: string;
-    nameEn?: string;
-    username: string;
-  };
-  department: string;
-}
-
-// الترجمات
+// Translations
 const translations = {
   ar: {
     title: 'إدارة مخزون المصنع',
@@ -105,7 +101,7 @@ const translations = {
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
     selectProduct: 'اختر منتج',
-    selectChef: 'اختر شيف', // ترجمة جديدة
+    selectChef: 'اختر شيف', // Added translation for chef
     filterByStatus: 'تصفية حسب الحالة',
     filterByDepartment: 'تصفية حسب القسم',
     allStatuses: 'جميع الحالات',
@@ -130,7 +126,7 @@ const translations = {
     inProduction: 'في الإنتاج',
     errors: {
       fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
-      fetchChefs: 'خطأ في جلب بيانات الشيفات', // ترجمة جديدة
+      fetchChefs: 'خطأ في جلب بيانات الشيفات', // Added error for chefs
       createProduction: 'خطأ في إنشاء طلب الإنتاج',
       updateInventory: 'خطأ في تحديث المخزون',
       invalidForm: 'البيانات المدخلة غير صالحة',
@@ -140,7 +136,7 @@ const translations = {
       invalidQuantityMax: 'الكمية يجب أن تكون أكبر من 0',
       noItemSelected: 'لم يتم اختيار عنصر',
       invalidProductId: 'معرف المنتج غير صالح',
-      invalidChefId: 'معرف الشيف غير صالح', // ترجمة جديدة
+      invalidChefId: 'معرف الشيف غير صالح', // Added error for chef
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
@@ -169,7 +165,7 @@ const translations = {
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
     selectProduct: 'Select Product',
-    selectChef: 'Select Chef', // ترجمة جديدة
+    selectChef: 'Select Chef', // Added translation for chef
     filterByStatus: 'Filter by Status',
     filterByDepartment: 'Filter by Department',
     allStatuses: 'All Statuses',
@@ -194,7 +190,7 @@ const translations = {
     inProduction: 'In Production',
     errors: {
       fetchInventory: 'Error fetching factory inventory data',
-      fetchChefs: 'Error fetching chefs data', // ترجمة جديدة
+      fetchChefs: 'Error fetching chefs data', // Added error for chefs
       createProduction: 'Error creating production order',
       updateInventory: 'Error updating inventory',
       invalidForm: 'Invalid form data',
@@ -204,7 +200,7 @@ const translations = {
       invalidQuantityMax: 'Quantity must be greater than 0',
       noItemSelected: 'No item selected',
       invalidProductId: 'Invalid product ID',
-      invalidChefId: 'Invalid chef ID', // ترجمة جديدة
+      invalidChefId: 'Invalid chef ID', // Added error for chef
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
@@ -218,7 +214,7 @@ const translations = {
   },
 };
 
-// مكون QuantityInput
+// QuantityInput Component
 const QuantityInput = ({
   value,
   onChange,
@@ -273,21 +269,19 @@ const QuantityInput = ({
   );
 };
 
-// Reducer لنموذج طلب الإنتاج
+// Reducer for production form
 type ProductionFormAction =
   | { type: 'SET_NOTES'; payload: string }
-  | { type: 'SET_CHEF'; payload: string }
   | { type: 'ADD_ITEM'; payload: ProductionItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ProductionItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
+  | { type: 'SET_CHEF'; payload: string } // Added action for chef
   | { type: 'RESET' };
 
 const productionFormReducer = (state: ProductionFormState, action: ProductionFormAction): ProductionFormState => {
   switch (action.type) {
     case 'SET_NOTES':
       return { ...state, notes: action.payload };
-    case 'SET_CHEF':
-      return { ...state, selectedChef: action.payload };
     case 'ADD_ITEM':
       return { ...state, items: [...state.items, action.payload] };
     case 'UPDATE_ITEM':
@@ -296,14 +290,16 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+    case 'SET_CHEF':
+      return { ...state, chefId: action.payload }; // Handle chef selection
     case 'RESET':
-      return { notes: '', items: [], selectedChef: undefined };
+      return { notes: '', items: [], chefId: '' }; // Reset includes chefId
     default:
       return state;
   }
 };
 
-// دالة لتجميع العناصر حسب المنتج
+// Aggregate items by product
 const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   const aggregated: Record<string, ProductionItem> = {};
   items.forEach((item) => {
@@ -311,7 +307,6 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
       aggregated[item.product] = {
         product: item.product,
         quantity: 0,
-        chefId: item.chefId,
       };
     }
     aggregated[item.product].quantity += item.quantity;
@@ -327,7 +322,6 @@ export const FactoryInventory: React.FC = () => {
   const { socket, isConnected } = useSocket();
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
-
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
@@ -337,48 +331,29 @@ export const FactoryInventory: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<FactoryInventoryItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [], selectedChef: undefined });
+  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [], chefId: '' });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
-  const [availableChefs, setAvailableChefs] = useState<Chef[]>([]);
+  const [availableChefs, setAvailableChefs] = useState<Chef[]>([]); // Added state for chefs
+
   const ITEMS_PER_PAGE = 10;
 
-  // Hook مخصص للـ Debounce
+  // Custom debounce hook
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
     const [debouncedValue, setDebouncedValue] = useState<T>(initialValue);
-
     useEffect(() => {
       const handler = setTimeout(() => setDebouncedValue(value), delay);
       return () => clearTimeout(handler);
     }, [value, delay]);
-
     return [value, setValue, debouncedValue] as const;
   };
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
-  // استعلام جلب الشيفات
-  const { data: chefsData, isLoading: chefsLoading, error: chefsError } = useQuery<Chef[], Error>({
-    queryKey: ['chefs', language],
-    queryFn: async () => {
-      const response = await chefsAPI.getAll();
-      console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
-      const data = Array.isArray(response.data) ? response.data : [];
-      return data.filter((chef) => chef && isValidObjectId(chef._id));
-    },
-    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
-    staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
-      toast.error(err.message || t.errors.fetchChefs, { position: isRtl ? 'top-right' : 'top-left' });
-    },
-  });
-
-  // استعلام جلب المخزون
+  // Inventory Query
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
     FactoryInventoryItem[],
     Error
@@ -445,7 +420,29 @@ export const FactoryInventory: React.FC = () => {
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
   });
 
-  // استعلام تاريخ المنتج
+  // Chefs Query
+  const { data: chefsData, isLoading: chefsLoading } = useQuery<Chef[], Error>({
+    queryKey: ['chefs', language],
+    queryFn: async () => {
+      const response = await factoryOrdersAPI.getChefs();
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getChefs - Response:`, response);
+      const data = Array.isArray(response) ? response : response?.data || response?.chefs || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getChefs - Invalid data format, expected array, got:`, data);
+        return [];
+      }
+      return data;
+    },
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
+    onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
+      toast.error(err.message || t.errors.fetchChefs, { position: isRtl ? 'top-right' : 'top-left' });
+    },
+  });
+
+  // Product History Query
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
     queryKey: ['factoryProductHistory', selectedProductId, language],
     queryFn: async () => {
@@ -470,7 +467,7 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  // استعلام طلبات المصنع
+  // Factory Orders Query for inProduction flag
   const { data: factoryOrdersData } = useQuery<FactoryOrder[], Error>({
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
@@ -492,7 +489,7 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  // جلب المنتجات المتاحة
+  // Available products
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -524,14 +521,22 @@ export const FactoryInventory: React.FC = () => {
     fetchProducts();
   }, [isRtl, t]);
 
-  // تحديث قائمة الشيفات
+  // Available chefs
   useEffect(() => {
     if (chefsData) {
-      setAvailableChefs(chefsData);
+      setAvailableChefs(
+        chefsData
+          .filter((chef: any) => chef && chef._id && isValidObjectId(chef._id))
+          .map((chef: any) => ({
+            _id: chef._id,
+            name: isRtl ? chef.name : chef.nameEn || chef.name,
+            nameEn: chef.nameEn || chef.name,
+          }))
+      );
     }
-  }, [chefsData]);
+  }, [chefsData, isRtl]);
 
-  // أحداث WebSocket
+  // Socket Events
   useEffect(() => {
     if (!socket || !user?.role || !isConnected) return;
 
@@ -654,7 +659,7 @@ export const FactoryInventory: React.FC = () => {
     };
   }, [socket, user, isConnected, queryClient, addNotification, t, isRtl, selectedProductId]);
 
-  // خيارات الأقسام
+  // Department options
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
     const deptMap: Record<string, { _id: string; name: string }> = {};
@@ -680,7 +685,7 @@ export const FactoryInventory: React.FC = () => {
     ];
   }, [inventoryData, isRtl, t]);
 
-  // خيارات الحالة
+  // Status options
   const statusOptions = useMemo(
     () => [
       { value: '', label: t.allStatuses },
@@ -691,7 +696,7 @@ export const FactoryInventory: React.FC = () => {
     [t]
   );
 
-  // خيارات المنتجات
+  // Product options
   const productOptions = useMemo(
     () => [
       { value: '', label: t.selectProduct },
@@ -703,19 +708,19 @@ export const FactoryInventory: React.FC = () => {
     [availableProducts, t]
   );
 
-  // خيارات الشيفات
+  // Chef options
   const chefOptions = useMemo(
     () => [
       { value: '', label: t.selectChef },
       ...availableChefs.map((chef) => ({
         value: chef._id,
-        label: isRtl ? chef.user.name : chef.user.nameEn || chef.user.name,
+        label: chef.name,
       })),
     ],
-    [availableChefs, isRtl, t]
+    [availableChefs, t]
   );
 
-  // المخزون المفلتر والمقسم
+  // Filtered and paginated inventory
   const filteredInventory = useMemo(
     () =>
       (inventoryData || []).filter(
@@ -737,7 +742,7 @@ export const FactoryInventory: React.FC = () => {
 
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
 
-  // الدوال المساعدة
+  // Handlers
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
     setCurrentPage(1);
@@ -830,7 +835,7 @@ export const FactoryInventory: React.FC = () => {
       if (chefId && !isValidObjectId(chefId)) {
         setProductionErrors((prev) => ({
           ...prev,
-          selectedChef: t.errors.invalidChefId,
+          chefId: t.errors.invalidChefId,
         }));
         return;
       }
@@ -854,6 +859,11 @@ export const FactoryInventory: React.FC = () => {
     const errors: Record<string, string> = {};
     if (productionForm.items.length === 0) {
       errors.items = t.errors.required.replace('{field}', t.items);
+    }
+    if (!productionForm.chefId) {
+      errors.chefId = t.errors.required.replace('{field}', t.selectChef);
+    } else if (!isValidObjectId(productionForm.chefId)) {
+      errors.chefId = t.errors.invalidChefId;
     }
     productionForm.items.forEach((item, index) => {
       if (!item.product) {
@@ -900,8 +910,8 @@ export const FactoryInventory: React.FC = () => {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
         items: aggregatedItems,
         notes: productionForm.notes || undefined,
+        chefId: productionForm.chefId, // Include chefId
         priority: 'medium',
-        chefId: productionForm.selectedChef || undefined, // إضافة معرف الشيف
       };
       console.log(`[${new Date().toISOString()}] Creating production order:`, data);
       const response = await factoryOrdersAPI.create(data);
@@ -943,6 +953,8 @@ export const FactoryInventory: React.FC = () => {
         });
       } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
         errorMessage = t.errors.invalidProductId;
+      } else if (err.message.includes('معرف الشيف غير صالح') || err.message.includes('Invalid chef ID')) {
+        errorMessage = t.errors.invalidChefId;
       } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
       }
@@ -992,7 +1004,7 @@ export const FactoryInventory: React.FC = () => {
     },
   });
 
-  const errorMessage = inventoryError?.message || chefsError?.message || '';
+  const errorMessage = inventoryError?.message || '';
 
   return (
     <div className="mx-auto px-4 py-4 max-w-7xl">
@@ -1013,6 +1025,7 @@ export const FactoryInventory: React.FC = () => {
           {t.create}
         </button>
       </div>
+
       {errorMessage && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -1023,6 +1036,7 @@ export const FactoryInventory: React.FC = () => {
           <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
         </motion.div>
       )}
+
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="w-full lg:w-1/2">
@@ -1061,7 +1075,8 @@ export const FactoryInventory: React.FC = () => {
           {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
         </div>
       </div>
-      {inventoryLoading || chefsLoading ? (
+
+      {inventoryLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
@@ -1191,6 +1206,7 @@ export const FactoryInventory: React.FC = () => {
           </AnimatePresence>
         </div>
       )}
+
       {totalInventoryPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-3">
           <button
@@ -1214,6 +1230,7 @@ export const FactoryInventory: React.FC = () => {
           </button>
         </div>
       )}
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
@@ -1259,16 +1276,15 @@ export const FactoryInventory: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.selectChef}</label>
               <ProductDropdown
-                value={productionForm.selectedChef || ''}
+                value={productionForm.chefId}
                 onChange={handleChefChange}
                 options={chefOptions}
                 ariaLabel={t.selectChef}
                 placeholder={t.selectChef}
                 className="w-full"
+                disabled={chefsLoading}
               />
-              {productionErrors.selectedChef && (
-                <p className="text-red-600 text-xs mt-1">{productionErrors.selectedChef}</p>
-              )}
+              {productionErrors.chefId && <p className="text-red-600 text-xs mt-1">{productionErrors.chefId}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
@@ -1344,6 +1360,7 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </motion.div>
       </motion.div>
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isEditModalOpen ? 1 : 0 }}
@@ -1440,6 +1457,7 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </motion.div>
       </motion.div>
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
@@ -1520,4 +1538,4 @@ export const FactoryInventory: React.FC = () => {
   );
 };
 
-export default FactoryInventory ;
+export default FactoryInventory;
