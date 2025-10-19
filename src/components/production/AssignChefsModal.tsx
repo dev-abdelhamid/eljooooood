@@ -50,7 +50,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 
   // التحقق من صحة النموذج
   const isFormValid = useCallback(() => {
-    return assignFormData.items.every((item) => item.assignedTo);
+    return assignFormData.items.every((item) => item.assignedTo && item.departmentId !== 'no-department');
   }, [assignFormData]);
 
   // تحديث شيف معين لعنصر معين
@@ -70,7 +70,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     if (isOpen && selectedOrder) {
       setAssignForm({
         items: selectedOrder.items
-          .filter((item) => !item.assignedTo)
+          .filter((item) => !item.assignedTo && item.department?._id && item.department._id !== 'no-department')
           .map((item) => ({
             itemId: item._id,
             assignedTo: '',
@@ -114,7 +114,9 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
               </h3>
               {assignFormData.items.length === 0 ? (
                 <p className="text-sm text-gray-600 text-center">
-                  {isRtl ? 'جميع العناصر تم تعيينها مسبقًا' : 'All items have already been assigned'}
+                  {isRtl
+                    ? 'جميع العناصر تم تعيينها مسبقًا أو لا تحتوي على قسم صالح'
+                    : 'All items have already been assigned or have no valid department'}
                 </p>
               ) : (
                 assignFormData.items.map((item, index) => {
@@ -131,7 +133,11 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                             : `${item.product} (${item.quantity} ${item.unit})`}
                         </span>
                       </div>
-                      {availableChefs.length === 0 ? (
+                      {item.departmentId === 'no-department' ? (
+                        <p className="text-sm text-red-600">
+                          {isRtl ? 'القسم غير مُعرف لهذا العنصر' : 'Department not defined for this item'}
+                        </p>
+                      ) : availableChefs.length === 0 ? (
                         <p className="text-sm text-red-600">
                           {isRtl ? 'لا يوجد شيفات متاحين لهذا القسم' : 'No chefs available for this department'}
                         </p>
@@ -152,7 +158,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                           }`}
                         />
                       )}
-                      {!item.assignedTo && availableChefs.length > 0 && (
+                      {!item.assignedTo && availableChefs.length > 0 && item.departmentId !== 'no-department' && (
                         <p className="text-xs text-red-600 mt-1">
                           {isRtl ? 'يرجى اختيار شيف' : 'Please select a chef'}
                         </p>
