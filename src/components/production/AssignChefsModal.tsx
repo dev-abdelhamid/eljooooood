@@ -50,7 +50,9 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 
   // التحقق من صحة النموذج
   const isFormValid = useCallback(() => {
-    return assignFormData.items.every((item) => item.assignedTo && item.departmentId !== 'no-department');
+    return assignFormData.items.every(
+      (item) => item.assignedTo && item.departmentId && item.departmentId !== 'no-department'
+    );
   }, [assignFormData]);
 
   // تحديث شيف معين لعنصر معين
@@ -74,9 +76,9 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           .map((item) => ({
             itemId: item._id,
             assignedTo: '',
-            product: item.displayProductName,
+            product: item.displayProductName || item.product?.name || 'Unknown Product',
             quantity: item.quantity,
-            unit: item.displayUnit,
+            unit: item.displayUnit || item.product?.unit || 'unit',
             departmentId: item.department._id,
           })),
       });
@@ -146,8 +148,8 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                           options={[
                             { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
                             ...availableChefs.map((chef) => ({
-                              value: chef.userId,
-                              label: chef.displayName,
+                              value: chef.userId || chef._id,
+                              label: chef.displayName || chef.name || 'Unknown Chef',
                             })),
                           ]}
                           value={item.assignedTo}

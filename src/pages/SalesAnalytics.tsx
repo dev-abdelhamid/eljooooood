@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { salesAPI, ordersAPI, returnsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, BarChart2, ChevronDown, Search, X } from 'lucide-react';
+import { ProductDropdown ,ProductSearchInput } from './OrdersTablePage';
 import { toast } from 'react-toastify';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
@@ -455,6 +456,125 @@ const ReportsAnalytics: React.FC = () => {
     [branches, t]
   );
 
+
+  
+const DataTable: React.FC<{
+  title: string;
+  data: any[];
+  columns: { key: string; label: string; width?: string }[];
+  isRtl: boolean;
+  currency?: string;
+}> = React.memo(({ title, data, columns, isRtl, currency }) => (
+  <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+    <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{title}</h3>
+    {data.length > 0 ? (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-max">
+          <thead>
+            <tr className="bg-gray-50">
+              {columns.map((col) => (
+                <th key={col.key} className={`p-2 ${isRtl ? 'text-right' : 'text-left'} ${col.width || ''} font-alexandria`}>
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item, index) => (
+              <tr key={index} className="border-t">
+                {columns.map((col) => (
+                  <td key={col.key} className={`p-2 ${col.width || ''} font-alexandria`}>
+                    {col.key === 'totalSales' || col.key === 'averageOrderValue' || col.key === 'totalRevenue' || col.key === 'total'
+                      ? safeNumber(item[col.key]).toFixed(2) + (currency ? ` ${currency}` : '')
+                      : safeNumber(item[col.key]) || item[col.key] || '-'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <NoDataMessage message={translations[isRtl ? 'ar' : 'en'].noData} />
+    )}
+  </div>
+));
+
+const OrdersTable: React.FC<{
+  orders: Order[];
+  isRtl: boolean;
+  currency: string;
+}> = React.memo(({ orders, isRtl, currency }) => (
+  <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+    <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{translations[isRtl ? 'ar' : 'en'].ordersTab}</h3>
+    {orders.length > 0 ? (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-max">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'التاريخ' : 'Date'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'الحالة' : 'Status'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'الفرع' : 'Branch'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.map((order) => (
+              <tr key={order._id} className="border-t">
+                <td className="p-2 font-alexandria">{order.orderNumber}</td>
+                <td className="p-2 font-alexandria">{formatDate(new Date(order.date), language)}</td>
+                <td className="p-2 font-alexandria">{safeNumber(order.total).toFixed(2)} {currency}</td>
+                <td className="p-2 font-alexandria">{order.status}</td>
+                <td className="p-2 font-alexandria">{order.branchName}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <NoDataMessage message={translations[isRtl ? 'ar' : 'en'].noOrders} />
+    )}
+  </div>
+));
+
+const ReturnsTable: React.FC<{
+  returns: Return[];
+  isRtl: boolean;
+  currency: string;
+}> = React.memo(({ returns, isRtl, currency }) => (
+  <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+    <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{translations[isRtl ? 'ar' : 'en'].returnsTab}</h3>
+    {returns.length > 0 ? (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-max">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'رقم المرتجع' : 'Return Number'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'التاريخ' : 'Date'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'الحالة' : 'Status'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}>{isRtl ? 'الفرع' : 'Branch'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {returns.map((returnItem) => (
+              <tr key={returnItem._id} className="border-t">
+                <td className="p-2 font-alexandria">{returnItem.returnNumber}</td>
+                <td className="p-2 font-alexandria">{formatDate(new Date(returnItem.date), language)}</td>
+                <td className="p-2 font-alexandria">{safeNumber(returnItem.total).toFixed(2)} {currency}</td>
+                <td className="p-2 font-alexandria">{returnItem.status}</td>
+                <td className="p-2 font-alexandria">{returnItem.branchName}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <NoDataMessage message={translations[isRtl ? 'ar' : 'en'].noReturns} />
+    )}
+  </div>
+));
   const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
