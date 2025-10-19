@@ -3,12 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus, Search, ChevronDown } from 'lucide-react';
-import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId } from '../services/api';
+import { factoryOrdersAPI, factoryInventoryAPI, chefsAPI, isValidObjectId } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { chefsAPI } from '../services/chefsAPI'; // Importing the provided chefsAPI
 
 // Enums for type safety
 enum InventoryStatus {
@@ -41,6 +40,7 @@ interface FactoryInventoryItem {
 interface ProductionItem {
   product: string;
   quantity: number;
+  assignedTo: string; // Chef ID
 }
 
 interface ProductionFormState {
@@ -66,13 +66,31 @@ interface AvailableProduct {
   productName: string;
   unit: string;
   departmentName: string;
+  departmentId: string;
 }
 
 interface FactoryOrder {
   _id: string;
   orderNumber: string;
-  items: { productId: string; quantity: number; status: string }[];
+  items: { productId: string; quantity: number; status: string; assignedTo?: string }[];
   status: 'pending' | 'in_production' | 'completed' | 'cancelled';
+}
+
+interface Chef {
+  _id: string;
+  user: {
+    _id: string;
+    name: string;
+    nameEn?: string;
+    username: string;
+    email: string;
+    phone: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+  department: { _id: string; name: string; nameEn?: string };
+  createdAt: string;
 }
 
 // Translations
@@ -94,6 +112,7 @@ const translations = {
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
     selectProduct: 'اختر منتج',
+    selectChef: 'اختر شيف',
     filterByStatus: 'تصفية حسب الحالة',
     filterByDepartment: 'تصفية حسب القسم',
     allStatuses: 'جميع الحالات',
@@ -101,6 +120,7 @@ const translations = {
     notes: 'ملاحظات',
     notesPlaceholder: 'أدخل ملاحظات إضافية (اختياري)',
     items: 'العناصر',
+    chef: 'الشيف',
     addItem: 'إضافة عنصر',
     removeItem: 'إزالة العنصر',
     submit: 'إرسال',
@@ -127,6 +147,7 @@ const translations = {
       invalidQuantityMax: 'الكمية يجب أن تكون أكبر من 0',
       noItemSelected: 'لم يتم اختيار عنصر',
       invalidProductId: 'معرف المنتج غير صالح',
+      invalidChefId: 'معرف الشيف غير صالح',
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
@@ -134,6 +155,7 @@ const translations = {
     notifications: {
       productionCreated: 'تم إنشاء طلب الإنتاج بنجاح',
       inventoryUpdated: 'تم تحديث المخزون بنجاح',
+      taskAssigned: 'تم تعيين مهمة إنتاج جديدة',
       orderCompleted: 'تم إكمال طلب الإنتاج',
     },
   },
@@ -154,6 +176,7 @@ const translations = {
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
     selectProduct: 'Select Product',
+    selectChef: 'Select Chef',
     filterByStatus: 'Filter by Status',
     filterByDepartment: 'Filter by Department',
     allStatuses: 'All Statuses',
@@ -161,6 +184,7 @@ const translations = {
     notes: 'Notes',
     notesPlaceholder: 'Enter additional notes (optional)',
     items: 'Items',
+    chef: 'Chef',
     addItem: 'Add Item',
     removeItem: 'Remove Item',
     submit: 'Submit',
@@ -187,6 +211,7 @@ const translations = {
       invalidQuantityMax: 'Quantity must be greater than 0',
       noItemSelected: 'No item selected',
       invalidProductId: 'Invalid product ID',
+      invalidChefId: 'Invalid chef ID',
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
@@ -194,102 +219,10 @@ const translations = {
     notifications: {
       productionCreated: 'Production order created successfully',
       inventoryUpdated: 'Inventory updated successfully',
+      taskAssigned: 'New production task assigned',
       orderCompleted: 'Production order completed',
     },
   },
-};
-
-// ProductSearchInput Component
-export const ProductSearchInput = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      <div
-        className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
-      >
-        <Search className="w-4 h-4" />
-      </div>
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      />
-      <div
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${value ? 'opacity-100' : 'opacity-0'}`}
-      >
-        <button
-          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ProductDropdown Component
-export const ProductDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  disabled = false,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
-  return (
-    <div className="relative group">
-      <button
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
-          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
-        </div>
-      </button>
-      {isOpen && !disabled && (
-        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
-          {options.map((option) => (
-            <div
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-            >
-              {option.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 };
 
 // QuantityInput Component
@@ -307,7 +240,6 @@ const QuantityInput = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
-
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
     if (val === '' || isNaN(num) || num < 1) {
@@ -316,7 +248,6 @@ const QuantityInput = ({
     }
     onChange(val);
   };
-
   return (
     <div className="flex items-center gap-2">
       <button
@@ -374,19 +305,23 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
   }
 };
 
-// Aggregate items by product
+// Aggregate items by product and chef
 const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   const aggregated: Record<string, ProductionItem> = {};
   items.forEach((item) => {
-    if (!aggregated[item.product]) {
-      aggregated[item.product] = {
+    const key = `${item.product}_${item.assignedTo}`;
+    if (!aggregated[key]) {
+      aggregated[key] = {
         product: item.product,
         quantity: 0,
+        assignedTo: item.assignedTo,
       };
     }
-    aggregated[item.product].quantity += item.quantity;
+    aggregated[key].quantity += item.quantity;
   });
-  return Object.values(aggregated).filter((item) => item.product && isValidObjectId(item.product));
+  return Object.values(aggregated).filter(
+    (item) => item.product && isValidObjectId(item.product) && item.assignedTo && isValidObjectId(item.assignedTo)
+  );
 };
 
 export const FactoryInventory: React.FC = () => {
@@ -423,7 +358,6 @@ export const FactoryInventory: React.FC = () => {
     }, [value, delay]);
     return [value, setValue, debouncedValue] as const;
   };
-
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
   // Inventory Query
@@ -491,6 +425,29 @@ export const FactoryInventory: React.FC = () => {
     },
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
+  });
+
+  // Chefs Query
+  const { data: chefsData, isLoading: chefsLoading } = useQuery<Chef[], Error>({
+    queryKey: ['chefs', language],
+    queryFn: async () => {
+      const response = await chefsAPI.getAll();
+      console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
+      const data = Array.isArray(response) ? response : response?.data?.chefs || response?.chefs || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
+      return data;
+    },
+    enabled: isProductionModalOpen && !!user?.role && ['production', 'admin'].includes(user.role),
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
+    refetchOnMount: 'always',
+    onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
+      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
+    },
   });
 
   // Product History Query
@@ -562,6 +519,7 @@ export const FactoryInventory: React.FC = () => {
               departmentName: isRtl
                 ? product.department?.name || t.allDepartments
                 : product.department?.nameEn || product.department?.name || 'Unknown',
+              departmentId: product.department?._id || '',
             }))
         );
       } catch (err: any) {
@@ -575,7 +533,6 @@ export const FactoryInventory: React.FC = () => {
   // Socket Events
   useEffect(() => {
     if (!socket || !user?.role || !isConnected) return;
-
     const handleFactoryInventoryUpdated = ({ productId }: { productId: string }) => {
       if (!isValidObjectId(productId)) {
         console.warn(`[${new Date().toISOString()}] Invalid productId in factoryInventoryUpdated:`, productId);
@@ -597,7 +554,6 @@ export const FactoryInventory: React.FC = () => {
         vibrate: [200, 100, 200],
       });
     };
-
     const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
       if (!isValidObjectId(orderId)) {
         console.warn(`[${new Date().toISOString()}] Invalid orderId in factoryOrderCreated:`, orderId);
@@ -619,7 +575,37 @@ export const FactoryInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
-
+    const handleFactoryTaskAssigned = ({
+      factoryOrderId,
+      taskId,
+      chefId,
+      productName,
+    }: {
+      factoryOrderId: string;
+      taskId: string;
+      chefId: string;
+      productName: string;
+    }) => {
+      if (!isValidObjectId(factoryOrderId) || !isValidObjectId(chefId)) {
+        console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId or chefId in factoryTaskAssigned:`, { factoryOrderId, chefId });
+        return;
+      }
+      if (user._id === chefId) {
+        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
+        addNotification({
+          _id: crypto.randomUUID(),
+          type: 'info',
+          message: t.notifications.taskAssigned,
+          data: { factoryOrderId, taskId, chefId, productName, eventId: crypto.randomUUID(), isRtl },
+          read: false,
+          createdAt: new Date().toISOString(),
+          sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
+          vibrate: [200, 100, 200],
+        });
+        toast.info(t.notifications.taskAssigned, { position: isRtl ? 'top-right' : 'top-left' });
+      }
+    };
     const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
       if (!isValidObjectId(factoryOrderId)) {
         console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId in factoryOrderCompleted:`, factoryOrderId);
@@ -641,21 +627,20 @@ export const FactoryInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
-
     socket.on('factoryInventoryUpdated', handleFactoryInventoryUpdated);
     socket.on('factoryOrderCreated', handleFactoryOrderCreated);
+    socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
-
     const reconnectInterval = setInterval(() => {
       if (!isConnected && socket) {
         console.log(`[${new Date().toISOString()}] Attempting to reconnect WebSocket...`);
         socket.connect();
       }
     }, 5000);
-
     return () => {
       socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
       socket.off('factoryOrderCreated', handleFactoryOrderCreated);
+      socket.off('factoryTaskAssigned', handleFactoryTaskAssigned);
       socket.off('factoryOrderCompleted', handleFactoryOrderCompleted);
       clearInterval(reconnectInterval);
     };
@@ -710,6 +695,37 @@ export const FactoryInventory: React.FC = () => {
     [availableProducts, t]
   );
 
+  // Product to department map
+  const productDepartmentMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    availableProducts.forEach((prod) => {
+      if (prod.productId && prod.departmentId) {
+        map[prod.productId] = prod.departmentId;
+      }
+    });
+    return map;
+  }, [availableProducts]);
+
+  // Get chef options for a specific department
+  const getChefOptions = useCallback(
+    (departmentId: string) => {
+      const options = [
+        { value: '', label: t.selectChef },
+        ...chefsData
+          ?.filter((chef) => chef.department?._id === departmentId)
+          .map((chef) => ({
+            value: chef._id,
+            label: isRtl
+              ? chef.user.name || chef.user.nameEn || `شيف بدون اسم (${chef._id})`
+              : chef.user.nameEn || chef.user.name || `Unnamed Chef (${chef._id})`,
+          })) || [],
+      ];
+      console.log(`[${new Date().toISOString()}] chefOptions for dept ${departmentId}:`, options);
+      return options;
+    },
+    [chefsData, isRtl, t]
+  );
+
   // Filtered and paginated inventory
   const filteredInventory = useMemo(
     () =>
@@ -746,12 +762,13 @@ export const FactoryInventory: React.FC = () => {
         payload: {
           product: item.product._id,
           quantity: 1,
+          assignedTo: '',
         },
       });
     } else {
       dispatchProductionForm({
         type: 'ADD_ITEM',
-        payload: { product: '', quantity: 1 },
+        payload: { product: '', quantity: 1, assignedTo: '' },
       });
     }
     setProductionErrors({});
@@ -760,10 +777,7 @@ export const FactoryInventory: React.FC = () => {
 
   const handleOpenEditModal = useCallback((item: FactoryInventoryItem) => {
     setSelectedItem(item);
-    setEditForm({
-      minStockLevel: item.minStockLevel >= 0 ? item.minStockLevel : 0,
-      maxStockLevel: item.maxStockLevel >= 0 ? item.maxStockLevel : item.minStockLevel + 1,
-    });
+    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
   }, []);
@@ -780,31 +794,24 @@ export const FactoryInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchProductionForm({
       type: 'ADD_ITEM',
-      payload: { product: '', quantity: 1 },
+      payload: { product: '', quantity: 1, assignedTo: '' },
     });
   }, []);
 
-  const updateItemInForm = useCallback(
-    (index: number, field: keyof ProductionItem, value: string | number) => {
-      if (field === 'quantity') {
-        const numValue = typeof value === 'string' ? parseInt(value, 10) : value;
-        if (isNaN(numValue) || numValue < 1) {
-          setProductionErrors((prev) => ({
-            ...prev,
-            [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
-          }));
-          return;
-        }
-        value = numValue;
+  const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
+    if (field === 'quantity' && typeof value === 'string') {
+      const numValue = parseInt(value, 10);
+      if (isNaN(numValue) || numValue < 1) {
+        setProductionErrors((prev) => ({
+          ...prev,
+          [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
+        }));
+        return;
       }
-      dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-      setProductionErrors((prev) => ({
-        ...prev,
-        [`item_${index}_${field}`]: undefined,
-      }));
-    },
-    [t]
-  );
+      value = numValue;
+    }
+    dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+  }, [t]);
 
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
@@ -826,12 +833,25 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-      setProductionErrors((prev) => ({
-        ...prev,
-        [`item_${index}_product`]: undefined,
-      }));
     },
     [t, productionForm.items]
+  );
+
+  const handleChefChange = useCallback(
+    (index: number, chefId: string) => {
+      if (!isValidObjectId(chefId)) {
+        setProductionErrors((prev) => ({
+          ...prev,
+          [`item_${index}_assignedTo`]: t.errors.invalidChefId,
+        }));
+        return;
+      }
+      dispatchProductionForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'assignedTo', value: chefId },
+      });
+    },
+    [t]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
@@ -856,6 +876,11 @@ export const FactoryInventory: React.FC = () => {
       } else if (!isValidObjectId(item.product)) {
         errors[`item_${index}_product`] = t.errors.invalidProductId;
       }
+      if (!item.assignedTo) {
+        errors[`item_${index}_assignedTo`] = t.errors.required.replace('{field}', t.chef);
+      } else if (!isValidObjectId(item.assignedTo)) {
+        errors[`item_${index}_assignedTo`] = t.errors.invalidChefId;
+      }
       if (item.quantity < 1 || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax;
       }
@@ -866,10 +891,10 @@ export const FactoryInventory: React.FC = () => {
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (editForm.minStockLevel < 0 || isNaN(editForm.minStockLevel)) {
+    if (editForm.minStockLevel < 0) {
       errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
     }
-    if (editForm.maxStockLevel < 0 || isNaN(editForm.maxStockLevel)) {
+    if (editForm.maxStockLevel < 0) {
       errors.maxStockLevel = t.errors.nonNegative.replace('{field}', t.maxStock);
     }
     if (editForm.maxStockLevel <= editForm.minStockLevel) {
@@ -893,7 +918,11 @@ export const FactoryInventory: React.FC = () => {
       }
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
-        items: aggregatedItems,
+        items: aggregatedItems.map((item) => ({
+          productId: item.product,
+          quantity: item.quantity,
+          assignedTo: item.assignedTo,
+        })),
         notes: productionForm.notes || undefined,
         priority: 'medium',
       };
@@ -937,6 +966,8 @@ export const FactoryInventory: React.FC = () => {
         });
       } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
         errorMessage = t.errors.invalidProductId;
+      } else if (err.message.includes('معرف الشيف غير صالح') || err.message.includes('Invalid chef ID')) {
+        errorMessage = t.errors.invalidChefId;
       } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
       }
@@ -990,7 +1021,6 @@ export const FactoryInventory: React.FC = () => {
 
   return (
     <div className="mx-auto px-4 py-4 max-w-7xl">
-      {/* Header Section */}
       <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
@@ -1008,8 +1038,6 @@ export const FactoryInventory: React.FC = () => {
           {t.create}
         </button>
       </div>
-
-      {/* Error Message */}
       {errorMessage && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -1020,8 +1048,6 @@ export const FactoryInventory: React.FC = () => {
           <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
         </motion.div>
       )}
-
-      {/* Filters Section */}
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="w-full lg:w-1/2">
@@ -1057,8 +1083,6 @@ export const FactoryInventory: React.FC = () => {
           {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
         </div>
       </div>
-
-      {/* Inventory List */}
       {inventoryLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
@@ -1114,13 +1138,13 @@ export const FactoryInventory: React.FC = () => {
                       {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {t.stock}: {item.currentStock >= 0 ? item.currentStock : 0}
+                      {t.stock}: {item.currentStock}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {t.minStock}: {item.minStockLevel >= 0 ? item.minStockLevel : 0}
+                      {t.minStock}: {item.minStockLevel}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {t.maxStock}: {item.maxStockLevel >= 0 ? item.maxStockLevel : item.minStockLevel + 1}
+                      {t.maxStock}: {item.maxStockLevel}
                     </p>
                     <p className="text-sm text-gray-600">
                       {t.unit}: {item.product.displayUnit}
@@ -1153,7 +1177,7 @@ export const FactoryInventory: React.FC = () => {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             strokeWidth={2}
-                            d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                            d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 0 002-2V8m-9 4h4"
                           />
                         </svg>
                         {t.inProduction}
@@ -1189,8 +1213,6 @@ export const FactoryInventory: React.FC = () => {
           </AnimatePresence>
         </div>
       )}
-
-      {/* Pagination */}
       {totalInventoryPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-3">
           <button
@@ -1214,8 +1236,6 @@ export const FactoryInventory: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* Production Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
@@ -1245,93 +1265,110 @@ export const FactoryInventory: React.FC = () => {
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
-              <textarea
-                value={productionForm.notes}
-                onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
-                placeholder={t.notesPlaceholder}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                rows={3}
-                aria-label={t.notes}
-              />
-              {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-              {productionForm.items.map((item, index) => (
-                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <ProductDropdown
-                    value={item.product}
-                    onChange={(value) => handleProductChange(index, value)}
-                    options={productOptions}
-                    ariaLabel={`${t.items} ${index + 1}`}
-                  />
-                  {productionErrors[`item_${index}_product`] && (
-                    <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
-                  )}
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
-                      <QuantityInput
-                        value={item.quantity}
-                        onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                        onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                        onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
+          {chefsLoading ? (
+            <p className="text-gray-600 text-sm">{isRtl ? 'جاري تحميل الشيفات...' : 'Loading chefs...'}</p>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
+                <textarea
+                  value={productionForm.notes}
+                  onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
+                  placeholder={t.notesPlaceholder}
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+                  rows={3}
+                  aria-label={t.notes}
+                />
+                {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
+                {productionForm.items.map((item, index) => {
+                  const itemDeptId = productDepartmentMap[item.product] || '';
+                  const itemChefOptions = getChefOptions(itemDeptId);
+                  return (
+                    <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <ProductDropdown
+                        value={item.product}
+                        onChange={(value) => handleProductChange(index, value)}
+                        options={productOptions}
+                        ariaLabel={`${t.items} ${index + 1}`}
+                        placeholder={t.selectProduct}
                       />
-                      {productionErrors[`item_${index}_quantity`] && (
-                        <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
+                      {productionErrors[`item_${index}_product`] && (
+                        <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
                       )}
+                      <ProductDropdown
+                        value={item.assignedTo}
+                        onChange={(value) => handleChefChange(index, value)}
+                        options={itemChefOptions}
+                        ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
+                        placeholder={t.selectChef}
+                      />
+                      {productionErrors[`item_${index}_assignedTo`] && (
+                        <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
+                      )}
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                          <QuantityInput
+                            value={item.quantity}
+                            onChange={(val) => updateItemInForm(index, 'quantity', val)}
+                            onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
+                            onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
+                          />
+                          {productionErrors[`item_${index}_quantity`] && (
+                            <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
+                          )}
+                        </div>
+                        {productionForm.items.length > 1 && (
+                          <button
+                            onClick={() => removeItemFromForm(index)}
+                            className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
+                            aria-label={t.removeItem}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {productionForm.items.length > 1 && (
-                      <button
-                        onClick={() => removeItemFromForm(index)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
-                        aria-label={t.removeItem}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <button
-                onClick={addItemToForm}
-                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                aria-label={t.addItem}
-              >
-                <Plus className="w-4 h-4" />
-                {t.addItem}
-              </button>
-              {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
+                  );
+                })}
+                <button
+                  onClick={addItemToForm}
+                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                  aria-label={t.addItem}
+                >
+                  <Plus className="w-4 h-4" />
+                  {t.addItem}
+                </button>
+                {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setIsProductionModalOpen(false);
+                    dispatchProductionForm({ type: 'RESET' });
+                    setProductionErrors({});
+                  }}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                  aria-label={t.cancel}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={() => createProductionMutation.mutate()}
+                  disabled={createProductionMutation.isLoading}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                  aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
+                >
+                  {createProductionMutation.isLoading ? t.submitting : t.submit}
+                </button>
+              </div>
             </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setIsProductionModalOpen(false);
-                  dispatchProductionForm({ type: 'RESET' });
-                  setProductionErrors({});
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => createProductionMutation.mutate()}
-                disabled={createProductionMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
-              >
-                {createProductionMutation.isLoading ? t.submitting : t.submit}
-              </button>
-            </div>
-          </div>
+          )}
         </motion.div>
       </motion.div>
-
-      {/* Edit Stock Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isEditModalOpen ? 1 : 0 }}
@@ -1374,7 +1411,7 @@ export const FactoryInventory: React.FC = () => {
                 value={editForm.minStockLevel}
                 onChange={(e) => {
                   const value = parseInt(e.target.value, 10);
-                  setEditForm((prev) => ({ ...prev, minStockLevel: isNaN(value) ? 0 : Math.max(0, value) }));
+                  setEditForm((prev) => ({ ...prev, minStockLevel: isNaN(value) ? 0 : value }));
                   setEditErrors((prev) => ({ ...prev, minStockLevel: undefined }));
                 }}
                 min={0}
@@ -1392,7 +1429,7 @@ export const FactoryInventory: React.FC = () => {
                 value={editForm.maxStockLevel}
                 onChange={(e) => {
                   const value = parseInt(e.target.value, 10);
-                  setEditForm((prev) => ({ ...prev, maxStockLevel: isNaN(value) ? 0 : Math.max(0, value) }));
+                  setEditForm((prev) => ({ ...prev, maxStockLevel: isNaN(value) ? 0 : value }));
                   setEditErrors((prev) => ({ ...prev, maxStockLevel: undefined }));
                 }}
                 min={0}
@@ -1428,8 +1465,6 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </motion.div>
       </motion.div>
-
-      {/* Product Details Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
@@ -1443,7 +1478,7 @@ export const FactoryInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
@@ -1458,52 +1493,34 @@ export const FactoryInventory: React.FC = () => {
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="space-y-4">
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
-                ))}
-              </div>
-            ) : productHistory && productHistory.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-600">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2 px-4 text-left font-medium">{t.date}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.type}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.reference}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b border-gray-100">
-                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                        <td className="py-2 px-4">{t[entry.type]}</td>
-                        <td className="py-2 px-4">{entry.quantity}</td>
-                        <td className="py-2 px-4">{entry.reference || 'N/A'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-gray-600 text-sm">{t.noHistory}</p>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
+          {historyLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+              ))}
             </div>
-          </div>
+          ) : productHistory && productHistory.length > 0 ? (
+            <div className="space-y-4">
+              {productHistory.map((entry) => (
+                <div key={entry._id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-600">
+                    {t.date}: {new Date(entry.date).toLocaleDateString(language)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.type}: {entry.type === 'produced_stock' ? t.produced_stock : t.adjustment}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.quantity}: {entry.quantity}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.reference}: {entry.reference}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-600 text-sm">{t.noHistory}</p>
+          )}
         </motion.div>
       </motion.div>
     </div>
