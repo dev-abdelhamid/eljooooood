@@ -180,7 +180,7 @@ const generateFileName = (prefix: string, monthName: string, isRtl: boolean, ext
   return `${prefix}_${monthName}_${dateStr}.${extension}`;
 };
 
-// Export functions
+// Enhanced Export Functions
 const exportToExcel = (dataRows: any[], headers: string[], monthName: string, isRtl: boolean) => {
   toast.info(isRtl ? 'جارٍ إنشاء ملف Excel...' : 'Generating Excel...', {
     position: isRtl ? 'top-left' : 'top-right',
@@ -192,16 +192,56 @@ const exportToExcel = (dataRows: any[], headers: string[], monthName: string, is
     const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
     const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
     if (isRtl) ws['!views'] = [{ RTL: true }];
+
+    // Enhanced Excel styling
     ws['!cols'] = [
-      { wch: 15 },
-      { wch: 15 },
-      ...Array(headers.length - 4).fill({ wch: 15 }),
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 30 },
+      { wch: 25 }, // Name
+      { wch: 15 }, // Price
+      { wch: 15 }, // Code
+      ...Array(headers.length - 6).fill({ wch: 15 }), // Branches
+      { wch: 15 }, // Total
+      { wch: 15 }, // Unit
     ];
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }]; // Merge header row
+    ws['!rows'] = [{ hpt: 30 }, { hpt: 20 }]; // Set row heights
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `DailyOrdersSummary_${monthName}`);
+    const wsName = `DailyOrdersSummary_${monthName}`;
+    XLSX.utils.book_append_sheet(wb, ws, wsName);
+
+    // Apply advanced styling
+    const range = XLSX.utils.decode_range(ws['!ref']!);
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (R === 0) {
+          if (ws[cellAddress]) {
+            ws[cellAddress].s = {
+              fill: { fgColor: { rgb: 'F5A911' } },
+              font: { bold: true, color: { rgb: 'FFFFFF' } },
+              alignment: { horizontal: 'center', vertical: 'middle' },
+            };
+          }
+        } else {
+          if (ws[cellAddress]) {
+            ws[cellAddress].s = {
+              alignment: { horizontal: 'center', vertical: 'middle' },
+              border: {
+                top: { style: 'thin', color: { rgb: 'D3D3D3' } },
+                bottom: { style: 'thin', color: { rgb: 'D3D3D3' } },
+                left: { style: 'thin', color: { rgb: 'D3D3D3' } },
+                right: { style: 'thin', color: { rgb: 'D3D3D3' } },
+              },
+            };
+            if (R === dataRows.length + 1) {
+              ws[cellAddress].s.font = { bold: true, color: { rgb: '333333' } };
+              ws[cellAddress].s.fill = { fgColor: { rgb: 'F5F5F5' } };
+            }
+          }
+        }
+      }
+    }
+
     XLSX.writeFile(wb, generateFileName('DailyOrdersSummary', monthName, isRtl, 'xlsx'));
     toast.update('excel-export', {
       render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
@@ -231,9 +271,9 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
 
     const pageWidth = doc.internal.pageSize.width;
     doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-    doc.setFontSize(20);
-    doc.setTextColor(33, 33, 33);
-    doc.text(title, isRtl ? pageWidth - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+    doc.setFontSize(22);
+    doc.setTextColor(20, 20, 20);
+    doc.text(title, pageWidth / 2, 15, { align: 'center' });
 
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
@@ -245,11 +285,11 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
       minute: '2-digit',
       hour12: true,
     }).replace(/am|pm/i, match => match === 'am' ? 'ص' : 'م');
-    doc.text(`${isRtl ? 'تاريخ الإنشاء: ' : 'Generated on: '}${currentDate}`, isRtl ? pageWidth - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
+    doc.text(`${isRtl ? 'تاريخ الإنشاء: ' : 'Generated on: '}${currentDate}`, pageWidth / 2, 22, { align: 'center' });
 
-    doc.setLineWidth(0.7);
+    doc.setLineWidth(1);
     doc.setDrawColor(245, 158, 11);
-    doc.line(20, 30, pageWidth - 20, 30);
+    doc.line(15, 25, pageWidth - 15, 25);
 
     const tableData = isRtl ? dataRows.map(row => row.slice().reverse()) : dataRows;
     const tableHeaders = isRtl ? headers.slice().reverse() : headers;
@@ -257,7 +297,7 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
     autoTable(doc, {
       head: [tableHeaders],
       body: tableData,
-      startY: 40,
+      startY: 30,
       theme: 'grid',
       margin: { top: 10, bottom: 20, left: 15, right: 15 },
       tableWidth: 'auto',
@@ -268,21 +308,24 @@ const exportToPDF = async (dataRows: any[], title: string, monthName: string, he
         font: fontLoaded ? fontName : 'helvetica',
         fontStyle: 'bold',
         halign: 'center',
-        cellPadding: 4,
+        valign: 'middle',
+        cellPadding: 6,
       },
       bodyStyles: {
         fontSize: 10,
         textColor: [33, 33, 33],
         font: fontLoaded ? fontName : 'helvetica',
         halign: 'center',
-        lineColor: [180, 180, 180],
+        valign: 'middle',
+        lineColor: [200, 200, 200],
         fillColor: [255, 255, 255],
-        cellPadding: 3,
+        cellPadding: 5,
       },
       alternateRowStyles: { fillColor: [245, 245, 245] },
       didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 4)) {
+        if (data.section === 'body' && data.row.index === dataRows.length) {
           data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [245, 245, 245];
         }
         if (isRtl) {
           data.cell.text = data.cell.text.map(text => String(text).replace(/[0-9]/g, d => toArabicNumerals(d)));
