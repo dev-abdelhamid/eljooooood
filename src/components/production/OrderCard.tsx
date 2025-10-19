@@ -1,5 +1,4 @@
 
-
 import React, { useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card } from '../UI/Card';
@@ -87,7 +86,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   isRtl,
   currentUserRole,
 }) => {
-  const { user } = useAuth();  // أضفت هذا للوصول إلى user.id في الشروط
+  const { user } = useAuth();
   const t = translations[isRtl ? 'ar' : 'en'];
 
   const statusStyles = useMemo(
@@ -175,7 +174,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             {submitting === order.id ? '...' : t.approve}
           </Button>
         )}
-        {order.status === 'approved' && !allAssigned && canAssign && (
+        {order.status === 'approved' && !allAssigned && canAssign && order.createdByRole !== 'chef' && (
           <Button
             variant="primary"
             onClick={() => openAssignModal(order)}
@@ -221,3 +220,4 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 };
 
 export default OrderCard;
+

@@ -52,6 +52,18 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const { user } = useAuth();
 
+  const availableChefsByDepartment = useMemo(() => {
+    const map = new Map<string, Chef[]>();
+    chefs.forEach((chef) => {
+      const departmentId = typeof chef.department === 'string' ? chef.department : chef.department?._id || 'no-department';
+      if (!map.has(departmentId)) {
+        map.set(departmentId, []);
+      }
+      map.get(departmentId)!.push(chef);
+    });
+    return map;
+  }, [chefs]);
+
   const updateAssignment = useCallback(
     (index: number, value: string) => {
       setAssignForm({
@@ -67,11 +79,11 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     if (!selectedOrder || !user) return;
 
     const updatedItems = selectedOrder.items.filter(item => !item.assignedTo).map((item) => {
-      const departmentId = item.department._id;
-      const deptChefs = chefs.filter(chef => chef.department._id === departmentId);
+      const departmentId = typeof item.department === 'string' ? item.department : item.department?._id || 'no-department';
+      const availableChefs = availableChefsByDepartment.get(departmentId) || [];
       let assignedTo = '';
-      if (deptChefs.length === 1) {
-        assignedTo = deptChefs[0].userId;
+      if (availableChefs.length === 1) {
+        assignedTo = availableChefs[0].userId;
       }
       return {
         itemId: item._id,
@@ -83,7 +95,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     });
 
     setAssignForm({ items: updatedItems });
-  }, [chefs, selectedOrder, setAssignForm, isRtl, user]);
+  }, [availableChefsByDepartment, selectedOrder, setAssignForm, isRtl, user]);
 
   return (
     <Modal
@@ -114,13 +126,13 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         ) : (
           assignFormData.items.map((item, index) => {
             const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
-            const departmentId = orderItem?.department?._id;
-            const availableChefs = chefs.filter(chef => chef.department._id === departmentId);
+            const departmentId = typeof orderItem?.department === 'string' ? orderItem?.department : orderItem?.department?._id || 'no-department';
+            const availableChefs = availableChefsByDepartment.get(departmentId) || [];
             const chefOptions = [
               { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
               ...availableChefs.map((chef) => ({
                 value: chef.userId,
-                label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+                label: chef.displayName,
               })),
             ];
 
