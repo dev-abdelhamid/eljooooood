@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,10 +10,10 @@ import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI , } from '../services/api';
+import { factoryOrdersAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem , User } from '../types/types';
+import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem, User } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
@@ -391,10 +387,15 @@ export const InventoryOrders: React.FC = () => {
           lang: language,
         };
 
-        const [ordersResponse, chefsResponse, departmentsResponse] = await Promise.all([
+        // Fetch orders, departments, and available chefs
+        const [ordersResponse, departmentsResponse, chefsResponse] = await Promise.all([
           factoryOrdersAPI.getAll(query),
-          chefsAPI.getAll({ lang: language }),
           departmentAPI.getAll({ lang: language }),
+          // Pass departmentId only if available from user or selected order
+          factoryOrdersAPI.getAvailableChefs({ 
+            lang: language,
+            departmentId: user.department?._id || state.selectedOrder?.items[0]?.department?._id,
+          }),
         ]);
 
         // Fetch all products by looping through pages
@@ -538,7 +539,7 @@ export const InventoryOrders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, isRtl, language]
+    [user, state.sortBy, state.sortOrder, state.debouncedSearchQuery, isRtl, language, state.selectedOrder]
   );
 
   useEffect(() => {
@@ -879,7 +880,7 @@ export const InventoryOrders: React.FC = () => {
 
   const assignChefs = useCallback(
     async (orderId: string) => {
-      if (!user?.id || state.assignFormData.items.some((item) => !item.assignedTo)) {
+      if (!user?.id || !state.selectedOrder || state.assignFormData.items.some((item) => !item.assignedTo)) {
         toast.error(isRtl ? 'يرجى تعيين شيف لكل عنصر' : 'Please assign a chef to each item', {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -887,7 +888,13 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await factoryOrdersAPI.assignChefs(orderId, state.assignFormData);
+        const payload = {
+          items: state.assignFormData.items.map((item) => ({
+            itemId: item.itemId,
+            assignedTo: item.assignedTo,
+          })),
+        };
+        await factoryOrdersAPI.assignChefs(orderId, payload);
         const items = state.assignFormData.items.map((item) => ({
           _id: item.itemId,
           assignedTo: state.chefs.find((chef) => chef.userId === item.assignedTo) || {
@@ -921,11 +928,17 @@ export const InventoryOrders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
+    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl, state.selectedOrder]
   );
 
   const openAssignModal = useCallback(
     (order: FactoryOrder) => {
+      if (!order || !order.items || order.items.length === 0) {
+        toast.error(isRtl ? 'لا توجد عناصر لتعيين الشيفات' : 'No items available for chef assignment', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
       if (order.createdByRole === 'chef') {
         toast.info(isRtl ? 'الطلب مُسند تلقائيًا للشيف الذي أنشأه' : 'Order is automatically assigned to the chef who created it', {
           position: isRtl ? 'top-left' : 'top-right',
@@ -938,24 +951,68 @@ export const InventoryOrders: React.FC = () => {
         });
         return;
       }
-      dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-      dispatch({
-        type: 'SET_ASSIGN_FORM',
-        payload: {
-          items: order.items
-            .filter((item) => !item.assignedTo)
-            .map((item) => ({
-              itemId: item._id,
-              assignedTo: '',
-              product: item.displayProductName,
-              quantity: item.quantity,
-              unit: translateUnit(item.unit, isRtl),
-            })),
-        },
-      });
-      dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
+      // Fetch available chefs for each department in the order
+      const departmentIds = Array.from(new Set(order.items.map(item => item.department?._id).filter(id => id && id !== 'no-department')));
+      if (departmentIds.length === 0) {
+        toast.error(isRtl ? 'لا يوجد أقسام مُعرفة للعناصر' : 'No departments defined for items', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+      Promise.all(
+        departmentIds.map(deptId =>
+          factoryOrdersAPI.getAvailableChefs({ lang: language, departmentId: deptId })
+        )
+      )
+        .then((responses) => {
+          const allChefs = responses.flatMap(res => res.data || []);
+          dispatch({
+            type: 'SET_CHEFS',
+            payload: allChefs
+              .filter((chef: any) => chef && chef.user?._id)
+              .map((chef: any) => ({
+                _id: chef._id,
+                userId: chef.user._id,
+                name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                nameEn: chef.user?.nameEn || chef.nameEn,
+                displayName: chef.user?.displayName || (isRtl ? chef.user?.name || chef.name : chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
+                department: chef.department
+                  ? {
+                      _id: chef.department._id || 'no-department',
+                      name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                      nameEn: chef.department.nameEn,
+                      displayName: chef.department.displayName || (isRtl ? chef.department.name : chef.department.nameEn || chef.department.name),
+                    }
+                  : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
+                status: chef.status || 'active',
+              })),
+          });
+          dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
+          dispatch({
+            type: 'SET_ASSIGN_FORM',
+            payload: {
+              items: order.items
+                .filter((item) => !item.assignedTo)
+                .map((item) => ({
+                  itemId: item._id,
+                  assignedTo: '',
+                  product: item.displayProductName,
+                  quantity: item.quantity,
+                  unit: translateUnit(item.unit, isRtl),
+                  departmentId: item.department._id,
+                })),
+            },
+          });
+          dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
+        })
+        .catch((err) => {
+          console.error('Error fetching chefs for departments:', err.message);
+          toast.error(isRtl ? `فشل في جلب الشيفات: ${err.message}` : `Failed to fetch chefs: ${err.message}`, {
+            position: isRtl ? 'top-left' : 'top-right',
+          });
+        });
     },
-    [isRtl]
+    [isRtl, language]
   );
 
   const handlePageChange = useCallback((page: number) => {
@@ -1235,7 +1292,7 @@ export const InventoryOrders: React.FC = () => {
                                 updateOrderStatus={updateOrderStatus}
                                 confirmItemCompletion={confirmItemCompletion}
                                 openAssignModal={openAssignModal}
-                                confirmFactoryProduction={(orderId) => updateOrderStatus(orderId, 'stocked')}  // استخدم factoryInventoryAPI هنا
+                                confirmFactoryProduction={(orderId) => updateOrderStatus(orderId, 'stocked')}
                                 submitting={state.submitting}
                                 isRtl={isRtl}
                                 currentUserRole={user.role}
@@ -1268,7 +1325,6 @@ export const InventoryOrders: React.FC = () => {
                     assignChefs={assignChefs}
                     error={state.error}
                     submitting={state.submitting}
-                    isRtl={isRtl}
                     loading={state.loading}
                   />
                   <Modal
@@ -1410,10 +1466,19 @@ export const InventoryOrders: React.FC = () => {
                                   <ProductDropdown
                                     options={[
                                       { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-                                      ...state.chefs.map((chef) => ({
-                                        value: chef.userId,
-                                        label: chef.displayName,
-                                      })),
+                                      ...state.chefs
+                                        .filter((chef) => {
+                                          const selectedProduct = state.products.find(
+                                            (p) => p._id === item.productId
+                                          );
+                                          return (
+                                            selectedProduct?.department?._id === chef.department?._id
+                                          );
+                                        })
+                                        .map((chef) => ({
+                                          value: chef.userId,
+                                          label: chef.displayName,
+                                        })),
                                     ]}
                                     value={item.assignedTo || ''}
                                     onChange={(value) =>
@@ -1427,7 +1492,7 @@ export const InventoryOrders: React.FC = () => {
                                         },
                                       })
                                     }
-                                    ariaLabel={isRtl ? 'تعيين إلى' : 'Assign To'}
+                                    ariaLabel={isRtl ? 'تعيين شيف' : 'Assign Chef'}
                                     className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
                                       state.formErrors[`item_${index}_assignedTo`] ? 'border-red-500' : ''
                                     }`}
@@ -1439,23 +1504,22 @@ export const InventoryOrders: React.FC = () => {
                                   )}
                                 </div>
                               )}
-                              {state.createFormData.items.length > 1 && (
-                                <button
-                                  onClick={() =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.filter((_, i) => i !== index),
-                                      },
-                                    })
-                                  }
-                                  className="mt-6 text-red-600 hover:text-red-800 transition-colors duration-200"
-                                  aria-label={isRtl ? 'إزالة العنصر' : 'Remove Item'}
-                                >
-                                  <MinusCircle className="w-5 h-5" />
-                                </button>
-                              )}
+                              <Button
+                                variant="danger"
+                                onClick={() =>
+                                  dispatch({
+                                    type: 'SET_CREATE_FORM',
+                                    payload: {
+                                      ...state.createFormData,
+                                      items: state.createFormData.items.filter((_, i) => i !== index),
+                                    },
+                                  })
+                                }
+                                className="self-start bg-red-100 hover:bg-red-200 text-red-600 rounded-lg px-3 py-1 text-sm font-medium shadow transition-all duration-200"
+                                aria-label={isRtl ? 'إزالة العنصر' : 'Remove Item'}
+                              >
+                                {isRtl ? 'إزالة' : 'Remove'}
+                              </Button>
                             </div>
                           </div>
                         ))}
@@ -1470,14 +1534,14 @@ export const InventoryOrders: React.FC = () => {
                               },
                             })
                           }
-                          className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200 mt-4"
+                          className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow transition-all duration-200"
                         >
-                          <Plus className="w-5 h-5" />
+                          <PlusCircle className="w-5 h-5" />
                           {isRtl ? 'إضافة عنصر' : 'Add Item'}
                         </Button>
                       </div>
                       {state.formErrors.form && (
-                        <p className="text-sm text-red-600 mt-2">{state.formErrors.form}</p>
+                        <p className="text-sm text-red-600 text-center">{state.formErrors.form}</p>
                       )}
                       <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
                         <Button

@@ -1608,12 +1608,12 @@ const ReportsAnalytics: React.FC = () => {
                 <DataTable
                   title={t.leastBranchOrders}
                   data={filteredData.leastBranchOrders}
-                  columns=[
-                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },  
                     { key: 'totalOrders', label: t.totalOrders, width: 'w-1/4' },
                     { key: 'totalValue', label: t.totalValue, width: 'w-1/4' },
-                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
-                  ]
+                    
+                  ]}
                   isRtl={isRtl}
                   currency={t.currency}
                 />
