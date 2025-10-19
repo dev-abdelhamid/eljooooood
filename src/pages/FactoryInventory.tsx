@@ -2,9 +2,8 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
+import { Package, Plus, X, Eye, Edit, AlertCircle, Minus, Search, ChevronDown } from 'lucide-react';
 import { factoryOrdersAPI, factoryInventoryAPI, chefsAPI, isValidObjectId } from '../services/api';
-import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -79,12 +78,19 @@ interface FactoryOrder {
 
 interface Chef {
   _id: string;
-  userId: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
+  user: {
+    _id: string;
+    name: string;
+    nameEn?: string;
+    username: string;
+    email: string;
+    phone: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
   department: { _id: string; name: string; nameEn?: string };
-  status?: 'active' | 'inactive';
+  createdAt: string;
 }
 
 // Translations
@@ -219,6 +225,104 @@ const translations = {
   },
 };
 
+// ProductSearchInput Component
+export const ProductSearchInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <div
+        className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+      >
+        <Search className="w-4 h-4" />
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <div
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${value ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ProductDropdown Component
+export const ProductDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  // Log options for debugging
+  console.log(`[${new Date().toISOString()}] ProductDropdown options:`, options);
+  const selectedOption =
+    options.find((opt) => opt.value === value) ||
+    options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+
+  return (
+    <div className="relative group">
+      <button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label || (isRtl ? 'غير معروف' : 'Unknown')}</span>
+        <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </div>
+      </button>
+      {isOpen && !disabled && (
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+          {options.map((option) => (
+            <div
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+            >
+              {option.label || (isRtl ? 'غير معروف' : 'Unknown')}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // QuantityInput Component
 const QuantityInput = ({
   value,
@@ -303,7 +407,7 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
 const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   const aggregated: Record<string, ProductionItem> = {};
   items.forEach((item) => {
-    const key = `${item.product}_${item.assignedTo}`; // Unique key for product and chef
+    const key = `${item.product}_${item.assignedTo}`;
     if (!aggregated[key]) {
       aggregated[key] = {
         product: item.product,
@@ -432,6 +536,14 @@ export const FactoryInventory: React.FC = () => {
         console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
         return [];
       }
+      // Log raw data for each chef
+      data.forEach((chef, index) => {
+        console.log(`[${new Date().toISOString()}] Chef ${index + 1}:`, {
+          id: chef._id,
+          user: chef.user,
+          department: chef.department,
+        });
+      });
       return data;
     },
     enabled: isProductionModalOpen && !!user?.role && ['production', 'admin'].includes(user.role),
@@ -707,10 +819,19 @@ export const FactoryInventory: React.FC = () => {
         { value: '', label: t.selectChef },
         ...chefsData
           ?.filter((chef) => chef.department?._id === departmentId)
-          .map((chef) => ({
-            value: chef._id,
-            label: isRtl ? chef.name : chef.nameEn || chef.name,
-          })) || [],
+          .map((chef) => {
+            console.log(`[${new Date().toISOString()}] Chef data for dept ${departmentId}:`, {
+              chefId: chef._id,
+              user: chef.user,
+              department: chef.department,
+            });
+            return {
+              value: chef._id,
+              label: isRtl
+                ? chef.user.name || chef.user.nameEn || `شيف بدون اسم (${chef._id})`
+                : chef.user.nameEn || chef.user.name || `Unnamed Chef (${chef._id})`,
+            };
+          }) || [],
       ];
       console.log(`[${new Date().toISOString()}] chefOptions for dept ${departmentId}:`, options);
       return options;
@@ -1048,7 +1169,6 @@ export const FactoryInventory: React.FC = () => {
               onChange={handleSearchChange}
               placeholder={t.search}
               ariaLabel={t.search}
-              className="w-full"
             />
           </div>
           <div className="w-full lg:w-1/2 flex flex-col sm:flex-row gap-4">
@@ -1060,7 +1180,6 @@ export const FactoryInventory: React.FC = () => {
               }}
               options={statusOptions}
               ariaLabel={t.filterByStatus}
-              className="w-full"
             />
             <ProductDropdown
               value={filterDepartment}
@@ -1070,7 +1189,6 @@ export const FactoryInventory: React.FC = () => {
               }}
               options={departmentOptions}
               ariaLabel={t.filterByDepartment}
-              className="w-full"
             />
           </div>
         </div>
@@ -1289,7 +1407,6 @@ export const FactoryInventory: React.FC = () => {
                         options={productOptions}
                         ariaLabel={`${t.items} ${index + 1}`}
                         placeholder={t.selectProduct}
-                        className="w-full"
                       />
                       {productionErrors[`item_${index}_product`] && (
                         <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
@@ -1300,7 +1417,6 @@ export const FactoryInventory: React.FC = () => {
                         options={itemChefOptions}
                         ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
                         placeholder={t.selectChef}
-                        className="w-full"
                       />
                       {productionErrors[`item_${index}_assignedTo`] && (
                         <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
@@ -1475,7 +1591,7 @@ export const FactoryInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
@@ -1490,52 +1606,34 @@ export const FactoryInventory: React.FC = () => {
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="space-y-4">
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
-                ))}
-              </div>
-            ) : productHistory && productHistory.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-600">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2 px-4 text-left font-medium">{t.date}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.type}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.reference}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b border-gray-100">
-                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                        <td className="py-2 px-4">{t[entry.type]}</td>
-                        <td className="py-2 px-4">{entry.quantity}</td>
-                        <td className="py-2 px-4">{entry.reference || 'N/A'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="text-gray-600 text-sm">{t.noHistory}</p>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
+          {historyLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+              ))}
             </div>
-          </div>
+          ) : productHistory && productHistory.length > 0 ? (
+            <div className="space-y-4">
+              {productHistory.map((entry) => (
+                <div key={entry._id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-600">
+                    {t.date}: {new Date(entry.date).toLocaleDateString(language)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.type}: {entry.type === 'produced_stock' ? t.produced_stock : t.adjustment}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.quantity}: {entry.quantity}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.reference}: {entry.reference}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-600 text-sm">{t.noHistory}</p>
+          )}
         </motion.div>
       </motion.div>
     </div>
