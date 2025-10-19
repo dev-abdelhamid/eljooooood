@@ -42,7 +42,6 @@ import DailyOrdersSummary from './pages/DailyOrdersSummary';
 
 // New imports for separate pages
 import OrdersTablePage from './pages/OrdersTablePage';
-import { FactoryOrders } from './pages/InventoryOrders';
 
 
 
