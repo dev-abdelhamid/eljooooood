@@ -19,7 +19,7 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem , User } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
-import AssignChefsModal from '../components/Shared/AssignChefsModal';
+import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
 import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
