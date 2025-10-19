@@ -1137,7 +1137,7 @@ export const factoryInventoryAPI = {
 };
 
 
-// Factory Orders API
+
 export const factoryOrdersAPI = {
   // Create a new factory order
   create: async (data: { orderNumber: string; items: { product: string; quantity: number; assignedTo?: string }[]; notes?: string; priority?: string }) => {
@@ -1344,16 +1344,30 @@ export const factoryOrdersAPI = {
 
   // Get available chefs, optionally filtered by department
   getAvailableChefs: async (departmentId?: string) => {
+    const isArabic = localStorage.getItem('language') === 'ar';
     try {
-      const params = departmentId ? { departmentId } : {};
+      // Validate departmentId
+      const params: Record<string, string> = {};
+      if (departmentId) {
+        if (!isValidObjectId(departmentId)) {
+          console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Invalid departmentId:`, departmentId);
+          throw new Error(createErrorMessage('invalidDepartmentId', isArabic));
+        }
+        params.departmentId = departmentId;
+      }
+
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Request params:`, params);
       const response = await api.get('/factoryOrders/available-chefs', { params });
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Response:`, response);
       return response.data.data;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Error:`, error.message);
-      throw error;
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableChefs - Error:`, error.response?.data?.message || error.message);
+      const errorMessage = error.response?.data?.message || createErrorMessage('invalidData', isArabic);
+      throw new Error(errorMessage);
     }
   },
 };
+
+// ... باقي الكود في api.ts يبقى كما هو ...
 export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
