@@ -131,7 +131,6 @@ const translations = {
     adjustment: 'تعديل',
     inProduction: 'في الإنتاج',
     availableProducts: 'المنتجات المتوفرة',
-    allProducts: 'جميع المنتجات',
     errors: {
       fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
       fetchChefs: 'خطأ في جلب بيانات الشيفات',
@@ -197,7 +196,6 @@ const translations = {
     adjustment: 'Adjustment',
     inProduction: 'In Production',
     availableProducts: 'Available Products',
-    allProducts: 'All Products',
     errors: {
       fetchInventory: 'Error fetching factory inventory data',
       fetchChefs: 'Error fetching chefs data',
@@ -241,11 +239,7 @@ const QuantityInput = ({
   const t = translations[isRtl ? 'ar' : 'en'];
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
-    if (val === '' || isNaN(num) || num < 1) {
-      onChange('1');
-      return;
-    }
-    onChange(val);
+    onChange(isNaN(num) || num < 1 ? '1' : val);
   };
   return (
     <div className="flex items-center gap-2">
@@ -263,9 +257,9 @@ const QuantityInput = ({
         value={value}
         onChange={(e) => handleChange(e.target.value)}
         min={1}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
         style={{ appearance: 'none', MozAppearance: 'textfield' }}
-        aria-label={isRtl ? 'الكمية' : 'Quantity'}
+        aria-label={t.quantity}
       />
       <Button
         variant="primary"
@@ -298,93 +292,65 @@ const InventoryCard = ({
   if (!item.product) return null;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
+      exit={{ opacity: 0, y: -10 }}
+      className="p-4 bg-white rounded-lg shadow-sm hover:shadow-md border border-gray-100 hover:border-amber-200 transition-all duration-200"
     >
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-            {item.product.displayName}
-          </h3>
-          <p className="text-sm text-gray-500">{item.product.code}</p>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-semibold text-gray-900 text-sm truncate">{item.product.displayName}</h3>
+          <p className="text-xs text-gray-500">{item.product.code}</p>
         </div>
-        <p className="text-sm text-amber-600">
+        <p className="text-xs text-amber-600">
           {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
         </p>
-        <p className="text-sm text-gray-600">
-          {t.stock}: {item.currentStock}
-        </p>
-        <p className="text-sm text-gray-600">
-          {t.minStock}: {item.minStockLevel}
-        </p>
-        <p className="text-sm text-gray-600">
-          {t.maxStock}: {item.maxStockLevel}
-        </p>
-        <p className="text-sm text-gray-600">
-          {t.unit}: {item.product.displayUnit}
-        </p>
+        <p className="text-xs text-gray-600">{t.stock}: {item.currentStock}</p>
+        <p className="text-xs text-gray-600">{t.minStock}: {item.minStockLevel}</p>
+        <p className="text-xs text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
+        <p className="text-xs text-gray-600">{t.unit}: {item.product.displayUnit}</p>
         <p
-          className={`text-sm font-medium ${
-            item.status === InventoryStatus.LOW
-              ? 'text-red-600'
-              : item.status === InventoryStatus.FULL
-              ? 'text-yellow-600'
-              : 'text-green-600'
+          className={`text-xs font-medium ${
+            item.status === InventoryStatus.LOW ? 'text-red-600' :
+            item.status === InventoryStatus.FULL ? 'text-yellow-600' : 'text-green-600'
           }`}
         >
-          {item.status === InventoryStatus.LOW
-            ? t.lowStock
-            : item.status === InventoryStatus.FULL
-            ? t.full
-            : t.normal}
+          {item.status === InventoryStatus.LOW ? t.lowStock :
+           item.status === InventoryStatus.FULL ? t.full : t.normal}
         </p>
         {item.inProduction && (
-          <p className="text-sm text-blue-600 flex items-center gap-1">
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-              />
+          <p className="text-xs text-blue-600 flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
             </svg>
             {t.inProduction}
           </p>
         )}
       </div>
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-3 flex justify-end gap-2">
         <Button
           variant="secondary"
           onClick={() => onOpenDetailsModal(item)}
-          className="p-2 text-green-600 hover:text-green-800"
+          className="p-1.5 text-green-600 hover:text-green-800"
           aria-label={t.viewDetails}
         >
-          <Eye className="w-4 h-4" />
+          <Eye className="w-3 h-3" />
         </Button>
         <Button
           variant="secondary"
           onClick={() => onOpenEditModal(item)}
-          className="p-2 text-blue-600 hover:text-blue-800"
+          className="p-1.5 text-blue-600 hover:text-blue-800"
           aria-label={t.editStockLimits}
         >
-          <Edit className="w-4 h-4" />
+          <Edit className="w-3 h-3" />
         </Button>
         <Button
           variant="secondary"
           onClick={() => onOpenProductionModal(item)}
-          className="p-2 text-amber-600 hover:text-amber-800"
+          className="p-1.5 text-amber-600 hover:text-amber-800"
           aria-label={t.create}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3 h-3" />
         </Button>
       </div>
     </motion.div>
@@ -432,61 +398,41 @@ const ProductionModal = ({
 
   const handleProductChange = (index: number, productId: string) => {
     if (!isValidObjectId(productId)) {
-      setErrors((prev) => ({
-        ...prev,
-        [`item_${index}_product`]: t.errors.invalidProductId,
-      }));
+      setErrors((prev) => ({ ...prev, [`item_${index}_product`]: t.errors.invalidProductId }));
       return;
     }
     if (formData.items.some((item, i) => i !== index && item.product === productId)) {
-      setErrors((prev) => ({
-        ...prev,
-        [`item_${index}_product`]: t.errors.duplicateProduct,
-      }));
+      setErrors((prev) => ({ ...prev, [`item_${index}_product`]: t.errors.duplicateProduct }));
       return;
     }
-    setFormData({
-      type: 'UPDATE_ITEM',
-      payload: { index, field: 'product', value: productId },
-    });
+    setFormData({ type: 'UPDATE_ITEM', payload: { index, field: 'product', value: productId } });
+    setErrors((prev) => ({ ...prev, [`item_${index}_product`]: '' }));
   };
 
   const handleQuantityChange = (index: number, value: string) => {
     const numValue = parseInt(value, 10);
     if (isNaN(numValue) || numValue < 1) {
-      setErrors((prev) => ({
-        ...prev,
-        [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
-      }));
+      setErrors((prev) => ({ ...prev, [`item_${index}_quantity`]: t.errors.invalidQuantityMax }));
       return;
     }
-    setFormData({
-      type: 'UPDATE_ITEM',
-      payload: { index, field: 'quantity', value: numValue },
-    });
+    setFormData({ type: 'UPDATE_ITEM', payload: { index, field: 'quantity', value: numValue } });
+    setErrors((prev) => ({ ...prev, [`item_${index}_quantity`]: '' }));
   };
 
   const handleChefChange = (index: number, chefId: string) => {
     if (!isValidObjectId(chefId)) {
-      setErrors((prev) => ({
-        ...prev,
-        [`item_${index}_assignedTo`]: t.errors.noChefSelected,
-      }));
+      setErrors((prev) => ({ ...prev, [`item_${index}_assignedTo`]: t.errors.noChefSelected }));
       return;
     }
-    setFormData({
-      type: 'UPDATE_ITEM',
-      payload: { index, field: 'assignedTo', value: chefId },
-    });
+    setFormData({ type: 'UPDATE_ITEM', payload: { index, field: 'assignedTo', value: chefId } });
+    setErrors((prev) => ({ ...prev, [`item_${index}_assignedTo`]: '' }));
   };
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: isOpen ? 1 : 0 }}
-      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-        isOpen ? '' : 'pointer-events-none'
-      }`}
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${isOpen ? '' : 'pointer-events-none'}`}
       role="dialog"
       aria-modal="true"
       aria-label={t.create}
@@ -494,34 +440,34 @@ const ProductionModal = ({
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: isOpen ? 1 : 0.95, y: isOpen ? 0 : 20 }}
-        className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-white p-5 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">{t.create}</h2>
           <Button
             variant="secondary"
             onClick={onClose}
-            className="p-2"
+            className="p-1.5"
             aria-label={t.cancel}
           >
             <X className="w-4 h-4" />
           </Button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t.notes}</label>
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ type: 'SET_NOTES', payload: e.target.value })}
               placeholder={t.notesPlaceholder}
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+              className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
               rows={3}
               aria-label={t.notes}
             />
             {errors.form && <p className="text-red-600 text-xs mt-1">{errors.form}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t.items}</label>
             {formData.items.map((item, index) => {
               const selectedProduct = products.find((p) => p.productId === item.product);
               const itemChefOptions = [
@@ -534,21 +480,21 @@ const ProductionModal = ({
                   })),
               ];
               return (
-                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <div key={index} className="flex flex-col gap-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
                   <Select
                     value={item.product}
                     options={productOptions}
                     onChange={(value) => handleProductChange(index, value)}
                     placeholder={t.selectProduct}
                     ariaLabel={`${t.items} ${index + 1}`}
-                    className="w-full"
+                    className="w-full text-sm"
                   />
                   {errors[`item_${index}_product`] && (
                     <p className="text-red-600 text-xs">{errors[`item_${index}_product`]}</p>
                   )}
-                  <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">{t.quantity}</label>
                       <QuantityInput
                         value={item.quantity}
                         onChange={(val) => handleQuantityChange(index, val)}
@@ -570,14 +516,14 @@ const ProductionModal = ({
                       )}
                     </div>
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.selectChef}</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">{t.selectChef}</label>
                       <Select
                         value={item.assignedTo || ''}
                         options={itemChefOptions}
                         onChange={(value) => handleChefChange(index, value)}
                         placeholder={t.selectChef}
                         ariaLabel={`${t.selectChef} ${index + 1}`}
-                        className="w-full"
+                        className="w-full text-sm"
                       />
                       {errors[`item_${index}_assignedTo`] && (
                         <p className="text-red-600 text-xs mt-1">{errors[`item_${index}_assignedTo`]}</p>
@@ -588,10 +534,10 @@ const ProductionModal = ({
                     <Button
                       variant="secondary"
                       onClick={() => setFormData({ type: 'REMOVE_ITEM', payload: index })}
-                      className="text-red-600 hover:text-red-800 flex items-center gap-1"
+                      className="text-red-600 hover:text-red-800 flex items-center gap-1 text-xs"
                       aria-label={t.remove}
                     >
-                      <MinusCircle className="w-4 h-4" />
+                      <MinusCircle className="w-3 h-3" />
                       {t.remove}
                     </Button>
                   )}
@@ -600,34 +546,24 @@ const ProductionModal = ({
             })}
             <Button
               variant="secondary"
-              onClick={() =>
-                setFormData({
-                  type: 'ADD_ITEM',
-                  payload: { product: '', quantity: 1, assignedTo: '' },
-                })
-              }
-              className="flex items-center gap-2 text-amber-600 hover:text-amber-800"
+              onClick={() => setFormData({ type: 'ADD_ITEM', payload: { product: '', quantity: 1, assignedTo: '' } })}
+              className="flex items-center gap-1 text-amber-600 hover:text-amber-800 text-xs"
               aria-label={t.addItem}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3 h-3" />
               {t.addItem}
             </Button>
             {errors.items && <p className="text-red-600 text-xs">{errors.items}</p>}
           </div>
-          <div className={`flex gap-3 ${isRtl ? 'justify-start' : 'justify-end'}`}>
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              className="px-4 py-2"
-              aria-label={t.cancel}
-            >
+          <div className={`flex gap-2 ${isRtl ? 'justify-start' : 'justify-end'}`}>
+            <Button variant="secondary" onClick={onClose} className="px-3 py-1.5 text-sm" aria-label={t.cancel}>
               {t.cancel}
             </Button>
             <Button
               variant="primary"
               onClick={onSubmit}
               disabled={isSubmitting}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm"
               aria-label={isSubmitting ? t.submitting : t.submit}
             >
               {isSubmitting ? t.submitting : t.submit}
@@ -665,9 +601,7 @@ const EditModal = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: isOpen ? 1 : 0 }}
-      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-        isOpen ? '' : 'pointer-events-none'
-      }`}
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${isOpen ? '' : 'pointer-events-none'}`}
       role="dialog"
       aria-modal="true"
       aria-label={t.editStockLimits}
@@ -675,59 +609,49 @@ const EditModal = ({
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: isOpen ? 1 : 0.95, y: isOpen ? 0 : 20 }}
-        className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+        className="bg-white p-5 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            className="p-2"
-            aria-label={t.cancel}
-          >
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">{t.editStockLimits}</h2>
+          <Button variant="secondary" onClick={onClose} className="p-1.5" aria-label={t.cancel}>
             <X className="w-4 h-4" />
           </Button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t.minStock}</label>
             <input
               type="number"
               value={formData.minStockLevel}
               onChange={(e) => setFormData({ ...formData, minStockLevel: parseInt(e.target.value) || 0 })}
               min={0}
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+              className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
               aria-label={t.minStock}
             />
             {errors.minStockLevel && <p className="text-red-600 text-xs mt-1">{errors.minStockLevel}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t.maxStock}</label>
             <input
               type="number"
               value={formData.maxStockLevel}
               onChange={(e) => setFormData({ ...formData, maxStockLevel: parseInt(e.target.value) || 0 })}
               min={0}
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+              className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
               aria-label={t.maxStock}
             />
             {errors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{errors.maxStockLevel}</p>}
           </div>
           {errors.form && <p className="text-red-600 text-xs">{errors.form}</p>}
-          <div className={`flex gap-3 ${isRtl ? 'justify-start' : 'justify-end'}`}>
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              className="px-4 py-2"
-              aria-label={t.cancel}
-            >
+          <div className={`flex gap-2 ${isRtl ? 'justify-start' : 'justify-end'}`}>
+            <Button variant="secondary" onClick={onClose} className="px-3 py-1.5 text-sm" aria-label={t.cancel}>
               {t.cancel}
             </Button>
             <Button
               variant="primary"
               onClick={onSubmit}
               disabled={isSubmitting}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm"
               aria-label={isSubmitting ? t.saving : t.save}
             >
               {isSubmitting ? t.saving : t.save}
@@ -759,9 +683,7 @@ const DetailsModal = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: isOpen ? 1 : 0 }}
-      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-        isOpen ? '' : 'pointer-events-none'
-      }`}
+      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${isOpen ? '' : 'pointer-events-none'}`}
       role="dialog"
       aria-modal="true"
       aria-label={t.productDetails}
@@ -769,91 +691,45 @@ const DetailsModal = ({
       <motion.div
         initial={{ scale: 0.95, y: 20 }}
         animate={{ scale: isOpen ? 1 : 0.95, y: isOpen ? 0 : 20 }}
-        className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-white p-5 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            className="p-2"
-            aria-label={t.cancel}
-          >
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">{t.productDetails}</h2>
+          <Button variant="secondary" onClick={onClose} className="p-1.5" aria-label={t.cancel}>
             <X className="w-4 h-4" />
           </Button>
         </div>
         {isLoading ? (
-          <div className="space-y-4 animate-pulse">
+          <div className="space-y-3 animate-pulse">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-10 bg-gray-200 rounded"></div>
+              <div key={i} className="h-8 bg-gray-200 rounded"></div>
             ))}
           </div>
         ) : history.length === 0 ? (
           <p className="text-gray-600 text-sm">{t.noHistory}</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {history.map((entry) => (
-              <div key={entry._id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                <p className="text-sm text-gray-600">
+              <div key={entry._id} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <p className="text-xs text-gray-600">
                   {t.date}: {new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
                 </p>
-                <p className="text-sm text-gray-600">
+                <p className="text-xs text-gray-600">
                   {t.type}: {entry.type === 'produced_stock' ? t.produced_stock : t.adjustment}
                 </p>
-                <p className="text-sm text-gray-600">
-                  {t.quantity}: {entry.quantity}
-                </p>
-                <p className="text-sm text-gray-600">
-                  {t.reference}: {entry.reference}
-                </p>
+                <p className="text-xs text-gray-600">{t.quantity}: {entry.quantity}</p>
+                <p className="text-xs text-gray-600">{t.reference}: {entry.reference}</p>
               </div>
             ))}
           </div>
         )}
-        <div className={`mt-4 flex ${isRtl ? 'justify-start' : 'justify-end'}`}>
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            className="px-4 py-2"
-            aria-label={t.cancel}
-          >
+        <div className={`mt-3 flex ${isRtl ? 'justify-start' : 'justify-end'}`}>
+          <Button variant="secondary" onClick={onClose} className="px-3 py-1.5 text-sm" aria-label={t.cancel}>
             {t.cancel}
           </Button>
         </div>
       </motion.div>
     </motion.div>
-  );
-};
-
-// Custom Tabs Component
-const CustomTabs = ({
-  selectedTab,
-  setSelectedTab,
-  tabs,
-  children,
-}: {
-  selectedTab: number;
-  setSelectedTab: React.Dispatch<React.SetStateAction<number>>;
-  tabs: string[];
-  children: React.ReactNode[];
-}) => {
-  return (
-    <div className="mb-6">
-      <div className="flex space-x-1 rounded-xl bg-gray-100 p-1">
-        {tabs.map((tab, index) => (
-          <button
-            key={index}
-            onClick={() => setSelectedTab(index)}
-            className={`w-full rounded-lg py-2.5 text-sm font-medium leading-5 text-amber-600 ${
-              selectedTab === index ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/[0.12] hover:text-amber-700'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-      <div>{children[selectedTab]}</div>
-    </div>
   );
 };
 
@@ -878,7 +754,7 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
     case 'RESET':
-      return { notes: '', items: [] };
+      return { notes: '', items: [{ product: '', quantity: 1, assignedTo: '' }] };
     default:
       return state;
   }
@@ -889,11 +765,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   const aggregated: Record<string, ProductionItem> = {};
   items.forEach((item) => {
     if (!aggregated[item.product]) {
-      aggregated[item.product] = {
-        product: item.product,
-        quantity: 0,
-        assignedTo: item.assignedTo,
-      };
+      aggregated[item.product] = { product: item.product, quantity: 0, assignedTo: item.assignedTo };
     }
     aggregated[item.product].quantity += item.quantity;
   });
@@ -923,9 +795,8 @@ export const FactoryInventory: React.FC = () => {
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-  const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
-  const [allProducts, setAllProducts] = useState<AvailableProduct[]>([]);
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [products, setProducts] = useState<AvailableProduct[]>([]);
+  const [searchInput, setSearchInput] = useState<string>('');
   const ITEMS_PER_PAGE = 10;
 
   // Custom debounce hook
@@ -938,15 +809,14 @@ export const FactoryInventory: React.FC = () => {
     }, [value, delay]);
     return [value, setValue, debouncedValue] as const;
   };
-  const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
+  const [, setSearchInputState, debouncedSearchQuery] = useDebouncedState<string>(searchInput, 300);
 
   // Chefs Query
   const { data: chefsData, error: chefsError } = useQuery<Chef[], Error>({
     queryKey: ['chefs', language],
     queryFn: async () => {
       const response = await chefsAPI.getAll();
-      const data = Array.isArray(response) ? response : response?.data || response?.chefs || [];
-      return Array.isArray(data) ? data.filter((chef): chef is Chef => !!chef && isValidObjectId(chef._id)) : [];
+      return Array.isArray(response) ? response.filter((chef): chef is Chef => !!chef && isValidObjectId(chef._id)) : [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
@@ -967,42 +837,42 @@ export const FactoryInventory: React.FC = () => {
         lang: language,
       };
       const response = await factoryInventoryAPI.getAll(params);
-      const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
-      return Array.isArray(data) ? data : [];
+      return Array.isArray(response) ? response : response?.data?.inventory || [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    select: (data) => data
-      .filter((item): item is FactoryInventoryItem => !!item && !!item.product && isValidObjectId(item.product._id))
-      .map((item) => ({
-        ...item,
-        product: item.product ? {
-          ...item.product,
-          displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-          displayUnit: isRtl ? (item.product.unit || t.unit) : item.product.unitEn || item.product.unit || 'N/A',
-          department: item.product.department ? {
-            ...item.product.department,
-            displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+    select: (data) =>
+      data
+        .filter((item): item is FactoryInventoryItem => !!item && !!item.product && isValidObjectId(item.product._id))
+        .map((item) => ({
+          ...item,
+          product: item.product ? {
+            ...item.product,
+            displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+            displayUnit: isRtl ? (item.product.unit || t.unit) : item.product.unitEn || item.product.unit || 'N/A',
+            department: item.product.department ? {
+              ...item.product.department,
+              displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+            } : null,
           } : null,
-        } : null,
-        status: item.currentStock <= item.minStockLevel ? InventoryStatus.LOW :
-          item.currentStock >= item.maxStockLevel ? InventoryStatus.FULL : InventoryStatus.NORMAL,
-        inProduction: factoryOrdersData?.some(
-          (order) =>
-            (order.status === 'pending' || order.status === 'in_production') &&
-            order.items.some((i) => i.productId === item.product?._id)
-        ) || false,
-      })),
+          status: item.currentStock <= item.minStockLevel ? InventoryStatus.LOW :
+            item.currentStock >= item.maxStockLevel ? InventoryStatus.FULL : InventoryStatus.NORMAL,
+          inProduction: factoryOrdersData?.some(
+            (order) =>
+              (order.status === 'pending' || order.status === 'in_production') &&
+              order.items.some((i) => i.productId === item.product?._id)
+          ) || false,
+        })),
     onError: (err) => toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' }),
   });
 
-  // All Products Query
-  const { data: allProductsData, isLoading: allProductsLoading } = useQuery<AvailableProduct[], Error>({
-    queryKey: ['allProducts', language],
+  // Products Query
+  const { data: productsData, isLoading: productsLoading } = useQuery<AvailableProduct[], Error>({
+    queryKey: ['products', language],
     queryFn: async () => {
       const response = await factoryInventoryAPI.getAllProducts();
-      const products = Array.isArray(response) ? response : response?.data || response?.products || [];
-      return Array.isArray(products) ? products
+      const products = Array.isArray(response) ? response : response?.data || [];
+      return products
         .filter((product: any) => product && product._id && isValidObjectId(product._id))
         .map((product: any) => ({
           productId: product._id,
@@ -1012,7 +882,7 @@ export const FactoryInventory: React.FC = () => {
           departmentName: isRtl
             ? product.department?.name || t.allDepartments
             : product.department?.nameEn || product.department?.name || 'Unknown',
-        })) : [];
+        }));
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
@@ -1024,8 +894,7 @@ export const FactoryInventory: React.FC = () => {
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
       const response = await factoryOrdersAPI.getAll();
-      const data = Array.isArray(response) ? response : response?.data || [];
-      return Array.isArray(data) ? data : [];
+      return Array.isArray(response) ? response : response?.data || [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
@@ -1040,35 +909,19 @@ export const FactoryInventory: React.FC = () => {
         throw new Error(t.errors.invalidProductId);
       }
       const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
-      const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
-      return Array.isArray(data) ? data : [];
+      return Array.isArray(response) ? response : response?.data?.history || [];
     },
     enabled: isDetailsModalOpen && !!selectedProductId && isValidObjectId(selectedProductId),
     staleTime: 5 * 60 * 1000,
     onError: (err) => toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' }),
   });
 
-  // Set available and all products
+  // Set products
   useEffect(() => {
-    if (inventoryData) {
-      setAvailableProducts(
-        inventoryData
-          .filter((item) => item.currentStock > 0 && item.product)
-          .map((item) => ({
-            productId: item.product!._id,
-            productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
-            unit: isRtl ? (item.product!.unit || t.unit) : item.product!.unitEn || item.product!.unit || 'N/A',
-            departmentId: item.product!.department?._id || '',
-            departmentName: isRtl
-              ? item.product!.department?.name || t.allDepartments
-              : item.product!.department?.nameEn || item.product!.department?.name || 'Unknown',
-          }))
-      );
+    if (productsData) {
+      setProducts(productsData);
     }
-    if (allProductsData) {
-      setAllProducts(allProductsData);
-    }
-  }, [inventoryData, allProductsData, isRtl, t]);
+  }, [productsData]);
 
   // Socket Events
   useEffect(() => {
@@ -1095,8 +948,6 @@ export const FactoryInventory: React.FC = () => {
 
     const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
       if (!isValidObjectId(orderId)) return;
-      const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-      audio.play().catch(console.error);
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
@@ -1125,8 +976,6 @@ export const FactoryInventory: React.FC = () => {
     }) => {
       if (!isValidObjectId(factoryOrderId) || !isValidObjectId(chefId)) return;
       if (user._id === chefId) {
-        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-        audio.play().catch(console.error);
         addNotification({
           _id: crypto.randomUUID(),
           type: 'info',
@@ -1143,8 +992,6 @@ export const FactoryInventory: React.FC = () => {
 
     const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
       if (!isValidObjectId(factoryOrderId)) return;
-      const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-      audio.play().catch(console.error);
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
@@ -1165,16 +1012,11 @@ export const FactoryInventory: React.FC = () => {
     socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
 
-    const reconnectInterval = setInterval(() => {
-      if (!isConnected && socket) socket.connect();
-    }, 5000);
-
     return () => {
       socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
       socket.off('factoryOrderCreated', handleFactoryOrderCreated);
       socket.off('factoryTaskAssigned', handleFactoryTaskAssigned);
       socket.off('factoryOrderCompleted', handleFactoryOrderCompleted);
-      clearInterval(reconnectInterval);
     };
   }, [socket, user, isConnected, queryClient, addNotification, t, isRtl, selectedProductId]);
 
@@ -1183,21 +1025,15 @@ export const FactoryInventory: React.FC = () => {
     const deptMap = new Map<string, { _id: string; name: string }>();
     inventoryData?.forEach((item) => {
       if (item.product?.department?._id) {
-        const deptKey = item.product.department._id;
-        if (!deptMap.has(deptKey)) {
-          deptMap.set(deptKey, {
-            _id: deptKey,
-            name: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
-          });
-        }
+        deptMap.set(item.product.department._id, {
+          _id: item.product.department._id,
+          name: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+        });
       }
     });
     return [
       { value: '', label: t.allDepartments },
-      ...Array.from(deptMap.values()).map((dept) => ({
-        value: dept._id,
-        label: dept.name || t.allDepartments,
-      })),
+      ...Array.from(deptMap.values()).map((dept) => ({ value: dept._id, label: dept.name || t.allDepartments })),
     ];
   }, [inventoryData, isRtl, t]);
 
@@ -1227,34 +1063,19 @@ export const FactoryInventory: React.FC = () => {
     [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment]
   );
 
-  const filteredAllProducts = useMemo(
-    () =>
-      (allProducts || []).filter(
-        (product) =>
-          product.productName.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          product.departmentName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-      ),
-    [allProducts, debouncedSearchQuery]
-  );
-
   const paginatedInventory = useMemo(
     () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
     [filteredInventory, currentPage]
   );
 
-  const paginatedAllProducts = useMemo(
-    () => filteredAllProducts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
-    [filteredAllProducts, currentPage]
-  );
-
-  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
-  const totalAllProductsPages = Math.ceil(filteredAllProducts.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
 
   // Handlers
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
+    setSearchInputState(e.target.value);
     setCurrentPage(1);
-  }, [setSearchInput]);
+  }, [setSearchInputState]);
 
   const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
     dispatchProductionForm({ type: 'RESET' });
@@ -1262,11 +1083,6 @@ export const FactoryInventory: React.FC = () => {
       dispatchProductionForm({
         type: 'ADD_ITEM',
         payload: { product: item.product._id, quantity: 1, assignedTo: '' },
-      });
-    } else {
-      dispatchProductionForm({
-        type: 'ADD_ITEM',
-        payload: { product: '', quantity: 1, assignedTo: '' },
       });
     }
     setProductionErrors({});
@@ -1374,22 +1190,10 @@ export const FactoryInventory: React.FC = () => {
       }
     },
     onError: (err: any) => {
-      let errorMessage = err.message || t.errors.createProduction;
-      if (err.response?.status === 429) {
-        errorMessage = t.errors.tooManyRequests;
-      } else if (err.response?.data?.errors?.length > 0) {
-        errorMessage = err.response.data.errors.map((e: any) => e.msg).join(', ');
-        err.response.data.errors.forEach((e: any, index: number) => {
-          setProductionErrors((prev) => ({
-            ...prev,
-            [`item_${index}_${e.path}`]: e.msg,
-          }));
-        });
-      } else if (err.message.includes('Invalid product ID')) {
-        errorMessage = t.errors.invalidProductId;
-      } else if (err.message.includes('Product not found')) {
-        errorMessage = t.errors.productNotFound;
-      }
+      const errorMessage =
+        err.response?.status === 429 ? t.errors.tooManyRequests :
+        err.response?.data?.errors?.length > 0 ? err.response.data.errors.map((e: any) => e.msg).join(', ') :
+        err.message || t.errors.createProduction;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setProductionErrors((prev) => ({ ...prev, form: errorMessage }));
     },
@@ -1434,46 +1238,46 @@ export const FactoryInventory: React.FC = () => {
 
   return (
     <div className="mx-auto px-4 py-4 max-w-7xl">
-      <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
-        <div className="flex items-center gap-3">
-          <Package className="w-7 h-7 text-amber-600" />
+      <div className="mb-6 flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div className="flex items-center gap-2">
+          <Package className="w-6 h-6 text-amber-600" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-sm">{t.description}</p>
+            <h1 className="text-xl font-semibold text-gray-900">{t.title}</h1>
+            <p className="text-gray-600 text-xs">{t.description}</p>
           </div>
         </div>
         <Button
           variant="primary"
           onClick={() => handleOpenProductionModal()}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
+          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm"
           aria-label={t.create}
         >
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="w-4 h-4 mr-1" />
           {t.create}
         </Button>
       </div>
       {errorMessage && (
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+          className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
         >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-red-600 text-xs font-medium">{errorMessage}</span>
         </motion.div>
       )}
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="w-full lg:w-1/2">
+      <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="w-full sm:w-1/2">
             <ProductSearchInput
               value={searchInput}
               onChange={handleSearchChange}
               placeholder={t.search}
               ariaLabel={t.search}
-              className="w-full"
+              className="w-full text-sm"
             />
           </div>
-          <div className="w-full lg:w-1/2 flex flex-col sm:flex-row gap-4">
+          <div className="w-full sm:w-1/2 flex flex-col sm:flex-row gap-3">
             <ProductDropdown
               value={filterStatus}
               onChange={(value) => {
@@ -1482,7 +1286,7 @@ export const FactoryInventory: React.FC = () => {
               }}
               options={statusOptions}
               ariaLabel={t.filterByStatus}
-              className="w-full"
+              className="w-full text-sm"
             />
             <ProductDropdown
               value={filterDepartment}
@@ -1492,210 +1296,88 @@ export const FactoryInventory: React.FC = () => {
               }}
               options={departmentOptions}
               ariaLabel={t.filterByDepartment}
-              className="w-full"
+              className="w-full text-sm"
             />
           </div>
         </div>
-        <div className="mt-4 text-center text-sm text-gray-600 font-medium">
-          {isRtl ? `عدد العناصر: ${selectedTab === 0 ? filteredInventory.length : filteredAllProducts.length}` : `Items Count: ${selectedTab === 0 ? filteredInventory.length : filteredAllProducts.length}`}
+        <div className="mt-3 text-center text-xs text-gray-600 font-medium">
+          {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
         </div>
       </div>
-      <CustomTabs
-        selectedTab={selectedTab}
-        setSelectedTab={setSelectedTab}
-        tabs={[t.availableProducts, t.allProducts]}
-      >
-        <div>
-          {inventoryLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                  <div className="space-y-3 animate-pulse">
-                    <div className="flex items-center justify-between">
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                    </div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                    <div className="mt-4 flex justify-end">
-                      <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
-                    </div>
-                  </div>
+      {inventoryLoading || productsLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="space-y-2 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-2 bg-gray-200 rounded w-1/4"></div>
                 </div>
-              ))}
-            </div>
-          ) : paginatedInventory.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
-              <Button
-                variant="primary"
-                onClick={() => handleOpenProductionModal()}
-                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
-                aria-label={t.create}
-              >
-                {t.create}
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <AnimatePresence>
-                {paginatedInventory.map((item) => (
-                  <InventoryCard
-                    key={item._id}
-                    item={item}
-                    onOpenProductionModal={handleOpenProductionModal}
-                    onOpenEditModal={handleOpenEditModal}
-                    onOpenDetailsModal={handleOpenDetailsModal}
-                    isRtl={isRtl}
-                    t={t}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-          {totalInventoryPages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2"
-                aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
-              >
-                {isRtl ? 'السابق' : 'Previous'}
-              </Button>
-              <span className="text-gray-700 font-medium">
-                {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
-              </span>
-              <Button
-                variant="secondary"
-                onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
-                disabled={currentPage === totalInventoryPages}
-                className="px-4 py-2"
-                aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-              >
-                {isRtl ? 'التالي' : 'Next'}
-              </Button>
-            </div>
-          )}
-        </div>
-        <div>
-          {allProductsLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                  <div className="space-y-3 animate-pulse">
-                    <div className="flex items-center justify-between">
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                    </div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                    <div className="mt-4 flex justify-end">
-                      <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
-                    </div>
-                  </div>
+                <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-2 bg-gray-200 rounded w-1/3"></div>
+                <div className="h-2 bg-gray-200 rounded w-1/3"></div>
+                <div className="mt-3 flex justify-end">
+                  <div className="h-6 bg-gray-200 rounded-lg w-20"></div>
                 </div>
-              ))}
+              </div>
             </div>
-          ) : paginatedAllProducts.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
-              <Button
-                variant="primary"
-                onClick={() => handleOpenProductionModal()}
-                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white"
-                aria-label={t.create}
-              >
-                {t.create}
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <AnimatePresence>
-                {paginatedAllProducts.map((product) => (
-                  <motion.div
-                    key={product.productId}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
-                  >
-                    <div className="space-y-2">
-                      <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                        {product.productName}
-                      </h3>
-                      <p className="text-sm text-amber-600">
-                        {t.filterByDepartment}: {product.departmentName}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {t.unit}: {product.unit}
-                      </p>
-                    </div>
-                    <div className="mt-4 flex justify-end gap-2">
-                      <Button
-                        variant="secondary"
-                        onClick={() => handleOpenProductionModal({
-                          _id: product.productId,
-                          product: {
-                            _id: product.productId,
-                            name: product.productName,
-                            nameEn: '',
-                            code: '',
-                            unit: product.unit,
-                            unitEn: '',
-                            department: { _id: product.departmentId, name: product.departmentName, nameEn: '', displayName: product.departmentName },
-                            displayName: product.productName,
-                            displayUnit: product.unit,
-                          },
-                          currentStock: 0,
-                          minStockLevel: 0,
-                          maxStockLevel: 0,
-                          status: InventoryStatus.NORMAL,
-                          inProduction: false,
-                        })}
-                        className="p-2 text-amber-600 hover:text-amber-800"
-                        aria-label={t.create}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-          {totalAllProductsPages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2"
-                aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
-              >
-                {isRtl ? 'السابق' : 'Previous'}
-              </Button>
-              <span className="text-gray-700 font-medium">
-                {isRtl ? `الصفحة ${currentPage} من ${totalAllProductsPages}` : `Page ${currentPage} of ${totalAllProductsPages}`}
-              </span>
-              <Button
-                variant="secondary"
-                onClick={() => setCurrentPage(Math.min(currentPage + 1, totalAllProductsPages))}
-                disabled={currentPage === totalAllProductsPages}
-                className="px-4 py-2"
-                aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-              >
-                {isRtl ? 'التالي' : 'Next'}
-              </Button>
-            </div>
-          )}
+          ))}
         </div>
-      </CustomTabs>
+      ) : paginatedInventory.length === 0 ? (
+        <div className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100">
+          <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+          <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
+          <Button
+            variant="primary"
+            onClick={() => handleOpenProductionModal()}
+            className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm"
+            aria-label={t.create}
+          >
+            {t.create}
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <AnimatePresence>
+            {paginatedInventory.map((item) => (
+              <InventoryCard
+                key={item._id}
+                item={item}
+                onOpenProductionModal={handleOpenProductionModal}
+                onOpenEditModal={handleOpenEditModal}
+                onOpenDetailsModal={handleOpenDetailsModal}
+                isRtl={isRtl}
+                t={t}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 text-sm"
+            aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
+          >
+            {isRtl ? 'السابق' : 'Previous'}
+          </Button>
+          <span className="text-gray-700 text-xs font-medium">
+            {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
+          </span>
+          <Button
+            variant="secondary"
+            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 text-sm"
+            aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
+          >
+            {isRtl ? 'التالي' : 'Next'}
+          </Button>
+        </div>
+      )}
       <ProductionModal
         isOpen={isProductionModalOpen}
         onClose={() => {
@@ -1708,7 +1390,7 @@ export const FactoryInventory: React.FC = () => {
         setFormData={dispatchProductionForm}
         errors={productionErrors}
         setErrors={setProductionErrors}
-        products={allProducts}
+        products={products}
         chefs={chefsData || []}
         isSubmitting={createProductionMutation.isLoading}
         isRtl={isRtl}
