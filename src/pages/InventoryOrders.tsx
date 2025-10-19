@@ -1483,3 +1483,6 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
+
+
+export default InventoryOrders;
