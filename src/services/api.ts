@@ -1137,7 +1137,6 @@ export const factoryInventoryAPI = {
 };
 
 
-
 export const factoryOrdersAPI = {
   // Create a new factory order
   create: async (data: { orderNumber: string; items: { product: string; quantity: number; assignedTo?: string }[]; notes?: string; priority?: string }) => {
