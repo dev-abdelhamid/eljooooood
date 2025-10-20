@@ -273,12 +273,14 @@ export const ProductDropdown = ({
   options,
   ariaLabel,
   disabled = false,
+  placeholder,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
+  placeholder?: string;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -287,7 +289,7 @@ export const ProductDropdown = ({
   console.log(`[${new Date().toISOString()}] ProductDropdown options:`, options);
   const selectedOption =
     options.find((opt) => opt.value === value) ||
-    options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+    { value: '', label: placeholder || (isRtl ? 'اختر' : 'Select') };
   return (
     <div className="relative group">
       <button
@@ -385,6 +387,7 @@ export const FactoryInventory: React.FC = () => {
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
   const ITEMS_PER_PAGE = 10;
+  const isChef = user?.role === 'chef';
   // Custom debounce hook
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
@@ -521,7 +524,7 @@ export const FactoryInventory: React.FC = () => {
       }
       return data;
     },
-    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
+    enabled: !!user?.role && ['production', 'admin', 'chef'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
@@ -533,11 +536,11 @@ export const FactoryInventory: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await factoryOrdersAPI.getAvailableProducts();
-        console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Response:`, response);
+        const response = await factoryInventoryAPI.getAvailableProducts();
+        console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
         const products = Array.isArray(response) ? response : response?.data || response?.products || [];
         if (!Array.isArray(products)) {
-          console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
+          console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
           setAvailableProducts([]);
           return;
         }
@@ -552,6 +555,9 @@ export const FactoryInventory: React.FC = () => {
               : product.department?.nameEn || product.department?.name || 'Unknown',
             departmentId: product.department?._id || '',
           }));
+        if (isChef && user?.department?._id) {
+          filteredProducts = filteredProducts.filter((p) => p.departmentId === user.department._id);
+        }
         setAvailableProducts(filteredProducts);
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Error fetching products:`, err.message);
@@ -559,7 +565,7 @@ export const FactoryInventory: React.FC = () => {
       }
     };
     fetchProducts();
-  }, [isRtl, t, user]);
+  }, [isRtl, t, isChef, user]);
   // Socket Events
   useEffect(() => {
     if (!socket || !user?.role || !isConnected) return;
@@ -782,18 +788,18 @@ export const FactoryInventory: React.FC = () => {
         payload: {
           product: item.product._id,
           quantity: 1,
-          assignedTo: '',
+          assignedTo: isChef ? user?._id || '' : '',
         },
       });
     } else {
       dispatchProductionForm({
         type: 'ADD_ITEM',
-        payload: { product: '', quantity: 1, assignedTo: '' },
+        payload: { product: '', quantity: 1, assignedTo: isChef ? user?._id || '' : '' },
       });
     }
     setProductionErrors({});
     setIsProductionModalOpen(true);
-  }, []);
+  }, [isChef, user]);
   const handleOpenEditModal = useCallback((item: FactoryInventoryItem) => {
     setSelectedItem(item);
     setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
@@ -811,9 +817,9 @@ export const FactoryInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchProductionForm({
       type: 'ADD_ITEM',
-      payload: { product: '', quantity: 1, assignedTo: '' },
+      payload: { product: '', quantity: 1, assignedTo: isChef ? user?._id || '' : '' },
     });
-  }, []);
+  }, [isChef, user]);
   const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
     if (field === 'quantity' && typeof value === 'string') {
       const numValue = parseInt(value, 10);
@@ -929,11 +935,11 @@ export const FactoryInventory: React.FC = () => {
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
         items: aggregatedItems.map((item) => ({
-          product: item.product,
+          productId: item.product,
           quantity: item.quantity,
           assignedTo: item.assignedTo,
         })),
-        notes: productionForm.notes || undefined,
+        notes: productionForm.notes || '',
         priority: 'medium',
       };
       console.log(`[${new Date().toISOString()}] Creating production order:`, data);
@@ -1272,7 +1278,7 @@ export const FactoryInventory: React.FC = () => {
               <X className="w-4 h-4" />
             </button>
           </div>
-          {chefsLoading ? (
+          {chefsLoading && !isChef ? (
             <p className="text-gray-600 text-sm">{isRtl ? 'جاري تحميل الشيفات...' : 'Loading chefs...'}</p>
           ) : (
             <div className="space-y-4">
@@ -1305,15 +1311,24 @@ export const FactoryInventory: React.FC = () => {
                       {productionErrors[`item_${index}_product`] && (
                         <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
                       )}
-                      <ProductDropdown
-                        value={item.assignedTo}
-                        onChange={(value) => handleChefChange(index, value)}
-                        options={itemChefOptions}
-                        ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
-                        placeholder={t.selectChef}
-                      />
-                      {productionErrors[`item_${index}_assignedTo`] && (
-                        <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
+                      {!isChef && (
+                        <>
+                          <ProductDropdown
+                            value={item.assignedTo}
+                            onChange={(value) => handleChefChange(index, value)}
+                            options={itemChefOptions}
+                            ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
+                            placeholder={t.selectChef}
+                          />
+                          {productionErrors[`item_${index}_assignedTo`] && (
+                            <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
+                          )}
+                        </>
+                      )}
+                      {isChef && (
+                        <p className="text-sm text-gray-600">
+                          {t.chef}: {isRtl ? user?.name : user?.nameEn || user?.name}
+                        </p>
                       )}
                       <div className="flex flex-col sm:flex-row gap-4">
                         <div className="flex-1">
