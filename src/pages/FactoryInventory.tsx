@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus, Search, ChevronDown } from 'lucide-react';
-import { productsAPI, chefsAPI, isValidObjectId } from '../services/api';
+import {factoryInventoryAPI, factoryOrdersAPI, productsAPI, chefsAPI, isValidObjectId } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
