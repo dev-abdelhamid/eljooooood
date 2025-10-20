@@ -7,8 +7,8 @@ import { factoryOrdersAPI, factoryInventoryAPI, chefsAPI, isValidObjectId } from
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { ProductSearchInput  } from './NewOrder';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ProductSearchInput } from './NewOrder';
 
 // Enums for type safety
 enum InventoryStatus {
@@ -16,6 +16,9 @@ enum InventoryStatus {
   NORMAL = 'normal',
   FULL = 'full',
 }
+
+
+
 
 // Interfaces aligned with backend
 interface FactoryInventoryItem {
@@ -75,7 +78,6 @@ interface FactoryOrder {
   orderNumber: string;
   items: { productId: string; quantity: number; status: string; assignedTo?: string }[];
   status: 'pending' | 'in_production' | 'completed' | 'cancelled';
-  createdBy: string; // User ID
 }
 
 interface Chef {
@@ -280,6 +282,7 @@ const QuantityInput = ({
   );
 };
 
+
 export const ProductDropdown = ({
   value,
   onChange,
@@ -296,6 +299,7 @@ export const ProductDropdown = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
+  // Log options for debugging
   console.log(`[${new Date().toISOString()}] ProductDropdown options:`, options);
   const selectedOption =
     options.find((opt) => opt.value === value) ||
@@ -332,7 +336,6 @@ export const ProductDropdown = ({
     </div>
   );
 };
-
 // Reducer for production form
 type ProductionFormAction =
   | { type: 'SET_NOTES'; payload: string }
@@ -379,33 +382,10 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   );
 };
 
-// Error Boundary Component
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">
-            حدث خطأ، يرجى تحديث الصفحة أو المحاولة لاحقًا.
-          </span>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 export const FactoryInventory: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
-  const t = languageT || translations[isRtl ? 'ar' : 'en']; // Fallback to static translations
+  const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
   const { addNotification } = useNotifications();
@@ -608,10 +588,9 @@ export const FactoryInventory: React.FC = () => {
     fetchProducts();
   }, [isRtl, t]);
 
-  // Optimized Socket Events with Reconnection Handling
+  // Socket Events
   useEffect(() => {
     if (!socket || !user?.role || !isConnected) return;
-
     const handleFactoryInventoryUpdated = ({ productId }: { productId: string }) => {
       if (!isValidObjectId(productId)) {
         console.warn(`[${new Date().toISOString()}] Invalid productId in factoryInventoryUpdated:`, productId);
@@ -633,7 +612,6 @@ export const FactoryInventory: React.FC = () => {
         vibrate: [200, 100, 200],
       });
     };
-
     const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
       if (!isValidObjectId(orderId)) {
         console.warn(`[${new Date().toISOString()}] Invalid orderId in factoryOrderCreated:`, orderId);
@@ -655,7 +633,6 @@ export const FactoryInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
-
     const handleFactoryTaskAssigned = ({
       factoryOrderId,
       taskId,
@@ -687,7 +664,6 @@ export const FactoryInventory: React.FC = () => {
         toast.info(t.notifications.taskAssigned, { position: isRtl ? 'top-right' : 'top-left' });
       }
     };
-
     const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
       if (!isValidObjectId(factoryOrderId)) {
         console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId in factoryOrderCompleted:`, factoryOrderId);
@@ -709,23 +685,16 @@ export const FactoryInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
-
     socket.on('factoryInventoryUpdated', handleFactoryInventoryUpdated);
     socket.on('factoryOrderCreated', handleFactoryOrderCreated);
     socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
-
-    // Optimized reconnection with exponential backoff
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
     const reconnectInterval = setInterval(() => {
-      if (!isConnected && socket && reconnectAttempts < maxReconnectAttempts) {
-        console.log(`[${new Date().toISOString()}] Attempting to reconnect WebSocket (${reconnectAttempts + 1}/${maxReconnectAttempts})...`);
+      if (!isConnected && socket) {
+        console.log(`[${new Date().toISOString()}] Attempting to reconnect WebSocket...`);
         socket.connect();
-        reconnectAttempts++;
       }
-    }, 5000 * Math.pow(2, reconnectAttempts));
-
+    }, 5000);
     return () => {
       socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
       socket.off('factoryOrderCreated', handleFactoryOrderCreated);
@@ -1109,435 +1078,336 @@ export const FactoryInventory: React.FC = () => {
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <ErrorBoundary>
-      <div className="mx-auto px-4 py-4 max-w-7xl">
-        <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
-          <div className="flex items-center gap-3">
-            <Package className="w-7 h-7 text-amber-600" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-              <p className="text-gray-600 text-sm">{t.description}</p>
-            </div>
+    <div className="mx-auto px-4 py-4 max-w-7xl">
+      <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
+        <div className="flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
+            <p className="text-gray-600 text-sm">{t.description}</p>
           </div>
+        </div>
+        <button
+          onClick={() => handleOpenProductionModal()}
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+          aria-label={t.create}
+        >
+          <Plus className="w-4 h-4" />
+          {t.create}
+        </button>
+      </div>
+      {errorMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+        >
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
+        </motion.div>
+      )}
+      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="w-full lg:w-1/2">
+            <ProductSearchInput
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder={t.search}
+              ariaLabel={t.search}
+            />
+          </div>
+          <div className="w-full lg:w-1/2 flex flex-col sm:flex-row gap-4">
+            <ProductDropdown
+              value={filterStatus}
+              onChange={(value) => {
+                setFilterStatus(value as InventoryStatus | '');
+                setCurrentPage(1);
+              }}
+              options={statusOptions}
+              ariaLabel={t.filterByStatus}
+            />
+            <ProductDropdown
+              value={filterDepartment}
+              onChange={(value) => {
+                setFilterDepartment(value);
+                setCurrentPage(1);
+              }}
+              options={departmentOptions}
+              ariaLabel={t.filterByDepartment}
+            />
+          </div>
+        </div>
+        <div className="mt-4 text-center text-sm text-gray-600 font-medium">
+          {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
+        </div>
+      </div>
+      {inventoryLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="space-y-3 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                </div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                <div className="mt-4 flex justify-end">
+                  <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : paginatedInventory.length === 0 ? (
+        <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
           <button
             onClick={() => handleOpenProductionModal()}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
             aria-label={t.create}
           >
-            <Plus className="w-4 h-4" />
             {t.create}
           </button>
         </div>
-        {errorMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
-          </motion.div>
-        )}
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="w-full lg:w-1/2">
-              <ProductSearchInput
-                value={searchInput}
-                onChange={handleSearchChange}
-                placeholder={t.search}
-                ariaLabel={t.search}
-              />
-            </div>
-            <div className="w-full lg:w-1/2 flex flex-col sm:flex-row gap-4">
-              <ProductDropdown
-                value={filterStatus}
-                onChange={(value) => {
-                  setFilterStatus(value as InventoryStatus | '');
-                  setCurrentPage(1);
-                }}
-                options={statusOptions}
-                ariaLabel={t.filterByStatus}
-              />
-              <ProductDropdown
-                value={filterDepartment}
-                onChange={(value) => {
-                  setFilterDepartment(value);
-                  setCurrentPage(1);
-                }}
-                options={departmentOptions}
-                ariaLabel={t.filterByDepartment}
-              />
-            </div>
-          </div>
-          <div className="mt-4 text-center text-sm text-gray-600 font-medium">
-            {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
-          </div>
-        </div>
-        {inventoryLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="space-y-3 animate-pulse">
-                  <div className="flex items-center justify-between">
-                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                  </div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                  <div className="mt-4 flex justify-end">
-                    <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : paginatedInventory.length === 0 ? (
-          <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
-            <button
-              onClick={() => handleOpenProductionModal()}
-              className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-              aria-label={t.create}
-            >
-              {t.create}
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <AnimatePresence>
-              {paginatedInventory.map((item) =>
-                item.product ? (
-                  <motion.div
-                    key={item._id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                          {item.product.displayName}
-                        </h3>
-                        <p className="text-sm text-gray-500">{item.product.code}</p>
-                      </div>
-                      <p className="text-sm text-amber-600">
-                        {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {t.stock}: {item.currentStock}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {t.minStock}: {item.minStockLevel}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {t.maxStock}: {item.maxStockLevel}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {t.unit}: {item.product.displayUnit}
-                      </p>
-                      <p
-                        className={`text-sm font-medium ${
-                          item.status === InventoryStatus.LOW
-                            ? 'text-red-600'
-                            : item.status === InventoryStatus.FULL
-                            ? 'text-yellow-600'
-                            : 'text-green-600'
-                        }`}
-                      >
-                        {item.status === InventoryStatus.LOW
-                          ? t.lowStock
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {paginatedInventory.map((item) =>
+              item.product ? (
+                <motion.div
+                  key={item._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
+                        {item.product.displayName}
+                      </h3>
+                      <p className="text-sm text-gray-500">{item.product.code}</p>
+                    </div>
+                    <p className="text-sm text-amber-600">
+                      {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t.stock}: {item.currentStock}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t.minStock}: {item.minStockLevel}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t.maxStock}: {item.maxStockLevel}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t.unit}: {item.product.displayUnit}
+                    </p>
+                    <p
+                      className={`text-sm font-medium ${
+                        item.status === InventoryStatus.LOW
+                          ? 'text-red-600'
                           : item.status === InventoryStatus.FULL
-                          ? t.full
-                          : t.normal}
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                      }`}
+                    >
+                      {item.status === InventoryStatus.LOW
+                        ? t.lowStock
+                        : item.status === InventoryStatus.FULL
+                        ? t.full
+                        : t.normal}
+                    </p>
+                    {item.inProduction && (
+                      <p className="text-sm text-blue-600 flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 0 002-2V8m-9 4h4"
+                          />
+                        </svg>
+                        {t.inProduction}
                       </p>
-                      {item.inProduction && (
-                        <p className="text-sm text-blue-600 flex items-center gap-1">
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 0 002-2V8m-9 4h4"
-                            />
-                          </svg>
-                          {t.inProduction}
-                        </p>
-                      )}
-                    </div>
-                    <div className="mt-4 flex justify-end gap-2">
-                      <button
-                        onClick={() => handleOpenDetailsModal(item)}
-                        className="p-2 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
-                        aria-label={t.viewDetails}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleOpenEditModal(item)}
-                        className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
-                        aria-label={t.editStockLimits}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleOpenProductionModal(item)}
-                        className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
-                        aria-label={t.create}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ) : null
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-        {totalInventoryPages > 1 && (
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <button
-              onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === 1}
-              aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
-            >
-              {isRtl ? 'السابق' : 'Previous'}
-            </button>
-            <span className="text-gray-700 font-medium">
-              {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
-            </span>
-            <button
-              onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === totalInventoryPages}
-              aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-            >
-              {isRtl ? 'التالي' : 'Next'}
-            </button>
-          </div>
-        )}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
-          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-            isProductionModalOpen ? '' : 'pointer-events-none'
-          }`}
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.create}
-        >
-          <motion.div
-            initial={{ scale: 0.95, y: 20 }}
-            animate={{ scale: isProductionModalOpen ? 1 : 0.95, y: isProductionModalOpen ? 0 : 20 }}
-            className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
+                    )}
+                  </div>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      onClick={() => handleOpenDetailsModal(item)}
+                      className="p-2 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.viewDetails}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenEditModal(item)}
+                      className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.editStockLimits}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenProductionModal(item)}
+                      className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.create}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              ) : null
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+      {totalInventoryPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <button
+            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+            disabled={currentPage === 1}
+            aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
-              <button
-                onClick={() => {
-                  setIsProductionModalOpen(false);
-                  dispatchProductionForm({ type: 'RESET' });
-                  setProductionErrors({});
-                }}
-                className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {chefsLoading ? (
-              <p className="text-gray-600 text-sm">{isRtl ? 'جاري تحميل الشيفات...' : 'Loading chefs...'}</p>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
-                  <textarea
-                    value={productionForm.notes}
-                    onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
-                    placeholder={t.notesPlaceholder}
-                    className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                    rows={3}
-                    aria-label={t.notes}
-                  />
-                  {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-                  {productionForm.items.map((item, index) => {
-                    const itemDeptId = productDepartmentMap[item.product] || '';
-                    const itemChefOptions = getChefOptions(itemDeptId);
-                    return (
-                      <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                        <ProductDropdown
-                          value={item.product}
-                          onChange={(value) => handleProductChange(index, value)}
-                          options={productOptions}
-                          ariaLabel={`${t.items} ${index + 1}`}
-                          disabled={createProductionMutation.isLoading}
-                        />
-                        {productionErrors[`item_${index}_product`] && (
-                          <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
-                        )}
-                        <ProductDropdown
-                          value={item.assignedTo}
-                          onChange={(value) => handleChefChange(index, value)}
-                          options={itemChefOptions}
-                          ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
-                          disabled={createProductionMutation.isLoading || !item.product}
-                        />
-                        {productionErrors[`item_${index}_assignedTo`] && (
-                          <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
-                        )}
-                        <div className="flex flex-col sm:flex-row gap-4">
-                          <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
-                            <QuantityInput
-                              value={item.quantity}
-                              onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                              onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                              onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
-                            />
-                            {productionErrors[`item_${index}_quantity`] && (
-                              <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
-                            )}
-                          </div>
-                          {productionForm.items.length > 1 && (
-                            <button
-                              onClick={() => removeItemFromForm(index)}
-                              className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
-                              aria-label={t.removeItem}
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
+            {isRtl ? 'السابق' : 'Previous'}
+          </button>
+          <span className="text-gray-700 font-medium">
+            {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
+          </span>
+          <button
+            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+            disabled={currentPage === totalInventoryPages}
+            aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
+          >
+            {isRtl ? 'التالي' : 'Next'}
+          </button>
+        </div>
+      )}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isProductionModalOpen ? '' : 'pointer-events-none'
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.create}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 20 }}
+          animate={{ scale: isProductionModalOpen ? 1 : 0.95, y: isProductionModalOpen ? 0 : 20 }}
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
+            <button
+              onClick={() => {
+                setIsProductionModalOpen(false);
+                dispatchProductionForm({ type: 'RESET' });
+                setProductionErrors({});
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+              aria-label={t.cancel}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {chefsLoading ? (
+            <p className="text-gray-600 text-sm">{isRtl ? 'جاري تحميل الشيفات...' : 'Loading chefs...'}</p>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
+                <textarea
+                  value={productionForm.notes}
+                  onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
+                  placeholder={t.notesPlaceholder}
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+                  rows={3}
+                  aria-label={t.notes}
+                />
+                {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
+                {productionForm.items.map((item, index) => {
+                  const itemDeptId = productDepartmentMap[item.product] || '';
+                  const itemChefOptions = getChefOptions(itemDeptId);
+                  return (
+                    <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <ProductDropdown
+                        value={item.product}
+                        onChange={(value) => handleProductChange(index, value)}
+                        options={productOptions}
+                        ariaLabel={`${t.items} ${index + 1}`}
+                        placeholder={t.selectProduct}
+                      />
+                      {productionErrors[`item_${index}_product`] && (
+                        <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
+                      )}
+                      <ProductDropdown
+                        value={item.assignedTo}
+                        onChange={(value) => handleChefChange(index, value)}
+                        options={itemChefOptions}
+                        ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
+                        placeholder={t.selectChef}
+                      />
+                      {productionErrors[`item_${index}_assignedTo`] && (
+                        <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
+                      )}
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                          <QuantityInput
+                            value={item.quantity}
+                            onChange={(val) => updateItemInForm(index, 'quantity', val)}
+                            onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
+                            onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
+                          />
+                          {productionErrors[`item_${index}_quantity`] && (
+                            <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
                           )}
                         </div>
+                        {productionForm.items.length > 1 && (
+                          <button
+                            onClick={() => removeItemFromForm(index)}
+                            className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
+                            aria-label={t.removeItem}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
-                    );
-                  })}
-                  <button
-                    onClick={addItemToForm}
-                    className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                    aria-label={t.addItem}
-                    disabled={createProductionMutation.isLoading}
-                  >
-                    <Plus className="w-4 h-4" />
-                    {t.addItem}
-                  </button>
-                  {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
-                </div>
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setIsProductionModalOpen(false);
-                      dispatchProductionForm({ type: 'RESET' });
-                      setProductionErrors({});
-                    }}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                    aria-label={t.cancel}
-                  >
-                    {t.cancel}
-                  </button>
-                  <button
-                    onClick={() => createProductionMutation.mutate()}
-                    disabled={createProductionMutation.isLoading}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                    aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
-                  >
-                    {createProductionMutation.isLoading ? t.submitting : t.submit}
-                  </button>
-                </div>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={addItemToForm}
+                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                  aria-label={t.addItem}
+                >
+                  <Plus className="w-4 h-4" />
+                  {t.addItem}
+                </button>
+                {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
               </div>
-            )}
-          </motion.div>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: isEditModalOpen ? 1 : 0 }}
-          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-            isEditModalOpen ? '' : 'pointer-events-none'
-          }`}
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.editStockLimits}
-        >
-          <motion.div
-            initial={{ scale: 0.95, y: 20 }}
-            animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
-            className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
-              <button
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditErrors({});
-                  setSelectedItem(null);
-                }}
-                className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              {selectedItem?.product && (
-                <p className="text-sm text-gray-600">
-                  {t.productDetails}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-                </p>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
-                <input
-                  type="number"
-                  value={editForm.minStockLevel}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value, 10);
-                    setEditForm((prev) => ({ ...prev, minStockLevel: isNaN(value) ? 0 : value }));
-                    setEditErrors((prev) => ({ ...prev, minStockLevel: undefined }));
-                  }}
-                  min={0}
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
-                  aria-label={t.minStock}
-                />
-                {editErrors.minStockLevel && (
-                  <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
-                <input
-                  type="number"
-                  value={editForm.maxStockLevel}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value, 10);
-                    setEditForm((prev) => ({ ...prev, maxStockLevel: isNaN(value) ? 0 : value }));
-                    setEditErrors((prev) => ({ ...prev, maxStockLevel: undefined }));
-                  }}
-                  min={0}
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
-                  aria-label={t.maxStock}
-                />
-                {editErrors.maxStockLevel && (
-                  <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>
-                )}
-              </div>
-              {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => {
-                    setIsEditModalOpen(false);
-                    setEditErrors({});
-                    setSelectedItem(null);
+                    setIsProductionModalOpen(false);
+                    dispatchProductionForm({ type: 'RESET' });
+                    setProductionErrors({});
                   }}
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                   aria-label={t.cancel}
@@ -1545,92 +1415,174 @@ export const FactoryInventory: React.FC = () => {
                   {t.cancel}
                 </button>
                 <button
-                  onClick={() => updateInventoryMutation.mutate()}
-                  disabled={updateInventoryMutation.isLoading}
+                  onClick={() => createProductionMutation.mutate()}
+                  disabled={createProductionMutation.isLoading}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                  aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
+                  aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
                 >
-                  {updateInventoryMutation.isLoading ? t.saving : t.save}
+                  {createProductionMutation.isLoading ? t.submitting : t.submit}
                 </button>
               </div>
             </div>
-          </motion.div>
+          )}
         </motion.div>
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isEditModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isEditModalOpen ? '' : 'pointer-events-none'
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.editStockLimits}
+      >
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
-          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-            isDetailsModalOpen ? '' : 'pointer-events-none'
-          }`}
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.productDetails}
+          initial={{ scale: 0.95, y: 20 }}
+          animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
         >
-          <motion.div
-            initial={{ scale: 0.95, y: 20 }}
-            animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-            className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
+            <button
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setEditErrors({});
+                setSelectedItem(null);
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+              aria-label={t.cancel}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-4">
+            {selectedItem?.product && (
+              <p className="text-sm text-gray-600">
+                {t.productDetails}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+              </p>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
+              <input
+                type="number"
+                value={editForm.minStockLevel}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  setEditForm((prev) => ({ ...prev, minStockLevel: isNaN(value) ? 0 : value }));
+                  setEditErrors((prev) => ({ ...prev, minStockLevel: undefined }));
+                }}
+                min={0}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+                aria-label={t.minStock}
+              />
+              {editErrors.minStockLevel && (
+                <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
+              <input
+                type="number"
+                value={editForm.maxStockLevel}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  setEditForm((prev) => ({ ...prev, maxStockLevel: isNaN(value) ? 0 : value }));
+                  setEditErrors((prev) => ({ ...prev, maxStockLevel: undefined }));
+                }}
+                min={0}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+                aria-label={t.maxStock}
+              />
+              {editErrors.maxStockLevel && (
+                <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>
+              )}
+            </div>
+            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
+                  setIsEditModalOpen(false);
+                  setEditErrors({});
+                  setSelectedItem(null);
                 }}
-                className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
               >
-                <X className="w-4 h-4" />
+                {t.cancel}
+              </button>
+              <button
+                onClick={() => updateInventoryMutation.mutate()}
+                disabled={updateInventoryMutation.isLoading}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
+              >
+                {updateInventoryMutation.isLoading ? t.saving : t.save}
               </button>
             </div>
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-              </div>
-            ) : productHistory && productHistory.length > 0 ? (
-              <div className="space-y-4">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-gray-700">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className={`p-2 text-left font-medium ${isRtl ? 'text-right' : 'text-left'}`}>
-                          {t.date}
-                        </th>
-                        <th className={`p-2 text-left font-medium ${isRtl ? 'text-right' : 'text-left'}`}>
-                          {t.type}
-                        </th>
-                        <th className={`p-2 text-left font-medium ${isRtl ? 'text-right' : 'text-left'}`}>
-                          {t.quantity}
-                        </th>
-                        <th className={`p-2 text-left font-medium ${isRtl ? 'text-right' : 'text-left'}`}>
-                          {t.reference}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {productHistory.map((entry) => (
-                        <tr key={entry._id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="p-2">
-                            {new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-                          </td>
-                          <td className="p-2">{t[entry.type] || entry.type}</td>
-                          <td className="p-2">{entry.quantity}</td>
-                          <td className="p-2">{entry.reference || 'N/A'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-600 text-sm text-center">{t.noHistory}</p>
-            )}
-          </motion.div>
+          </div>
         </motion.div>
-      </div>
-    </ErrorBoundary>
+      </motion.div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isDetailsModalOpen ? '' : 'pointer-events-none'
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.productDetails}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 20 }}
+          animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
+            <button
+              onClick={() => {
+                setIsDetailsModalOpen(false);
+                setSelectedProductId('');
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+              aria-label={t.cancel}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {historyLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+              ))}
+            </div>
+          ) : productHistory && productHistory.length > 0 ? (
+            <div className="space-y-4">
+              {productHistory.map((entry) => (
+                <div key={entry._id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-600">
+                    {t.date}: {new Date(entry.date).toLocaleDateString(language)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.type}: {entry.type === 'produced_stock' ? t.produced_stock : t.adjustment}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.quantity}: {entry.quantity}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t.reference}: {entry.reference}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-600 text-sm">{t.noHistory}</p>
+          )}
+        </motion.div>
+      </motion.div>
+    </div>
   );
 };
+
+export default FactoryInventory;
