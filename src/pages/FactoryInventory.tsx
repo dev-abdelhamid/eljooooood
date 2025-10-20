@@ -435,6 +435,12 @@ export const ProductionOrderForm: React.FC<{
   // Initialize form with preselected item if provided
   useEffect(() => {
     if (preselectedItem?.product?._id) {
+      const deptId = preselectedItem.product.department?._id;
+      if (isChef && deptId !== user.department._id) {
+        toast.error(t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
+        onClose();
+        return;
+      }
       dispatchProductionForm({
         type: 'INITIALIZE_ITEMS',
         payload: [
@@ -451,7 +457,7 @@ export const ProductionOrderForm: React.FC<{
         payload: [{ product: '', quantity: 1, assignedTo: isChef ? user?._id || '' : '' }],
       });
     }
-  }, [preselectedItem, isChef, user]);
+  }, [preselectedItem, isChef, user, t, isRtl, onClose]);
 
   const getChefOptions = useCallback(
     (departmentId: string) => {
@@ -510,12 +516,20 @@ export const ProductionOrderForm: React.FC<{
         }));
         return;
       }
+      const deptId = productDepartmentMap[productId];
+      if (isChef && deptId !== user.department._id) {
+        setProductionErrors((prev) => ({
+          ...prev,
+          [`item_${index}_product`]: t.errors.productNotFound, // or specific message for department mismatch
+        }));
+        return;
+      }
       dispatchProductionForm({
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
     },
-    [t, productionForm.items]
+    [t, productionForm.items, isChef, user, productDepartmentMap]
   );
 
   const handleChefChange = useCallback(
@@ -553,9 +567,13 @@ export const ProductionOrderForm: React.FC<{
     }
     productionForm.items.forEach((item, index) => {
       if (!item.product) {
-        errors[`item_${index}_product`] = t.errors.required.replace('{field}', t.items);
+        errors[`item_${index}_product`] = t.errors.required.replace('{field}', t.selectProduct);
       } else if (!isValidObjectId(item.product)) {
         errors[`item_${index}_product`] = t.errors.invalidProductId;
+      }
+      const deptId = productDepartmentMap[item.product];
+      if (isChef && deptId && deptId !== user.department._id) {
+        errors[`item_${index}_product`] = t.errors.productNotFound; // Department mismatch
       }
       if (!isChef) {
         if (!item.assignedTo) {
@@ -570,7 +588,7 @@ export const ProductionOrderForm: React.FC<{
     });
     setProductionErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [productionForm, t, isChef]);
+  }, [productionForm, t, isChef, user, productDepartmentMap]);
 
   const handleSubmit = () => {
     if (!validateProductionForm()) return;
@@ -640,7 +658,7 @@ export const ProductionOrderForm: React.FC<{
               {productionForm.items.map((item, index) => {
                 const itemDeptId = productDepartmentMap[item.product] || '';
                 const itemChefOptions = getChefOptions(itemDeptId);
-                const isProductDisabled = !!preselectedItem && index === 0; // Disable product selection if preselected
+                const isProductDisabled = !!preselectedItem && index === 0;
                 return (
                   <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
                     <ProductDropdown
@@ -776,12 +794,15 @@ export const FactoryInventory: React.FC = () => {
   >({
     queryKey: ['factoryInventory', debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
-      const params = {
+      let params: any = {
         product: debouncedSearchQuery || undefined,
         department: filterDepartment || undefined,
         stockStatus: filterStatus || undefined,
         lang: language,
       };
+      if (user.role === 'chef' && user.department?._id) {
+        params.department = user.department._id;
+      }
       const response = await factoryInventoryAPI.getAll(params);
       console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
@@ -849,7 +870,7 @@ export const FactoryInventory: React.FC = () => {
       }
       return data;
     },
-    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
+    enabled: isProductionModalOpen && !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     refetchOnMount: 'always',
@@ -910,11 +931,11 @@ export const FactoryInventory: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await factoryInventoryAPI.getAvailableProducts();
-        console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
+        const response = await factoryOrdersAPI.getAvailableProducts();
+        console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Response:`, response);
         const products = Array.isArray(response) ? response : response?.data || response?.products || [];
         if (!Array.isArray(products)) {
-          console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
+          console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
           setAvailableProducts([]);
           return;
         }
@@ -1132,9 +1153,13 @@ export const FactoryInventory: React.FC = () => {
   }, []);
 
   const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
+    if (item && isChef && item.product.department?._id !== user.department._id) {
+      toast.error(t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
     setPreselectedItem(item || null);
     setIsProductionModalOpen(true);
-  }, []);
+  }, [isChef, user, t, isRtl]);
 
   const handleCloseProductionModal = useCallback(() => {
     setIsProductionModalOpen(false);
@@ -1179,16 +1204,19 @@ export const FactoryInventory: React.FC = () => {
       }
       const aggregatedItems = aggregateItemsByProduct(productionForm.items);
       if (aggregatedItems.length === 0) {
+        if (productionForm.items.some(item => item.product && !item.assignedTo && !isChef)) {
+          throw new Error(t.errors.required.replace('{field}', t.chef));
+        }
         throw new Error(t.errors.noItemSelected);
       }
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
         items: aggregatedItems.map((item) => ({
-          productId: item.product,  // Fixed: use productId instead of product
+          product: item.product,
           quantity: item.quantity,
           assignedTo: item.assignedTo,
         })),
-        notes: productionForm.notes?.trim() || '',
+        notes: productionForm.notes || '',
         priority: 'medium',
       };
       console.log(`[${new Date().toISOString()}] Creating production order:`, data);
@@ -1241,16 +1269,15 @@ export const FactoryInventory: React.FC = () => {
       if (!selectedItem || !isValidObjectId(selectedItem._id)) {
         throw new Error(t.errors.noItemSelected);
       }
-      const data = {
-        currentStock: selectedItem.currentStock, // Preserve if needed, but updating limits
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-      };
       console.log(`[${new Date().toISOString()}] Updating inventory:`, {
         id: selectedItem._id,
-        ...data,
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
       });
-      await factoryInventoryAPI.updateStock(selectedItem._id, data);
+      await factoryInventoryAPI.updateStock(selectedItem._id, {
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
@@ -1456,13 +1483,15 @@ export const FactoryInventory: React.FC = () => {
                     >
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => handleOpenProductionModal(item)}
-                      className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
-                      aria-label={t.create}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                    {(isChef ? item.product.department?._id === user.department._id : true) && (
+                      <button
+                        onClick={() => handleOpenProductionModal(item)}
+                        className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
+                        aria-label={t.create}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               ) : null

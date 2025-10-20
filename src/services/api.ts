@@ -384,7 +384,7 @@ const createErrorMessage = (errorType, isRtl) => {
     invalidMinStockLevel: { ar: 'الحد الأدنى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Minimum stock level must be a non-negative integer' },
     invalidMaxStockLevel: { ar: 'الحد الأقصى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Maximum stock level must be a non-negative integer' },
     maxLessThanMin: { ar: 'الحد الأقصى يجب أن يكون أكبر من الحد الأدنى', en: 'Maximum stock level must be greater than minimum' },
-  
+ 
     invalidUserId: { ar: 'معرف المستخدم غير صالح', en: 'Invalid user ID' },
     invalidInventoryId: { ar: 'معرف المخزون غير صالح', en: 'Invalid inventory ID' },
     invalidStatus: { ar: 'الحالة غير صالحة', en: 'Invalid status' },
@@ -393,9 +393,9 @@ const createErrorMessage = (errorType, isRtl) => {
     invalidItems: { ar: 'العناصر غير صالحة', en: 'Invalid items' },
     invalidData: { ar: 'البيانات غير صالحة', en: 'Invalid data' },
   };
-  const msg = messages[key] || { ar: 'خطأ غير معروف', en: 'Unknown error' };
-  return isRtl ? msg.ar : msg.en;
+  return messages[errorType] ? (isRtl ? messages[errorType].ar : messages[errorType].en) : (isRtl ? 'خطأ غير معروف' : 'Unknown error');
 };
+ 
 
 export const ordersAPI = {
   create: async (orderData, isRtl = false) => {
