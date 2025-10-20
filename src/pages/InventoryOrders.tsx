@@ -19,7 +19,6 @@ import OrderTable from '../components/production/OrderTable';
 import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const QuantityInput = ({
   value,
@@ -456,7 +455,7 @@ export const InventoryOrders: React.FC = () => {
                         nameEn: chef.department.nameEn,
                         displayName: chef.department.displayName || (isRtl ? chef.department.name : chef.department.nameEn || chef.department.name),
                       }
-                  : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
+                    : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
                   status: chef.status || 'active',
                 }))
             : [],
