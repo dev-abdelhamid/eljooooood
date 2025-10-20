@@ -636,7 +636,7 @@ const DailyOrdersSummary: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
+    <div className={`min-h-screen px-4 py-8`}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
         <div className="flex flex-col gap-4">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
