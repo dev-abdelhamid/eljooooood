@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus, Search, ChevronDown } from 'lucide-react';
-import {factoryInventoryAPI, factoryOrdersAPI, productsAPI, chefsAPI, isValidObjectId } from '../services/api';
+import { productsAPI, chefsAPI, isValidObjectId } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -379,7 +379,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
     aggregated[key].quantity += item.quantity;
   });
   return Object.values(aggregated).filter(
-    (item) => item.product && isValidObjectId(item.product) && item.assignedTo && isValidObjectId(item.assignedTo)
+    (item) => item.product && isValidObjectId(item.product) && (item.assignedTo ? isValidObjectId(item.assignedTo) : true)
   );
 };
 
@@ -415,7 +415,6 @@ export const ProductionOrderForm: React.FC<{
 }) => {
   const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [] });
   const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
-  const [chefsLoading, setChefsLoading] = useState(false); // Assuming chefs are loaded externally
 
   // Product options, filtered for chefs
   const productOptions = useMemo(() => {
@@ -528,7 +527,7 @@ export const ProductionOrderForm: React.FC<{
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-      // Reset assignedTo if changing product, as chef options may change
+      // Reset assignedTo when product changes
       dispatchProductionForm({
         type: 'UPDATE_ITEM',
         payload: { index, field: 'assignedTo', value: '' },
@@ -663,7 +662,7 @@ export const ProductionOrderForm: React.FC<{
               {productionForm.items.map((item, index) => {
                 const itemDeptId = productDepartmentMap[item.product] || '';
                 const itemChefOptions = getChefOptions(itemDeptId);
-                const isProductDisabled = !!preselectedItem && index === 0;
+                const isProductDisabled = !!preselectedItem && index === 0; // Disable product selection if preselected
                 return (
                   <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
                     <ProductDropdown
@@ -872,7 +871,7 @@ export const FactoryInventory: React.FC = () => {
       }
       return data;
     },
-    enabled: isProductionModalOpen && !!user?.role && ['production', 'admin'].includes(user.role),
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     refetchOnMount: 'always',
@@ -937,7 +936,7 @@ export const FactoryInventory: React.FC = () => {
         console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
         const products = response.data || [];
         let filteredProducts = products
-          .filter((product: any) => product && product._id && isValidObjectId(product._id) && product.isActive)
+          .filter((product: any) => product && product._id && isValidObjectId(product._id))
           .map((product: any) => ({
             productId: product._id,
             productName: isRtl ? product.name : product.nameEn || product.name,
@@ -1201,9 +1200,6 @@ export const FactoryInventory: React.FC = () => {
       }
       const aggregatedItems = aggregateItemsByProduct(productionForm.items);
       if (aggregatedItems.length === 0) {
-        if (productionForm.items.some(item => item.product && !item.assignedTo && !isChef)) {
-          throw new Error(t.errors.required.replace('{field}', t.chef));
-        }
         throw new Error(t.errors.noItemSelected);
       }
       const data = {
