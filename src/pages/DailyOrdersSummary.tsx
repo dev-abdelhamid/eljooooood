@@ -228,21 +228,34 @@ const generatePDFHeader = (
   fontName: string,
   fontLoaded: boolean
 ) => {
-  doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
-  doc.text(title, isRtl ? pageWidth - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+  const margin = 20;
+
+  // Title
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(33, 33, 33);
+  const titleWidth = doc.getTextWidth(title);
+  const titleX = isRtl ? pageWidth - margin - titleWidth : margin;
+  doc.text(title, titleX, 20, { align: isRtl ? 'right' : 'left' });
+
+  // Statistics
   doc.setFontSize(10);
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
     ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl)}`
     : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl)}`;
-  doc.text(stats, isRtl ? pageWidth - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
+  const statsWidth = doc.getTextWidth(stats);
+  const statsX = isRtl ? margin : pageWidth - margin - statsWidth;
+  doc.text(stats, statsX, 20, { align: isRtl ? 'left' : 'right' });
+
+  // Divider Line
   doc.setLineWidth(0.5);
   doc.setDrawColor(245, 158, 11);
-  doc.line(20, 30, pageWidth - 20, 30);
+  doc.line(margin, 25, pageWidth - margin, 25);
+
+  // Footer on all pages
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
@@ -290,8 +303,8 @@ const generatePDFTable = (
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 35,
-    margin: { top: 35, bottom: 15, left: margin, right: margin },
+    startY: 30,
+    margin: { top: 30, bottom: 15, left: margin, right: margin },
     tableWidth: 'auto',
     columnStyles,
     headStyles: {
