@@ -1455,7 +1455,7 @@ export const InventoryOrders: React.FC = () => {
                                           payload: {
                                             ...state.createFormData,
                                             items: state.createFormData.items.map((it, i) =>
-                                              i === index ? { ...it, quantity: parseInt(                                      : val, 10) } : it
+                                              i === index ? { ...it, quantity: parseInt(                                       val, 10) } : it
                                             ),
                                           },
                                         })
