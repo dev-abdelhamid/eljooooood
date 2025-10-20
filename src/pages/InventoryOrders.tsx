@@ -1,17 +1,12 @@
-
-
-
-
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { Card } from '../components/UI/Card';
-import { Select } from '../components/UI/Select';
+import { ProductDropdown } from './FactoryInventory'; // Assuming ProductDropdown is exported from FactoryInventory
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { ProductSearchInput } from './OrdersTablePage';
-import {ProductDropdown} from './FactoryInventory'
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -1212,9 +1207,11 @@ export const InventoryOrders: React.FC = () => {
                           orders={paginatedOrders}
                           calculateTotalQuantity={calculateTotalQuantity}
                           translateUnit={translateUnit}
+                          approveOrder={orderId => updateOrderStatus(orderId, 'approved')}
                           updateOrderStatus={updateOrderStatus}
                           confirmItemCompletion={confirmItemCompletion}
                           openAssignModal={openAssignModal}
+                          confirmFactoryProduction={confirmFactoryProduction}
                           submitting={state.submitting}
                           isRtl={isRtl}
                           startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
@@ -1236,7 +1233,7 @@ export const InventoryOrders: React.FC = () => {
                                 updateOrderStatus={updateOrderStatus}
                                 confirmItemCompletion={confirmItemCompletion}
                                 openAssignModal={openAssignModal}
-                                confirmFactoryProduction={(orderId) => updateOrderStatus(orderId, 'stocked')}  // استخدم factoryInventoryAPI هنا
+                                confirmFactoryProduction={confirmFactoryProduction}
                                 submitting={state.submitting}
                                 isRtl={isRtl}
                                 currentUserRole={user.role}
@@ -1269,7 +1266,6 @@ export const InventoryOrders: React.FC = () => {
                     assignChefs={assignChefs}
                     error={state.error}
                     submitting={state.submitting}
-                    isRtl={isRtl}
                     loading={state.loading}
                   />
                   <Modal
@@ -1306,160 +1302,151 @@ export const InventoryOrders: React.FC = () => {
                         <label className={`block text-sm font-medium text-gray-700 mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
                           {isRtl ? 'العناصر' : 'Items'}
                         </label>
-                        {state.createFormData.items.map((item, index) => (
-                          <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100 shadow-sm">
-                            <ProductDropdown
-                              options={[
-                                { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
-                                ...state.products.map((product) => ({
-                                  value: product._id,
-                                  label: `${product.displayName} (${product.displayUnit})`,
-                                })),
-                              ]}
-                              value={item.productId}
-                              onChange={(value) =>
-                                dispatch({
-                                  type: 'SET_CREATE_FORM',
-                                  payload: {
-                                    ...state.createFormData,
-                                    items: state.createFormData.items.map((it, i) =>
-                                      i === index ? { ...it, productId: value } : it
-                                    ),
-                                  },
-                                })
-                              }
-                              ariaLabel={isRtl ? 'اختر منتج' : 'Select Product'}
-                              className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
-                                state.formErrors[`item_${index}_productId`] ? 'border-red-500' : ''
-                              }`}
-                            />
-                            {state.formErrors[`item_${index}_productId`] && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {state.formErrors[`item_${index}_productId`]}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1">
-                                <label
-                                  className={`block text-sm font-medium text-gray-700 mb-1 ${
-                                    isRtl ? 'text-right' : 'text-left'
-                                  }`}
-                                >
-                                  {isRtl ? 'الكمية' : 'Quantity'}
-                                </label>
-                                <QuantityInput
-                                  value={item.quantity}
-                                  onChange={(val) =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.map((it, i) =>
-                                          i === index ? { ...it, quantity: parseInt(val) || 1 } : it
-                                        ),
-                                      },
-                                    })
-                                  }
-                                  onIncrement={() =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.map((it, i) =>
-                                          i === index
-                                            ? {
-                                                ...it,
-                                                quantity: Math.min(
-                                                  it.quantity + 1,
-                                                  state.products.find((p) => p._id === it.productId)
-                                                    ?.maxStockLevel || 1000
-                                                ),
-                                              }
-                                            : it
-                                        ),
-                                      },
-                                    })
-                                  }
-                                  onDecrement={() =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.map((it, i) =>
-                                          i === index ? { ...it, quantity: Math.max(it.quantity - 1, 1) } : it
-                                        ),
-                                      },
-                                    })
-                                  }
-                                  max={state.products.find((p) => p._id === item.productId)?.maxStockLevel}
-                                />
-                                {state.formErrors[`item_${index}_quantity`] && (
-                                  <p className="text-xs text-red-600 mt-1">
-                                    {state.formErrors[`item_${index}_quantity`]}
-                                  </p>
-                                )}
-                              </div>
+                        {state.createFormData.items.map((item, index) => {
+                          const itemDeptId = state.products.find(p => p._id === item.productId)?.department._id || '';
+                          const chefOptions = [
+                            { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
+                            ...state.chefs.filter(c => c.department._id === itemDeptId).map(c => ({
+                              value: c._id,
+                              label: c.displayName,
+                            }))
+                          ];
+                          return (
+                            <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100 shadow-sm">
+                              <ProductDropdown
+                                options={[
+                                  { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
+                                  ...state.products.map((product) => ({
+                                    value: product._id,
+                                    label: `${product.displayName} (${product.displayUnit})`,
+                                  })),
+                                ]}
+                                value={item.productId}
+                                onChange={(value) =>
+                                  dispatch({
+                                    type: 'SET_CREATE_FORM',
+                                    payload: {
+                                      ...state.createFormData,
+                                      items: state.createFormData.items.map((it, i) =>
+                                        i === index ? { ...it, productId: value, assignedTo: '' } : it // Reset assignedTo on product change
+                                      ),
+                                    },
+                                  })
+                                }
+                                ariaLabel={isRtl ? 'اختر منتج' : 'Select Product'}
+                                className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
+                                  state.formErrors[`item_${index}_productId`] ? 'border-red-500' : ''
+                                }`}
+                              />
+                              {state.formErrors[`item_${index}_productId`] && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  {state.formErrors[`item_${index}_productId`]}
+                                </p>
+                              )}
                               {['admin', 'production'].includes(user.role) && (
+                                <ProductDropdown
+                                  options={chefOptions}
+                                  value={item.assignedTo || ''}
+                                  onChange={(value) =>
+                                    dispatch({
+                                      type: 'SET_CREATE_FORM',
+                                      payload: {
+                                        ...state.createFormData,
+                                        items: state.createFormData.items.map((it, i) =>
+                                          i === index ? { ...it, assignedTo: value } : it
+                                        ),
+                                      },
+                                    })
+                                  }
+                                  ariaLabel={isRtl ? 'اختر شيف' : 'Select Chef'}
+                                  className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
+                                    state.formErrors[`item_${index}_assignedTo`] ? 'border-red-500' : ''
+                                  }`}
+                                />
+                              )}
+                              {state.formErrors[`item_${index}_assignedTo`] && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  {state.formErrors[`item_${index}_assignedTo`]}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4">
                                 <div className="flex-1">
-                                  <label
-                                    className={`block text-sm font-medium text-gray-700 mb-1 ${
-                                      isRtl ? 'text-right' : 'text-left'
-                                    }`}
-                                  >
-                                    {isRtl ? 'تعيين إلى' : 'Assign To'}
+                                  <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                                    {isRtl ? 'الكمية' : 'Quantity'}
                                   </label>
-                                  <ProductDropdown
-                                    options={[
-                                      { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-                                      ...state.chefs.map((chef) => ({
-                                        value: chef.userId,
-                                        label: chef.displayName,
-                                      })),
-                                    ]}
-                                    value={item.assignedTo || ''}
-                                    onChange={(value) =>
+                                  <QuantityInput
+                                    value={item.quantity}
+                                    onChange={(val) =>
                                       dispatch({
                                         type: 'SET_CREATE_FORM',
                                         payload: {
                                           ...state.createFormData,
                                           items: state.createFormData.items.map((it, i) =>
-                                            i === index ? { ...it, assignedTo: value } : it
+                                            i === index ? { ...it, quantity: parseInt(val) || 1 } : it
                                           ),
                                         },
                                       })
                                     }
-                                    ariaLabel={isRtl ? 'تعيين إلى' : 'Assign To'}
-                                    className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200 ${
-                                      state.formErrors[`item_${index}_assignedTo`] ? 'border-red-500' : ''
-                                    }`}
+                                    onIncrement={() =>
+                                      dispatch({
+                                        type: 'SET_CREATE_FORM',
+                                        payload: {
+                                          ...state.createFormData,
+                                          items: state.createFormData.items.map((it, i) =>
+                                            i === index
+                                              ? {
+                                                  ...it,
+                                                  quantity: Math.min(
+                                                    it.quantity + 1,
+                                                    state.products.find((p) => p._id === it.productId)
+                                                      ?.maxStockLevel || 1000
+                                                  ),
+                                                }
+                                              : it
+                                          ),
+                                        },
+                                      })
+                                    }
+                                    onDecrement={() =>
+                                      dispatch({
+                                        type: 'SET_CREATE_FORM',
+                                        payload: {
+                                          ...state.createFormData,
+                                          items: state.createFormData.items.map((it, i) =>
+                                            i === index ? { ...it, quantity: Math.max(it.quantity - 1, 1) } : it
+                                          ),
+                                        },
+                                      })
+                                    }
+                                    max={state.products.find((p) => p._id === item.productId)?.maxStockLevel}
                                   />
-                                  {state.formErrors[`item_${index}_assignedTo`] && (
+                                  {state.formErrors[`item_${index}_quantity`] && (
                                     <p className="text-xs text-red-600 mt-1">
-                                      {state.formErrors[`item_${index}_assignedTo`]}
+                                      {state.formErrors[`item_${index}_quantity`]}
                                     </p>
                                   )}
                                 </div>
-                              )}
-                              {state.createFormData.items.length > 1 && (
-                                <button
-                                  onClick={() =>
-                                    dispatch({
-                                      type: 'SET_CREATE_FORM',
-                                      payload: {
-                                        ...state.createFormData,
-                                        items: state.createFormData.items.filter((_, i) => i !== index),
-                                      },
-                                    })
-                                  }
-                                  className="mt-6 text-red-600 hover:text-red-800 transition-colors duration-200"
-                                  aria-label={isRtl ? 'إزالة العنصر' : 'Remove Item'}
-                                >
-                                  <MinusCircle className="w-5 h-5" />
-                                </button>
-                              )}
+                                {state.createFormData.items.length > 1 && (
+                                  <button
+                                    onClick={() =>
+                                      dispatch({
+                                        type: 'SET_CREATE_FORM',
+                                        payload: {
+                                          ...state.createFormData,
+                                          items: state.createFormData.items.filter((_, i) => i !== index),
+                                        },
+                                      })
+                                    }
+                                    className="mt-6 text-red-600 hover:text-red-800 transition-colors duration-200"
+                                    aria-label={isRtl ? 'إزالة العنصر' : 'Remove Item'}
+                                  >
+                                    <MinusCircle className="w-5 h-5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         <Button
                           variant="secondary"
                           onClick={() =>

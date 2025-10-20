@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
 import { ProductDropdown } from '../../pages/FactoryInventory'; // Assuming ProductDropdown is exported from FactoryInventory
