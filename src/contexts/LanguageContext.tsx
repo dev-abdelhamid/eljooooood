@@ -60,7 +60,7 @@ const translations = {
     "sales.review": " المبيعات ",
     "productionTasks": " مهامي  ",
     "sales.create": " انشاء مبيعات جديدة ",
-    "dailyOrdersSummary": "   ملخص الطلبات    ",
+    "dailyOrdersSummary": " ملخص الطلبات",
 
     "returns.review": " المرتجعات ",
     // الطلبات

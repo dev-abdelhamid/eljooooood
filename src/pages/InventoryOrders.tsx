@@ -456,7 +456,7 @@ export const InventoryOrders: React.FC = () => {
                         nameEn: chef.department.nameEn,
                         displayName: chef.department.displayName || (isRtl ? chef.department.name : chef.department.nameEn || chef.department.name),
                       }
-                    : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
+                  : { _id: 'no-department', name: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown' },
                   status: chef.status || 'active',
                 }))
             : [],
