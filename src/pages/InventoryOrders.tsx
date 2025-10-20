@@ -6,11 +6,13 @@ import { Card } from '../components/UI/Card';
 import { Select } from '../components/UI/Select';
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
-import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
+import { ProductSearchInput } from './OrdersTablePage';
+import {  ProductDropdown } from './FactoryInventory';
+
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI  , isValidObjectId} from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem, User } from '../types/types';
