@@ -22,7 +22,6 @@ import OrderTable from '../components/production/OrderTable';
 import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-
 const QuantityInput = ({
   value,
   onChange,
@@ -80,7 +79,6 @@ const QuantityInput = ({
     </div>
   );
 };
-
 const normalizeText = (text: string) => {
   return text
     .normalize('NFD')
@@ -91,7 +89,6 @@ const normalizeText = (text: string) => {
     .toLowerCase()
     .trim();
 };
-
 interface State {
   orders: FactoryOrder[];
   selectedOrder: FactoryOrder | null;
@@ -117,7 +114,6 @@ interface State {
   viewMode: 'card' | 'table';
   formErrors: Record<string, string>;
 }
-
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -143,7 +139,6 @@ const initialState: State = {
   viewMode: 'card',
   formErrors: {},
 };
-
 const reducer = (state: State, action: any): State => {
   switch (action.type) {
     case 'SET_ORDERS':
@@ -302,9 +297,7 @@ const reducer = (state: State, action: any): State => {
       return state;
   }
 };
-
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
-
 const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]> = {
   requested: ['approved', 'cancelled'],
   pending: ['approved', 'cancelled'],
@@ -314,7 +307,6 @@ const validTransitions: Record<FactoryOrder['status'], FactoryOrder['status'][]>
   stocked: [],
   cancelled: [],
 };
-
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'requested', label: 'requested' },
@@ -325,12 +317,10 @@ const statusOptions = [
   { value: 'stocked', label: 'stocked' },
   { value: 'cancelled', label: 'cancelled' },
 ];
-
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalQuantity', label: 'sort_total_quantity' },
 ];
-
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -344,14 +334,12 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   };
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
-
 type CreateFormAction =
   | { type: 'SET_NOTES'; payload: string }
   | { type: 'ADD_ITEM'; payload: { product: string; quantity: number; assignedTo?: string; departmentId?: string } }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof { product: string; quantity: number; assignedTo?: string; departmentId?: string }; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
   | { type: 'RESET' };
-
 const createFormReducer = (state: State['createFormData'], action: CreateFormAction): State['createFormData'] => {
   switch (action.type) {
     case 'SET_NOTES':
@@ -370,35 +358,29 @@ const createFormReducer = (state: State['createFormData'], action: CreateFormAct
       return state;
   }
 };
-
 export const InventoryOrders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [createFormState, dispatchCreateForm] = useReducer(createFormReducer, { notes: '', items: [] });
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
   const [searchInput, setSearchInput] = useState('');
   const isChef = user?.role === 'chef';
-
   useEffect(() => {
     const handler = setTimeout(() => {
       dispatch({ type: 'SET_DEBOUNCED_SEARCH', payload: searchInput });
     }, 300);
     return () => clearTimeout(handler);
   }, [searchInput]);
-
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-
   const calculateTotalQuantity = useCallback((order: FactoryOrder) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
-
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user || !['chef', 'production', 'admin'].includes(user.role)) {
@@ -741,7 +723,7 @@ export const InventoryOrders: React.FC = () => {
     }
     dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
     try {
-      const orderNumber = `ORD-${Date.now()}`;
+      const orderNumber = `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`;
       const isAdminOrProduction = ['admin', 'production'].includes(user.role);
       const initialStatus = isAdminOrProduction && createFormState.items.every(i => i.assignedTo) ? 'in_production' : isAdminOrProduction ? 'pending' : 'requested';
       const aggregatedItems = createFormState.items.reduce((acc, item) => {
@@ -756,12 +738,13 @@ export const InventoryOrders: React.FC = () => {
       if (items.length === 0) {
         throw new Error(isRtl ? 'لا توجد عناصر صالحة' : 'No valid items');
       }
-      const response = await factoryOrdersAPI.create({
+      const data = {
         orderNumber,
         items,
-        notes: createFormState.notes,
+        notes: createFormState.notes || undefined,
         priority: 'medium',
-      });
+      };
+      const response = await factoryOrdersAPI.create(data);
       const newOrder: FactoryOrder = {
         id: response.data._id,
         orderNumber: response.data.orderNumber,
@@ -1402,16 +1385,23 @@ export const InventoryOrders: React.FC = () => {
                               <p className="text-red-600 text-xs">{state.formErrors[`item_${index}_product`]}</p>
                             )}
                             {!isChef && (
-                              <ProductDropdown
-                                value={item.assignedTo || ''}
-                                onChange={(value) => updateItemInForm(index, 'assignedTo', value)}
-                                options={getChefOptions(item.departmentId || '')}
-                                ariaLabel={`${isRtl ? 'العناصر' : 'Items'} ${index + 1} ${isRtl ? 'الشيف' : 'Chef'}`}
-                                placeholder={isRtl ? 'اختر شيف' : 'Select Chef'}
-                              />
+                              <>
+                                <ProductDropdown
+                                  value={item.assignedTo || ''}
+                                  onChange={(value) => updateItemInForm(index, 'assignedTo', value)}
+                                  options={getChefOptions(item.departmentId || '')}
+                                  ariaLabel={`${isRtl ? 'العناصر' : 'Items'} ${index + 1} ${isRtl ? 'الشيف' : 'Chef'}`}
+                                  placeholder={isRtl ? 'اختر شيف' : 'Select Chef'}
+                                />
+                                {state.formErrors[`item_${index}_assignedTo`] && (
+                                  <p className="text-red-600 text-xs">{state.formErrors[`item_${index}_assignedTo`]}</p>
+                                )}
+                              </>
                             )}
-                            {state.formErrors[`item_${index}_assignedTo`] && (
-                              <p className="text-red-600 text-xs">{state.formErrors[`item_${index}_assignedTo`]}</p>
+                            {isChef && (
+                              <p className="text-sm text-gray-600">
+                                {isRtl ? 'الشيف' : 'Chef'}: {isRtl ? user?.name : user?.nameEn || user?.name}
+                              </p>
                             )}
                             <div className="flex flex-col sm:flex-row gap-4">
                               <div className="flex-1">
@@ -1484,5 +1474,4 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
-
 export default InventoryOrders;
