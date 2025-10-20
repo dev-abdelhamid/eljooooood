@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Search, X, Upload, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -9,7 +9,6 @@ import { Tooltip } from 'react-tooltip';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
 // Button component
 const Button: React.FC<{
@@ -23,8 +22,7 @@ const Button: React.FC<{
     <button
       onClick={onClick}
       disabled={disabled}
-      
-      className={`flex items-center gap-2 rounded-full flex-row   px-4 py-2 text-xs font-medium transition-all duration-200 ${
+      className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
         variant === 'primary' && !disabled
           ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
           : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -51,11 +49,10 @@ export const ProductSearchInput: React.FC<{
   };
 
   return (
-    <div className={`relative group w-full ${className} ` }>
+    <div className={`relative group w-full ${className}`}>
       <motion.div
         className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
-        
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
@@ -85,7 +82,7 @@ export const ProductSearchInput: React.FC<{
   );
 };
 
-// ProductDropdown component with close on outside click
+// ProductDropdown component
 export const ProductDropdown = ({
   value,
   onChange,
@@ -102,8 +99,6 @@ export const ProductDropdown = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
-  // Log options for debugging
-  console.log(`[${new Date().toISOString()}] ProductDropdown options:`, options);
   const selectedOption =
     options.find((opt) => opt.value === value) ||
     options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
@@ -139,6 +134,7 @@ export const ProductDropdown = ({
     </div>
   );
 };
+
 // Utility functions
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -218,20 +214,22 @@ const generatePDFHeader = (
   fontName: string,
   fontLoaded: boolean
 ) => {
-  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-  doc.setFontSize(16);
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
+  doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
-  doc.text(title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
-  doc.setFontSize(9);
+  const titleWidth = doc.getTextWidth(title);
+  doc.text(title, isRtl ? pageWidth - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+  doc.setFontSize(10);
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
     ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl, true)}`
     : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl, true)}`;
-  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
+  doc.text(stats, isRtl ? pageWidth - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
   doc.setDrawColor(245, 158, 11);
-  doc.line(20, 25, pageWidth - 20, 25);
+  doc.line(20, 30, pageWidth - 20, 30);
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
@@ -259,52 +257,63 @@ const generatePDFTable = (
   fontName: string
 ) => {
   const numColumns = headers.length;
-  const fontSizeHead = Math.max(6, Math.min(9, Math.floor(280 / numColumns)));
-  const fontSizeBody = fontSizeHead - 1;
-  const cellPadding = numColumns > 20 ? 1 : 2;
-  const columnStyles = {};
-  headers.forEach((_, i) => {
-    columnStyles[i] = {
-      cellWidth: 'auto',
-      minCellWidth: 5,
+  const pageWidth = doc.internal.pageSize.width;
+  const margin = 10;
+  const maxTableWidth = pageWidth - 2 * margin;
+  const minCellWidth = 10; // Minimum width for smaller columns
+  const firstThreeWidths = [20, 20, 15]; // Reduced widths for name, price, code
+  const otherColumnWidth = Math.max(minCellWidth, (maxTableWidth - firstThreeWidths.reduce((a, b) => a + b, 0)) / (numColumns - 3));
+  const columnStyles = headers.reduce((styles, _, i) => {
+    const index = isRtl ? numColumns - 1 - i : i;
+    styles[index] = {
+      cellWidth: i < 3 ? firstThreeWidths[i] : otherColumnWidth,
       halign: 'center',
+      valign: 'middle',
+      overflow: 'linebreak',
     };
-  });
+    return styles;
+  }, {});
 
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 30,
-    margin: { top: 10, bottom: 10, left: 10, right: 10 },
-    tableWidth: 'wrap',
+    startY: 35,
+    margin: { top: 35, bottom: 15, left: margin, right: margin },
+    tableWidth: 'auto',
     columnStyles,
     headStyles: {
       fillColor: [245, 158, 11],
       textColor: [255, 255, 255],
-      fontSize: fontSizeHead,
+      fontSize: 8,
       halign: 'center',
+      valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
-      cellPadding,
+      cellPadding: 1.5,
+      minCellHeight: 8,
     },
     bodyStyles: {
-      fontSize: fontSizeBody,
+      fontSize: 7,
       halign: 'center',
+      valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
-      cellPadding,
+      cellPadding: 1.5,
+      minCellHeight: 6,
     },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245],
+    },
     didParseCell: (hookData) => {
       if (hookData.section === 'body' || hookData.section === 'head') {
         hookData.cell.text = hookData.cell.text.map(text => {
           let processedText = text;
-          if (isRtl) {
+          // Skip code column (index 1 in LTR, numColumns-2 in RTL) for Arabic numeral conversion
+          if ((isRtl && hookData.column.index !== numColumns - 2) || (!isRtl && hookData.column.index !== 1)) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
-          
           }
           return processedText;
         });
@@ -688,7 +697,7 @@ const DailyOrdersPage: React.FC = () => {
         ws['!cols'] = [
           { wch: 5 },
           { wch: 10 },
-          { wch: 25 },
+          { wch: 20 },
           { wch: 10 },
           ...displayedDays.map(() => ({ wch: 6 })),
           { wch: 12 },
@@ -697,8 +706,7 @@ const DailyOrdersPage: React.FC = () => {
           { wch: 12 },
         ];
         ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
-        // Add styles
-        const amberColor = 'FFF59E0B'; // Amber ARGB
+        const amberColor = 'FFF59E0B';
         const whiteColor = 'FFFFFFFF';
         const blackColor = 'FF000000';
         for (let c = 0; c < sheetHeaders.length; c++) {
@@ -722,7 +730,6 @@ const DailyOrdersPage: React.FC = () => {
             }
           }
         }
-        // Bold the total row
         for (let c = 0; c < sheetHeaders.length; c++) {
           const cell = XLSX.utils.encode_cell({ r: rows.length, c });
           if (ws[cell]) {
@@ -759,72 +766,75 @@ const DailyOrdersPage: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-8 `}>
+    <div className={`min-h-screen px-4 py-8`}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 `}>
-          <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
-          <div className="flex gap-2 items-center">
-            <ProductDropdown
-              value={selectedMonth}
-              onChange={setSelectedMonth}
-              options={months}
-              ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
-              className="w-40"
-            />
-           
-            <Button
-              variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-              onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
-              disabled={filteredData.length === 0}
-              className="flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              {isRtl ? ' PDF' : ' PDF'}
-            </Button>
-          </div>
-        </div>
-        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4 `}>
-          <ProductSearchInput
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
-            ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
-            className="md:col-span-1 max-w-none"
-          />
-          <ProductDropdown
-            value={selectedBranch}
-            onChange={setSelectedBranch}
-            options={branchOptions}
-            ariaLabel={isRtl ? 'اختر الفرع' : 'Select branch'}
-            className="md:col-span-1"
-          />
-          <ProductDropdown
-            value={selectedPeriod}
-            onChange={setSelectedPeriod}
-            options={periodOptions}
-            ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
-            className="md:col-span-1"
-          />
-          {selectedPeriod === 'custom' && (
-            <div className="col-span-1 md:col-span-3 flex flex-col sm:flex-row gap-4">
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+        <div className="flex flex-col gap-4">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
+            <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
+            <div className="flex gap-2 items-center">
+              <ProductDropdown
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                options={months}
+                ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
+                className="w-40"
               />
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
-              />
+              <Button
+                variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+                onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
+                disabled={filteredData.length === 0}
+                className="flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              </Button>
             </div>
-          )}
+          </div>
+          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 items-center`}>
+            <ProductSearchInput
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
+              ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
+              className="sm:col-span-1"
+            />
+            <ProductDropdown
+              value={selectedBranch}
+              onChange={setSelectedBranch}
+              options={branchOptions}
+              ariaLabel={isRtl ? 'اختر الفرع' : 'Select branch'}
+              className="sm:col-span-1"
+            />
+            <ProductDropdown
+              value={selectedPeriod}
+              onChange={setSelectedPeriod}
+              options={periodOptions}
+              ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
+              className="sm:col-span-1"
+            />
+            {selectedPeriod === 'custom' && (
+              <div className="col-span-1 sm:col-span-3 flex flex-col sm:flex-row gap-4">
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                />
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {loading ? (
-        <OrderTableSkeleton isRtl={isRtl} />
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+        </div>
       ) : (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -836,24 +846,24 @@ const DailyOrdersPage: React.FC = () => {
             <thead className="bg-amber-50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
                 <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'الكود' : 'Code'}</th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[200px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
                 <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                 {displayedDays.map((day, i) => (
-                  <th key={i} className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
+                  <th key={i} className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[40px]">
                     {day}
                   </th>
                 ))}
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">
                   {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                 </th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">
                   {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
                 </th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">
                   {isRtl ? 'السعر الإجمالي' : 'Total Price'}
                 </th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">
                   {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
                 </th>
               </tr>
@@ -862,8 +872,8 @@ const DailyOrdersPage: React.FC = () => {
               {filteredData.map((row, index) => (
                 <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200`}>
                   <td className="px-2 py-2 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                  <td className="px-2 py-2 text-gray-700 text-center truncate">{row.code}</td>
-                  <td className="px-2 py-2 text-gray-700 text-center truncate">{row.product}</td>
+                  <td className="px-1 py-2 text-gray-700 text-center truncate">{row.code}</td>
+                  <td className="px-1 py-2 text-gray-700 text-center truncate">{row.product}</td>
                   <td className="px-2 py-2 text-gray-700 text-center truncate">{row.unit}</td>
                   {row.displayedDailyQuantities.map((qty, i) => (
                     <td
