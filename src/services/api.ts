@@ -384,8 +384,17 @@ const createErrorMessage = (errorType, isRtl) => {
     invalidMinStockLevel: { ar: 'الحد الأدنى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Minimum stock level must be a non-negative integer' },
     invalidMaxStockLevel: { ar: 'الحد الأقصى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Maximum stock level must be a non-negative integer' },
     maxLessThanMin: { ar: 'الحد الأقصى يجب أن يكون أكبر من الحد الأدنى', en: 'Maximum stock level must be greater than minimum' },
+  
+    invalidUserId: { ar: 'معرف المستخدم غير صالح', en: 'Invalid user ID' },
+    invalidInventoryId: { ar: 'معرف المخزون غير صالح', en: 'Invalid inventory ID' },
+    invalidStatus: { ar: 'الحالة غير صالحة', en: 'Invalid status' },
+    invalidFactoryOrderId: { ar: 'معرف طلب المصنع غير صالح', en: 'Invalid factory order ID' },
+    invalidId: { ar: 'معرف غير صالح', en: 'Invalid ID' },
+    invalidItems: { ar: 'العناصر غير صالحة', en: 'Invalid items' },
+    invalidData: { ar: 'البيانات غير صالحة', en: 'Invalid data' },
   };
-  return isRtl ? messages[errorType].ar : messages[errorType].en;
+  const msg = messages[key] || { ar: 'خطأ غير معروف', en: 'Unknown error' };
+  return isRtl ? msg.ar : msg.en;
 };
 
 export const ordersAPI = {
@@ -1003,6 +1012,8 @@ export const inventoryAPI = {
 
 
 
+
+
 export const factoryInventoryAPI = {
   getAll: async (params = {}) => {
     if (params.product && !isValidObjectId(params.product)) {
@@ -1136,14 +1147,11 @@ export const factoryInventoryAPI = {
   },
 };
 
-
-
-// Updated factoryOrdersAPI with fixed error handling
 export const factoryOrdersAPI = {
   // إنشاء طلب إنتاج جديد
   create: async (data: {
     orderNumber: string;
-    items: { productId: string; quantity: number; assignedTo?: string }[];
+    items: { product: string; quantity: number; assignedTo?: string }[];
     notes?: string;
     priority?: string;
   }) => {
@@ -1154,7 +1162,7 @@ export const factoryOrdersAPI = {
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
       data.items.some(
-        (item) => !isValidObjectId(item.productId) || !Number.isInteger(item.quantity) || item.quantity < 1
+        (item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1
       )
     ) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - البيانات غير صالحة:`, data);
@@ -1164,7 +1172,7 @@ export const factoryOrdersAPI = {
       const response = await api.post('/factoryOrders', {
         orderNumber: data.orderNumber.trim(),
         items: data.items.map((item) => ({
-          productId: item.productId,
+          product: item.product,
           quantity: item.quantity,
           assignedTo: item.assignedTo,
         })),
@@ -1178,8 +1186,6 @@ export const factoryOrdersAPI = {
       throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
-
-
   // استرجاع جميع طلبات الإنتاج مع معايير اختيارية
   getAll: async (query: Record<string, any> = {}) => {
     try {
@@ -1191,7 +1197,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
   // استرجاع طلب إنتاج محدد باستخدام المعرف
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -1207,7 +1212,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
   // الموافقة على طلب إنتاج
   approve: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -1223,7 +1227,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
   // تعيين شيفات لعناصر طلب الإنتاج
   assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
     if (
@@ -1249,7 +1252,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
   // تحديث حالة عنصر في طلب الإنتاج
   updateItemStatus: async (id: string, itemId: string, data: { status: string }) => {
     if (!isValidObjectId(id) || !isValidObjectId(itemId)) {
@@ -1269,7 +1271,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
   // تحديث حالة طلب الإنتاج
   updateStatus: async (id: string, data: { status: string }) => {
     if (!isValidObjectId(id)) {
@@ -1289,7 +1290,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
   // تأكيد الإنتاج لطلب الإنتاج
   confirmProduction: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -1305,7 +1305,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
   // استرجاع المنتجات المتاحة للمستخدم الحالي
   getAvailableProducts: async () => {
     try {
@@ -1317,8 +1316,6 @@ export const factoryOrdersAPI = {
       throw error;
     }
   },
-
- 
 };
 export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
