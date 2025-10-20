@@ -60,6 +60,7 @@ const translations = {
     "sales.review": " المبيعات ",
     "productionTasks": " مهامي  ",
     "sales.create": " انشاء مبيعات جديدة ",
+    "dailyOrdersSummary": " ملخص حركةالطلبات  ",
 
     "returns.review": " المرتجعات ",
     // الطلبات
@@ -466,6 +467,7 @@ const translations = {
     "orders.startProduction": "Start Production",
     "orders.complete": "Complete",
     "orders.ship": "Ship",
+    "orders.dailyOrdersSummary": "Daily Orders Summary",
     "orders.loading": "Loading Orders...",
     "orders.fetchError": "Failed to fetch orders",
     "orders.timeoutError": "Request timed out, please try again",
