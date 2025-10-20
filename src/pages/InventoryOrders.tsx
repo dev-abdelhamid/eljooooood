@@ -385,7 +385,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
       };
     }
     aggregated[key].quantity += item.quantity;
-  };
+  });
   return Object.values(aggregated).filter(
     (item) => item.product && isValidObjectId(item.product) && item.assignedTo && isValidObjectId(item.assignedTo)
   );
