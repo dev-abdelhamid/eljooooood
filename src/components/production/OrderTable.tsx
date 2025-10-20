@@ -1,5 +1,6 @@
-import React from 'react';
-import { Button } from '../UI/Button';
+import React, { useMemo } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { Button } from '../../components/UI/Button';
 import { CheckCircle } from 'lucide-react';
 import { FactoryOrder, UserRole } from '../../types/types';
 
@@ -98,19 +99,19 @@ export const OrderTable: React.FC<OrderTableProps> = ({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-lg">
-      <table className="min-w-full bg-white divide-y divide-gray-200">
+      <table className="min-w-full bg-white divide-y divide-gray-200 table-fixed">
         <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
           <tr className={isRtl ? 'text-right' : 'text-left'}>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.orderNumber}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.date}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.items}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.quantity}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.status}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.priority}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.notes}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.createdBy}</th>
-            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">{t.actions}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">#</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.orderNumber}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.date}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.items}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.quantity}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.status}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.priority}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.notes}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.createdBy}</th>
+            <th className="px-6 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{t.actions}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
@@ -120,12 +121,12 @@ export const OrderTable: React.FC<OrderTableProps> = ({
             const displayStatus = order.status === 'completed' && order.inventoryProcessed ? 'stocked' : order.status;
             return (
               <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-200">
-                <td className="px-6 py-4 text-xs text-gray-900">{startIndex + index}</td>
-                <td className="px-6 py-4 text-xs text-gray-900">{order.orderNumber}</td>
-                <td className="px-6 py-4 text-xs text-gray-900">{order.date}</td>
-                <td className="px-6 py-4 text-xs text-gray-900">
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{startIndex + index}</td>
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{order.orderNumber}</td>
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{order.date}</td>
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">
                   {order.items.map((item) => (
-                    <div key={item._id} className="mb-1 flex items-center justify-between gap-2">
+                    <div key={item._id} className="mb-1 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden text-ellipsis">
                       <span>{item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})</span>
                       {item.assignedTo && (
                         <span className="text-xs text-gray-500">
@@ -145,8 +146,8 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                     </div>
                   ))}
                 </td>
-                <td className="px-6 py-4 text-xs text-gray-900">{calculateTotalQuantity(order)}</td>
-                <td className="px-6 py-4 text-xs">
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{calculateTotalQuantity(order)}</td>
+                <td className="px-6 py-4 text-xs whitespace-nowrap overflow-hidden text-ellipsis">
                   <span
                     className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
                       displayStatus === 'requested' ? 'bg-orange-100 text-orange-800' :
@@ -161,10 +162,10 @@ export const OrderTable: React.FC<OrderTableProps> = ({
                     {t[displayStatus]}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-xs text-gray-900">{t[order.priority]}</td>
-                <td className="px-6 py-4 text-xs text-gray-900">{order.notes || '—'}</td>
-                <td className="px-6 py-4 text-xs text-gray-900">{order.createdBy}</td>
-                <td className="px-6 py-4 text-xs">
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{t[order.priority]}</td>
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{order.notes || '—'}</td>
+                <td className="px-6 py-4 text-xs text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis">{order.createdBy}</td>
+                <td className="px-6 py-4 text-xs whitespace-nowrap overflow-hidden text-ellipsis">
                   <div className={`flex gap-2 flex-wrap ${isRtl ? 'flex-row-reverse' : ''}`}>
                     {(order.status === 'requested' || order.status === 'pending') && canApprove && (
                       <Button

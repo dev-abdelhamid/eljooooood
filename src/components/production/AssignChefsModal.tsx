@@ -1,11 +1,11 @@
 import React, { useMemo, useCallback, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
-import { Select } from '../../components/UI/Select';
+import { ProductDropdown } from '../../pages/FactoryInventory'; // Assuming ProductDropdown is exported from FactoryInventory
 import { AlertCircle } from 'lucide-react';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
 import { useLanguage } from '../../contexts/LanguageContext';
+
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -19,6 +19,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   };
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
+
 // واجهة الخصائص لمكون AssignChefsModal
 interface AssignChefsModalProps {
   isOpen: boolean;
@@ -126,16 +127,16 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         ) : error ? (
           <div className="flex items-center justify-center gap-2 text-red-600">
             <AlertCircle className="w-5 h-5" />
-            <p className="text-sm font-medium">{error}</p>
+            <p className="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">{error}</p>
           </div>
         ) : selectedOrder ? (
           <>
             <div className="space-y-4">
-              <h3 className={`text-lg font-semibold text-gray-800 ${isRtl ? 'text-right' : 'text-left'}`}>
+              <h3 className={`text-lg font-semibold text-gray-800 ${isRtl ? 'text-right' : 'text-left'} whitespace-nowrap overflow-hidden text-ellipsis`}>
                 {isRtl ? `طلب رقم: ${selectedOrder.orderNumber}` : `Order Number: ${selectedOrder.orderNumber}`}
               </h3>
               {assignFormData.items.length === 0 ? (
-                <p className="text-sm text-gray-600 text-center">
+                <p className="text-sm text-gray-600 text-center whitespace-nowrap overflow-hidden text-ellipsis">
                   {isRtl
                     ? 'جميع العناصر تم تعيينها مسبقًا أو لا تحتوي على قسم صالح'
                     : 'All items have already been assigned or have no valid department'}
@@ -149,22 +150,22 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                       className="flex flex-col gap-2 p-4 bg-gray-50 rounded-lg border border-gray-100 shadow-sm"
                     >
                       <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-sm font-medium text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis">
                           {isRtl
                             ? `${item.product} (${item.quantity} ${item.unit})`
                             : `${item.product} (${item.quantity} ${item.unit})`}
                         </span>
                       </div>
                       {item.departmentId === 'no-department' ? (
-                        <p className="text-sm text-red-600">
+                        <p className="text-sm text-red-600 whitespace-nowrap overflow-hidden text-ellipsis">
                           {isRtl ? 'القسم غير مُعرف لهذا العنصر' : 'Department not defined for this item'}
                         </p>
                       ) : availableChefs.length === 0 ? (
-                        <p className="text-sm text-red-600">
+                        <p className="text-sm text-red-600 whitespace-nowrap overflow-hidden text-ellipsis">
                           {isRtl ? 'لا يوجد شيفات متاحين لهذا القسم' : 'No chefs available for this department'}
                         </p>
                       ) : (
-                        <Select
+                        <ProductDropdown
                           options={[
                             { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
                             ...availableChefs.map((chef) => ({
@@ -181,7 +182,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                         />
                       )}
                       {!item.assignedTo && availableChefs.length > 0 && item.departmentId !== 'no-department' && (
-                        <p className="text-xs text-red-600 mt-1">
+                        <p className="text-xs text-red-600 mt-1 whitespace-nowrap overflow-hidden text-ellipsis">
                           {isRtl ? 'يرجى اختيار شيف' : 'Please select a chef'}
                         </p>
                       )}
@@ -215,7 +216,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             </div>
           </>
         ) : (
-          <p className="text-sm text-gray-600 text-center">
+          <p className="text-sm text-gray-600 text-center whitespace-nowrap overflow-hidden text-ellipsis">
             {isRtl ? 'لم يتم تحديد طلب' : 'No order selected'}
           </p>
         )}

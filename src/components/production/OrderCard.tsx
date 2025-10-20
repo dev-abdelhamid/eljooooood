@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Card } from '../UI/Card';
-import { Button } from '../UI/Button';
+import { Card } from '../../components/UI/Card';
+import { Button } from '../../components/UI/Button';
 import { CheckCircle } from 'lucide-react';
 import { FactoryOrder, UserRole } from '../../types/types';
 
@@ -124,26 +124,26 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className={isRtl ? 'text-right' : 'text-left'}>
-          <h3 className="text-sm font-semibold text-gray-800">{t.orderNumber}: {order.orderNumber}</h3>
-          <p className="text-xs text-gray-600">{t.date}: {order.date}</p>
-          <p className="text-xs text-gray-600">{t.createdBy}: {order.createdBy}</p>
-          <p className="text-xs text-gray-600">
+          <h3 className="text-sm font-semibold text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis">{t.orderNumber}: {order.orderNumber}</h3>
+          <p className="text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">{t.date}: {order.date}</p>
+          <p className="text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">{t.createdBy}: {order.createdBy}</p>
+          <p className="text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">
             {t.priority}: <span className={`px-2 py-1 rounded-full text-xs ${priorityStyles[order.priority]}`}>{t[order.priority]}</span>
           </p>
         </div>
         <div className={isRtl ? 'text-right' : 'text-left'}>
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">
             {t.status}: <span className={`px-2 py-1 rounded-full text-xs ${statusStyles[displayStatus]}`}>{t[displayStatus]}</span>
           </p>
-          <p className="text-xs text-gray-600">{t.quantity}: {calculateTotalQuantity(order)}</p>
-          <p className="text-xs text-gray-600">{t.notes}: {order.notes || '—'}</p>
+          <p className="text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">{t.quantity}: {calculateTotalQuantity(order)}</p>
+          <p className="text-xs text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">{t.notes}: {order.notes || '—'}</p>
         </div>
       </div>
       <div className="mt-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">{t.items}</h4>
+        <h4 className="text-sm font-medium text-gray-700 mb-2 whitespace-nowrap overflow-hidden text-ellipsis">{t.items}</h4>
         <ul className="space-y-2">
           {order.items.map((item) => (
-            <li key={item._id} className="text-xs text-gray-600 flex items-center justify-between gap-2">
+            <li key={item._id} className="text-xs text-gray-600 flex items-center justify-between gap-2 whitespace-nowrap overflow-hidden text-ellipsis">
               <span>
                 {item.displayProductName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                 {item.assignedTo && <span className="text-gray-500 ml-2">({t.assign}: {item.assignedTo.displayName})</span>}
