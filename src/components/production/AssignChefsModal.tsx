@@ -6,6 +6,9 @@ import { ProductDropdown } from '../../pages/FactoryInventory'; // Assuming Prod
 import { AlertCircle } from 'lucide-react';
 import { FactoryOrder, Chef, AssignChefsForm } from '../../types/types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { chefsAPI } from '../../services/api';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
 
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
@@ -26,7 +29,6 @@ interface AssignChefsModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedOrder: FactoryOrder | null;
-  chefs: Chef[];
   assignFormData: AssignChefsForm;
   setAssignForm: (data: AssignChefsForm) => void;
   assignChefs: (orderId: string) => Promise<void>;
@@ -39,7 +41,6 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isOpen,
   onClose,
   selectedOrder,
-  chefs,
   assignFormData,
   setAssignForm,
   assignChefs,
@@ -50,25 +51,42 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
-  // تنظيم الشيفات حسب القسم
+  const { data: chefsData, isLoading: chefsLoading } = useQuery<Chef[], Error>({
+    queryKey: ['chefs', language],
+    queryFn: async () => {
+      const response = await chefsAPI.getAll();
+      console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
+      const data = Array.isArray(response) ? response : response?.data?.chefs || response?.chefs || [];
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] chefsAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
+      return data;
+    },
+    enabled: isOpen,
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
+    refetchOnMount: 'always',
+    onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Chefs query error:`, err.message);
+      toast.error(err.message || (isRtl ? 'خطأ في جلب الشيفات' : 'Error fetching chefs'), { position: isRtl ? 'top-right' : 'top-left' });
+    },
+  });
+
   const availableChefsByDepartment = useMemo(() => {
     const chefsByDept: Record<string, Chef[]> = {};
-    chefs.forEach((chef) => {
+    chefsData?.forEach((chef) => {
       const deptId = chef.department?._id || 'no-department';
       if (!chefsByDept[deptId]) {
         chefsByDept[deptId] = [];
       }
       chefsByDept[deptId].push({
         ...chef,
-        displayName: chef.displayName || chef.name || chef.nameEn || (isRtl ? 'غير معروف' : 'Unknown'),
-        department: {
-          ...chef.department,
-          displayName: chef.department?.displayName || chef.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        },
+        displayName: isRtl ? chef.user.name : chef.user.nameEn || chef.user.name,
       });
     });
     return chefsByDept;
-  }, [chefs, isRtl]);
+  }, [chefsData, isRtl]);
 
   // التحقق من صحة النموذج
   const isFormValid = useCallback(() => {
@@ -121,7 +139,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         transition={{ duration: 0.3 }}
         className="space-y-6"
       >
-        {loading ? (
+        {chefsLoading || loading ? (
           <div className="text-center">
             <p className="text-sm text-gray-600">{isRtl ? 'جاري التحميل...' : 'Loading...'}</p>
           </div>
@@ -139,7 +157,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
               {assignFormData.items.length === 0 ? (
                 <p className="text-sm text-gray-600 text-center whitespace-nowrap overflow-hidden text-ellipsis">
                   {isRtl
-                    ? 'جميع العناصر تم تعيينها مسبقًا أو لا تحتوي على قسم صالح'
+                    ? 'جميع العناصر تم تعيينها أو لا تحتوي على قسم صالح'
                     : 'All items have already been assigned or have no valid department'}
                 </p>
               ) : (
@@ -170,8 +188,8 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                           options={[
                             { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
                             ...availableChefs.map((chef) => ({
-                              value: chef.userId || chef._id,
-                              label: chef.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
+                              value: chef._id,
+                              label: chef.displayName,
                             })),
                           ]}
                           value={item.assignedTo}
