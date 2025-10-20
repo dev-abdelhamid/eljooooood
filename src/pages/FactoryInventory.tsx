@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,14 +9,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { ProductSearchInput } from './NewOrder';
 import { useNotifications } from '../contexts/NotificationContext';
-
 // Enums for type safety
 enum InventoryStatus {
   LOW = 'low',
   NORMAL = 'normal',
   FULL = 'full',
 }
-
 // Interfaces aligned with backend
 interface FactoryInventoryItem {
   _id: string;
@@ -37,18 +35,15 @@ interface FactoryInventoryItem {
   status: InventoryStatus;
   inProduction: boolean;
 }
-
 interface ProductionItem {
   product: string;
   quantity: number;
   assignedTo: string; // Chef ID
 }
-
 interface ProductionFormState {
   notes: string;
   items: ProductionItem[];
 }
-
 interface ProductHistoryEntry {
   _id: string;
   date: string;
@@ -56,12 +51,10 @@ interface ProductHistoryEntry {
   quantity: number;
   reference: string;
 }
-
 interface EditForm {
   minStockLevel: number;
   maxStockLevel: number;
 }
-
 interface AvailableProduct {
   productId: string;
   productName: string;
@@ -69,14 +62,12 @@ interface AvailableProduct {
   departmentName: string;
   departmentId: string;
 }
-
 interface FactoryOrder {
   _id: string;
   orderNumber: string;
   items: { productId: string; quantity: number; status: string; assignedTo?: string }[];
   status: 'pending' | 'in_production' | 'completed' | 'cancelled';
 }
-
 interface Chef {
   _id: string;
   user: {
@@ -93,7 +84,6 @@ interface Chef {
   department: { _id: string; name: string; nameEn?: string };
   createdAt: string;
 }
-
 // Translations
 const translations = {
   ar: {
@@ -225,7 +215,6 @@ const translations = {
     },
   },
 };
-
 // QuantityInput Component
 const QuantityInput = ({
   value,
@@ -278,7 +267,6 @@ const QuantityInput = ({
     </div>
   );
 };
-
 export const ProductDropdown = ({
   value,
   onChange,
@@ -333,16 +321,13 @@ export const ProductDropdown = ({
     </div>
   );
 };
-
 // Reducer for production form
 type ProductionFormAction =
   | { type: 'SET_NOTES'; payload: string }
   | { type: 'ADD_ITEM'; payload: ProductionItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ProductionItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
-  | { type: 'RESET' }
-  | { type: 'INITIALIZE_ITEMS'; payload: ProductionItem[] };
-
+  | { type: 'RESET' };
 const productionFormReducer = (state: ProductionFormState, action: ProductionFormAction): ProductionFormState => {
   switch (action.type) {
     case 'SET_NOTES':
@@ -355,15 +340,12 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
-    case 'INITIALIZE_ITEMS':
-      return { ...state, items: action.payload };
     case 'RESET':
       return { notes: '', items: [] };
     default:
       return state;
   }
 };
-
 // Aggregate items by product and chef
 const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   const aggregated: Record<string, ProductionItem> = {};
@@ -382,375 +364,6 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
     (item) => item.product && isValidObjectId(item.product) && item.assignedTo && isValidObjectId(item.assignedTo)
   );
 };
-
-// New separate ProductionOrderForm component
-export const ProductionOrderForm: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  preselectedItem?: FactoryInventoryItem | null;
-  availableProducts: AvailableProduct[];
-  chefsData: Chef[];
-  isChef: boolean;
-  user: any;
-  productDepartmentMap: Record<string, string>;
-  createProductionMutation: any;
-  t: any;
-  isRtl: boolean;
-  socket: any;
-  isConnected: boolean;
-}> = ({
-  isOpen,
-  onClose,
-  preselectedItem,
-  availableProducts,
-  chefsData,
-  isChef,
-  user,
-  productDepartmentMap,
-  createProductionMutation,
-  t,
-  isRtl,
-  socket,
-  isConnected,
-}) => {
-  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [] });
-  const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
-  const [chefsLoading, setChefsLoading] = useState(false); // Assuming chefs are loaded externally
-
-  // Product options, filtered for chefs
-  const productOptions = useMemo(() => {
-    let filtered = availableProducts;
-    if (isChef && user?.department?._id) {
-      filtered = filtered.filter((p) => p.departmentId === user.department._id);
-    }
-    return [
-      { value: '', label: t.selectProduct },
-      ...filtered.map((product) => ({
-        value: product.productId,
-        label: `${product.productName} (${t.unit}: ${product.unit}) - ${product.departmentName}`,
-      })),
-    ];
-  }, [availableProducts, isChef, user, t]);
-
-  // Initialize form with preselected item if provided
-  useEffect(() => {
-    if (preselectedItem?.product?._id) {
-      const deptId = preselectedItem.product.department?._id;
-      if (isChef && deptId !== user.department._id) {
-        toast.error(t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
-        onClose();
-        return;
-      }
-      dispatchProductionForm({
-        type: 'INITIALIZE_ITEMS',
-        payload: [
-          {
-            product: preselectedItem.product._id,
-            quantity: 1,
-            assignedTo: isChef ? user?._id || '' : '',
-          },
-        ],
-      });
-    } else {
-      dispatchProductionForm({
-        type: 'INITIALIZE_ITEMS',
-        payload: [{ product: '', quantity: 1, assignedTo: isChef ? user?._id || '' : '' }],
-      });
-    }
-  }, [preselectedItem, isChef, user, t, isRtl, onClose]);
-
-  const getChefOptions = useCallback(
-    (departmentId: string) => {
-      const options = [
-        { value: '', label: t.selectChef },
-        ...chefsData
-          ?.filter((chef) => chef.department?._id === departmentId)
-          .map((chef) => ({
-            value: chef._id,
-            label: isRtl
-              ? chef.user.name || chef.user.nameEn || `شيف بدون اسم (${chef._id})`
-              : chef.user.nameEn || chef.user.name || `Unnamed Chef (${chef._id})`,
-          })) || [],
-      ];
-      console.log(`[${new Date().toISOString()}] chefOptions for dept ${departmentId}:`, options);
-      return options;
-    },
-    [chefsData, isRtl, t]
-  );
-
-  const addItemToForm = useCallback(() => {
-    dispatchProductionForm({
-      type: 'ADD_ITEM',
-      payload: { product: '', quantity: 1, assignedTo: isChef ? user?._id || '' : '' },
-    });
-  }, [isChef, user]);
-
-  const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
-    if (field === 'quantity' && typeof value === 'string') {
-      const numValue = parseInt(value, 10);
-      if (isNaN(numValue) || numValue < 1) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
-        }));
-        return;
-      }
-      value = numValue;
-    }
-    dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-  }, [t]);
-
-  const handleProductChange = useCallback(
-    (index: number, productId: string) => {
-      if (!isValidObjectId(productId)) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_product`]: t.errors.invalidProductId,
-        }));
-        return;
-      }
-      if (productionForm.items.some((item, i) => i !== index && item.product === productId)) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_product`]: t.errors.duplicateProduct,
-        }));
-        return;
-      }
-      const deptId = productDepartmentMap[productId];
-      if (isChef && deptId !== user.department._id) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_product`]: t.errors.productNotFound, // or specific message for department mismatch
-        }));
-        return;
-      }
-      dispatchProductionForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'product', value: productId },
-      });
-    },
-    [t, productionForm.items, isChef, user, productDepartmentMap]
-  );
-
-  const handleChefChange = useCallback(
-    (index: number, chefId: string) => {
-      if (!isValidObjectId(chefId)) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_assignedTo`]: t.errors.invalidChefId,
-        }));
-        return;
-      }
-      dispatchProductionForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'assignedTo', value: chefId },
-      });
-    },
-    [t]
-  );
-
-  const removeItemFromForm = useCallback((index: number) => {
-    dispatchProductionForm({ type: 'REMOVE_ITEM', payload: index });
-    setProductionErrors((prev) => {
-      const newErrors = { ...prev };
-      Object.keys(newErrors).forEach((key) => {
-        if (key.startsWith(`item_${index}_`)) delete newErrors[key];
-      });
-      return newErrors;
-    });
-  }, []);
-
-  const validateProductionForm = useCallback(() => {
-    const errors: Record<string, string> = {};
-    if (productionForm.items.length === 0) {
-      errors.items = t.errors.required.replace('{field}', t.items);
-    }
-    productionForm.items.forEach((item, index) => {
-      if (!item.product) {
-        errors[`item_${index}_product`] = t.errors.required.replace('{field}', t.selectProduct);
-      } else if (!isValidObjectId(item.product)) {
-        errors[`item_${index}_product`] = t.errors.invalidProductId;
-      }
-      const deptId = productDepartmentMap[item.product];
-      if (isChef && deptId && deptId !== user.department._id) {
-        errors[`item_${index}_product`] = t.errors.productNotFound; // Department mismatch
-      }
-      if (!isChef) {
-        if (!item.assignedTo) {
-          errors[`item_${index}_assignedTo`] = t.errors.required.replace('{field}', t.chef);
-        } else if (!isValidObjectId(item.assignedTo)) {
-          errors[`item_${index}_assignedTo`] = t.errors.invalidChefId;
-        }
-      }
-      if (item.quantity < 1 || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax;
-      }
-    });
-    setProductionErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [productionForm, t, isChef, user, productDepartmentMap]);
-
-  const handleSubmit = () => {
-    if (!validateProductionForm()) return;
-    createProductionMutation.mutate(
-      {
-        productionForm,
-        user,
-        socket,
-        isConnected,
-        isRtl,
-        t,
-      },
-      {
-        onSuccess: () => {
-          onClose();
-          dispatchProductionForm({ type: 'RESET' });
-          setProductionErrors({});
-        },
-      }
-    );
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: isOpen ? 1 : 0 }}
-      className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-        isOpen ? '' : 'pointer-events-none'
-      }`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t.create}
-    >
-      <motion.div
-        initial={{ scale: 0.95, y: 20 }}
-        animate={{ scale: isOpen ? 1 : 0.95, y: isOpen ? 0 : 20 }}
-        className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
-          <button
-            onClick={onClose}
-            className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-            aria-label={t.cancel}
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        {chefsLoading && !isChef ? (
-          <p className="text-gray-600 text-sm">{isRtl ? 'جاري تحميل الشيفات...' : 'Loading chefs...'}</p>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
-              <textarea
-                value={productionForm.notes}
-                onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
-                placeholder={t.notesPlaceholder}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                rows={3}
-                aria-label={t.notes}
-              />
-              {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-              {productionForm.items.map((item, index) => {
-                const itemDeptId = productDepartmentMap[item.product] || '';
-                const itemChefOptions = getChefOptions(itemDeptId);
-                const isProductDisabled = !!preselectedItem && index === 0;
-                return (
-                  <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                    <ProductDropdown
-                      value={item.product}
-                      onChange={(value) => handleProductChange(index, value)}
-                      options={productOptions}
-                      ariaLabel={`${t.items} ${index + 1}`}
-                      placeholder={t.selectProduct}
-                      disabled={isProductDisabled}
-                    />
-                    {productionErrors[`item_${index}_product`] && (
-                      <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
-                    )}
-                    {!isChef && (
-                      <>
-                        <ProductDropdown
-                          value={item.assignedTo}
-                          onChange={(value) => handleChefChange(index, value)}
-                          options={itemChefOptions}
-                          ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
-                          placeholder={t.selectChef}
-                        />
-                        {productionErrors[`item_${index}_assignedTo`] && (
-                          <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
-                        )}
-                      </>
-                    )}
-                    {isChef && (
-                      <p className="text-sm text-gray-600">
-                        {t.chef}: {isRtl ? user?.name : user?.nameEn || user?.name}
-                      </p>
-                    )}
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
-                        <QuantityInput
-                          value={item.quantity}
-                          onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                          onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                          onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
-                        />
-                        {productionErrors[`item_${index}_quantity`] && (
-                          <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
-                        )}
-                      </div>
-                      {productionForm.items.length > 1 && (
-                        <button
-                          onClick={() => removeItemFromForm(index)}
-                          className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
-                          aria-label={t.removeItem}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              <button
-                onClick={addItemToForm}
-                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                aria-label={t.addItem}
-              >
-                <Plus className="w-4 h-4" />
-                {t.addItem}
-              </button>
-              {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
-            </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={createProductionMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
-              >
-                {createProductionMutation.isLoading ? t.submitting : t.submit}
-              </button>
-            </div>
-          </div>
-        )}
-      </motion.div>
-    </motion.div>
-  );
-};
-
 export const FactoryInventory: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -763,18 +376,18 @@ export const FactoryInventory: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
-  const [preselectedItem, setPreselectedItem] = useState<FactoryInventoryItem | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FactoryInventoryItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [] });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
+  const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
   const ITEMS_PER_PAGE = 10;
   const isChef = user?.role === 'chef';
-
   // Custom debounce hook
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
@@ -786,7 +399,6 @@ export const FactoryInventory: React.FC = () => {
     return [value, setValue, debouncedValue] as const;
   };
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
-
   // Inventory Query
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
     FactoryInventoryItem[],
@@ -794,15 +406,12 @@ export const FactoryInventory: React.FC = () => {
   >({
     queryKey: ['factoryInventory', debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
-      let params: any = {
+      const params = {
         product: debouncedSearchQuery || undefined,
         department: filterDepartment || undefined,
         stockStatus: filterStatus || undefined,
         lang: language,
       };
-      if (user.role === 'chef' && user.department?._id) {
-        params.department = user.department._id;
-      }
       const response = await factoryInventoryAPI.getAll(params);
       console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
@@ -856,7 +465,6 @@ export const FactoryInventory: React.FC = () => {
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
   });
-
   // Chefs Query
   const { data: chefsData, isLoading: chefsLoading } = useQuery<Chef[], Error>({
     queryKey: ['chefs', language],
@@ -879,7 +487,6 @@ export const FactoryInventory: React.FC = () => {
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
-
   // Product History Query
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
     queryKey: ['factoryProductHistory', selectedProductId, language],
@@ -904,7 +511,6 @@ export const FactoryInventory: React.FC = () => {
       toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
-
   // Factory Orders Query for inProduction flag
   const { data: factoryOrdersData } = useQuery<FactoryOrder[], Error>({
     queryKey: ['factoryOrders', language],
@@ -926,16 +532,15 @@ export const FactoryInventory: React.FC = () => {
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
-
   // Available products
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await factoryOrdersAPI.getAvailableProducts();
-        console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Response:`, response);
+        const response = await factoryInventoryAPI.getAvailableProducts();
+        console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
         const products = Array.isArray(response) ? response : response?.data || response?.products || [];
         if (!Array.isArray(products)) {
-          console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
+          console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
           setAvailableProducts([]);
           return;
         }
@@ -961,7 +566,6 @@ export const FactoryInventory: React.FC = () => {
     };
     fetchProducts();
   }, [isRtl, t, isChef, user]);
-
   // Socket Events
   useEffect(() => {
     if (!socket || !user?.role || !isConnected) return;
@@ -1077,7 +681,6 @@ export const FactoryInventory: React.FC = () => {
       clearInterval(reconnectInterval);
     };
   }, [socket, user, isConnected, queryClient, addNotification, t, isRtl, selectedProductId]);
-
   // Department options
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
@@ -1103,7 +706,6 @@ export const FactoryInventory: React.FC = () => {
       })),
     ];
   }, [inventoryData, isRtl, t]);
-
   // Status options
   const statusOptions = useMemo(
     () => [
@@ -1114,7 +716,17 @@ export const FactoryInventory: React.FC = () => {
     ],
     [t]
   );
-
+  // Product options
+  const productOptions = useMemo(
+    () => [
+      { value: '', label: t.selectProduct },
+      ...availableProducts.map((product) => ({
+        value: product.productId,
+        label: `${product.productName} (${t.unit}: ${product.unit}) - ${product.departmentName}`,
+      })),
+    ],
+    [availableProducts, t]
+  );
   // Product to department map
   const productDepartmentMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1125,7 +737,25 @@ export const FactoryInventory: React.FC = () => {
     });
     return map;
   }, [availableProducts]);
-
+  // Get chef options for a specific department
+  const getChefOptions = useCallback(
+    (departmentId: string) => {
+      const options = [
+        { value: '', label: t.selectChef },
+        ...chefsData
+          ?.filter((chef) => chef.department?._id === departmentId)
+          .map((chef) => ({
+            value: chef._id,
+            label: isRtl
+              ? chef.user.name || chef.user.nameEn || `شيف بدون اسم (${chef._id})`
+              : chef.user.nameEn || chef.user.name || `Unnamed Chef (${chef._id})`,
+          })) || [],
+      ];
+      console.log(`[${new Date().toISOString()}] chefOptions for dept ${departmentId}:`, options);
+      return options;
+    },
+    [chefsData, isRtl, t]
+  );
   // Filtered and paginated inventory
   const filteredInventory = useMemo(
     () =>
@@ -1145,34 +775,37 @@ export const FactoryInventory: React.FC = () => {
     [filteredInventory, currentPage]
   );
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
-
   // Handlers
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
     setCurrentPage(1);
   }, []);
-
   const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
-    if (item && isChef && item.product.department?._id !== user.department._id) {
-      toast.error(t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
+    dispatchProductionForm({ type: 'RESET' });
+    if (item?.product) {
+      dispatchProductionForm({
+        type: 'ADD_ITEM',
+        payload: {
+          product: item.product._id,
+          quantity: 1,
+          assignedTo: isChef ? user?._id || '' : '',
+        },
+      });
+    } else {
+      dispatchProductionForm({
+        type: 'ADD_ITEM',
+        payload: { product: '', quantity: 1, assignedTo: isChef ? user?._id || '' : '' },
+      });
     }
-    setPreselectedItem(item || null);
+    setProductionErrors({});
     setIsProductionModalOpen(true);
-  }, [isChef, user, t, isRtl]);
-
-  const handleCloseProductionModal = useCallback(() => {
-    setIsProductionModalOpen(false);
-    setPreselectedItem(null);
-  }, []);
-
+  }, [isChef, user]);
   const handleOpenEditModal = useCallback((item: FactoryInventoryItem) => {
     setSelectedItem(item);
     setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
   }, []);
-
   const handleOpenDetailsModal = useCallback((item: FactoryInventoryItem) => {
     if (item.product && isValidObjectId(item.product._id)) {
       setSelectedProductId(item.product._id);
@@ -1181,7 +814,98 @@ export const FactoryInventory: React.FC = () => {
       toast.error(t.errors.invalidProductId, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [t, isRtl]);
-
+  const addItemToForm = useCallback(() => {
+    dispatchProductionForm({
+      type: 'ADD_ITEM',
+      payload: { product: '', quantity: 1, assignedTo: isChef ? user?._id || '' : '' },
+    });
+  }, [isChef, user]);
+  const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
+    if (field === 'quantity' && typeof value === 'string') {
+      const numValue = parseInt(value, 10);
+      if (isNaN(numValue) || numValue < 1) {
+        setProductionErrors((prev) => ({
+          ...prev,
+          [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
+        }));
+        return;
+      }
+      value = numValue;
+    }
+    dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+  }, [t]);
+  const handleProductChange = useCallback(
+    (index: number, productId: string) => {
+      if (!isValidObjectId(productId)) {
+        setProductionErrors((prev) => ({
+          ...prev,
+          [`item_${index}_product`]: t.errors.invalidProductId,
+        }));
+        return;
+      }
+      if (productionForm.items.some((item, i) => i !== index && item.product === productId)) {
+        setProductionErrors((prev) => ({
+          ...prev,
+          [`item_${index}_product`]: t.errors.duplicateProduct,
+        }));
+        return;
+      }
+      dispatchProductionForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'product', value: productId },
+      });
+    },
+    [t, productionForm.items]
+  );
+  const handleChefChange = useCallback(
+    (index: number, chefId: string) => {
+      if (!isValidObjectId(chefId)) {
+        setProductionErrors((prev) => ({
+          ...prev,
+          [`item_${index}_assignedTo`]: t.errors.invalidChefId,
+        }));
+        return;
+      }
+      dispatchProductionForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'assignedTo', value: chefId },
+      });
+    },
+    [t]
+  );
+  const removeItemFromForm = useCallback((index: number) => {
+    dispatchProductionForm({ type: 'REMOVE_ITEM', payload: index });
+    setProductionErrors((prev) => {
+      const newErrors = { ...prev };
+      Object.keys(newErrors).forEach((key) => {
+        if (key.startsWith(`item_${index}_`)) delete newErrors[key];
+      });
+      return newErrors;
+    });
+  }, []);
+  const validateProductionForm = useCallback(() => {
+    const errors: Record<string, string> = {};
+    if (productionForm.items.length === 0) {
+      errors.items = t.errors.required.replace('{field}', t.items);
+    }
+    productionForm.items.forEach((item, index) => {
+      if (!item.product) {
+        errors[`item_${index}_product`] = t.errors.required.replace('{field}', t.items);
+      } else if (!isValidObjectId(item.product)) {
+        errors[`item_${index}_product`] = t.errors.invalidProductId;
+      }
+      if (!item.assignedTo) {
+        errors[`item_${index}_assignedTo`] = t.errors.required.replace('{field}', t.chef);
+      } else if (!isValidObjectId(item.assignedTo)) {
+        errors[`item_${index}_assignedTo`] = t.errors.invalidChefId;
+      }
+      if (item.quantity < 1 || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax;
+      }
+    });
+    setProductionErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [productionForm, t]);
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (editForm.minStockLevel < 0) {
@@ -1196,23 +920,22 @@ export const FactoryInventory: React.FC = () => {
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
-
-  const createProductionMutation = useMutation<{ orderId: string; orderNumber: string }, Error, { productionForm: ProductionFormState; user: any; socket: any; isConnected: boolean; isRtl: boolean; t: any }>({
-    mutationFn: async ({ productionForm, user }) => {
+  const createProductionMutation = useMutation<{ orderId: string; orderNumber: string }, Error, void>({
+    mutationFn: async () => {
+      if (!validateProductionForm()) {
+        throw new Error(t.errors.invalidForm);
+      }
       if (!user?.id) {
         throw new Error('User not authenticated');
       }
       const aggregatedItems = aggregateItemsByProduct(productionForm.items);
       if (aggregatedItems.length === 0) {
-        if (productionForm.items.some(item => item.product && !item.assignedTo && !isChef)) {
-          throw new Error(t.errors.required.replace('{field}', t.chef));
-        }
         throw new Error(t.errors.noItemSelected);
       }
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
         items: aggregatedItems.map((item) => ({
-          product: item.product,
+          productId: item.product,
           quantity: item.quantity,
           assignedTo: item.assignedTo,
         })),
@@ -1227,10 +950,12 @@ export const FactoryInventory: React.FC = () => {
         orderNumber: response?.orderNumber || data.orderNumber,
       };
     },
-    onSuccess: (data, variables) => {
-      const { socket, isConnected, isRtl, t } = variables;
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
+      setIsProductionModalOpen(false);
+      dispatchProductionForm({ type: 'RESET' });
+      setProductionErrors({});
       toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
       if (socket && isConnected) {
         socket.emit('factoryOrderCreated', {
@@ -1242,14 +967,19 @@ export const FactoryInventory: React.FC = () => {
         });
       }
     },
-    onError: (err: any, variables) => {
-      const { t, isRtl } = variables;
+    onError: (err: any) => {
       console.error(`[${new Date().toISOString()}] Create production order error:`, err.message);
       let errorMessage = err.message || t.errors.createProduction;
       if (err.response?.status === 429) {
         errorMessage = t.errors.tooManyRequests;
       } else if (err.response?.data?.errors?.length > 0) {
         errorMessage = err.response.data.errors.map((e: any) => e.msg).join(', ');
+        err.response.data.errors.forEach((e: any, index: number) => {
+          setProductionErrors((prev) => ({
+            ...prev,
+            [`item_${index}_${e.path}`]: e.msg,
+          }));
+        });
       } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
         errorMessage = t.errors.invalidProductId;
       } else if (err.message.includes('معرف الشيف غير صالح') || err.message.includes('Invalid chef ID')) {
@@ -1258,9 +988,9 @@ export const FactoryInventory: React.FC = () => {
         errorMessage = t.errors.productNotFound;
       }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      setProductionErrors((prev) => ({ ...prev, form: errorMessage }));
     },
   });
-
   const updateInventoryMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       if (!validateEditForm()) {
@@ -1301,7 +1031,6 @@ export const FactoryInventory: React.FC = () => {
       setEditErrors({ form: errorMessage });
     },
   });
-
   const errorMessage = inventoryError?.message || '';
   return (
     <div className="mx-auto px-4 py-4 max-w-7xl">
@@ -1483,15 +1212,13 @@ export const FactoryInventory: React.FC = () => {
                     >
                       <Edit className="w-4 h-4" />
                     </button>
-                    {(isChef ? item.product.department?._id === user.department._id : true) && (
-                      <button
-                        onClick={() => handleOpenProductionModal(item)}
-                        className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
-                        aria-label={t.create}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleOpenProductionModal(item)}
+                      className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.create}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
                   </div>
                 </motion.div>
               ) : null
@@ -1522,21 +1249,148 @@ export const FactoryInventory: React.FC = () => {
           </button>
         </div>
       )}
-      <ProductionOrderForm
-        isOpen={isProductionModalOpen}
-        onClose={handleCloseProductionModal}
-        preselectedItem={preselectedItem}
-        availableProducts={availableProducts}
-        chefsData={chefsData || []}
-        isChef={isChef}
-        user={user}
-        productDepartmentMap={productDepartmentMap}
-        createProductionMutation={createProductionMutation}
-        t={t}
-        isRtl={isRtl}
-        socket={socket}
-        isConnected={isConnected}
-      />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isProductionModalOpen ? '' : 'pointer-events-none'
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.create}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 20 }}
+          animate={{ scale: isProductionModalOpen ? 1 : 0.95, y: isProductionModalOpen ? 0 : 20 }}
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
+            <button
+              onClick={() => {
+                setIsProductionModalOpen(false);
+                dispatchProductionForm({ type: 'RESET' });
+                setProductionErrors({});
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+              aria-label={t.cancel}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {chefsLoading && !isChef ? (
+            <p className="text-gray-600 text-sm">{isRtl ? 'جاري تحميل الشيفات...' : 'Loading chefs...'}</p>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
+                <textarea
+                  value={productionForm.notes}
+                  onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
+                  placeholder={t.notesPlaceholder}
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+                  rows={3}
+                  aria-label={t.notes}
+                />
+                {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
+                {productionForm.items.map((item, index) => {
+                  const itemDeptId = productDepartmentMap[item.product] || '';
+                  const itemChefOptions = getChefOptions(itemDeptId);
+                  return (
+                    <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <ProductDropdown
+                        value={item.product}
+                        onChange={(value) => handleProductChange(index, value)}
+                        options={productOptions}
+                        ariaLabel={`${t.items} ${index + 1}`}
+                        placeholder={t.selectProduct}
+                      />
+                      {productionErrors[`item_${index}_product`] && (
+                        <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
+                      )}
+                      {!isChef && (
+                        <>
+                          <ProductDropdown
+                            value={item.assignedTo}
+                            onChange={(value) => handleChefChange(index, value)}
+                            options={itemChefOptions}
+                            ariaLabel={`${t.items} ${index + 1} ${t.chef}`}
+                            placeholder={t.selectChef}
+                          />
+                          {productionErrors[`item_${index}_assignedTo`] && (
+                            <p className="text-red-600 text-xs">{productionErrors[`item_${index}_assignedTo`]}</p>
+                          )}
+                        </>
+                      )}
+                      {isChef && (
+                        <p className="text-sm text-gray-600">
+                          {t.chef}: {isRtl ? user?.name : user?.nameEn || user?.name}
+                        </p>
+                      )}
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                          <QuantityInput
+                            value={item.quantity}
+                            onChange={(val) => updateItemInForm(index, 'quantity', val)}
+                            onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
+                            onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
+                          />
+                          {productionErrors[`item_${index}_quantity`] && (
+                            <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
+                          )}
+                        </div>
+                        {productionForm.items.length > 1 && (
+                          <button
+                            onClick={() => removeItemFromForm(index)}
+                            className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
+                            aria-label={t.removeItem}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={addItemToForm}
+                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                  aria-label={t.addItem}
+                >
+                  <Plus className="w-4 h-4" />
+                  {t.addItem}
+                </button>
+                {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setIsProductionModalOpen(false);
+                    dispatchProductionForm({ type: 'RESET' });
+                    setProductionErrors({});
+                  }}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                  aria-label={t.cancel}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={() => createProductionMutation.mutate()}
+                  disabled={createProductionMutation.isLoading}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                  aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
+                >
+                  {createProductionMutation.isLoading ? t.submitting : t.submit}
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isEditModalOpen ? 1 : 0 }}
@@ -1694,5 +1548,4 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
-
 export default FactoryInventory;
