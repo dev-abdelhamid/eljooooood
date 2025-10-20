@@ -1137,11 +1137,13 @@ export const factoryInventoryAPI = {
 };
 
 
+
+// Updated factoryOrdersAPI with fixed error handling
 export const factoryOrdersAPI = {
   // إنشاء طلب إنتاج جديد
   create: async (data: {
     orderNumber: string;
-    items: { product: string; quantity: number; assignedTo?: string }[];
+    items: { productId: string; quantity: number; assignedTo?: string }[];
     notes?: string;
     priority?: string;
   }) => {
@@ -1152,7 +1154,7 @@ export const factoryOrdersAPI = {
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
       data.items.some(
-        (item) => !isValidObjectId(item.product) || !Number.isInteger(item.quantity) || item.quantity < 1
+        (item) => !isValidObjectId(item.productId) || !Number.isInteger(item.quantity) || item.quantity < 1
       )
     ) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - البيانات غير صالحة:`, data);
@@ -1162,7 +1164,7 @@ export const factoryOrdersAPI = {
       const response = await api.post('/factoryOrders', {
         orderNumber: data.orderNumber.trim(),
         items: data.items.map((item) => ({
-          product: item.product,
+          productId: item.productId,
           quantity: item.quantity,
           assignedTo: item.assignedTo,
         })),
@@ -1176,6 +1178,7 @@ export const factoryOrdersAPI = {
       throw new Error(createErrorMessage('invalidData', localStorage.getItem('language') === 'ar'));
     }
   },
+
 
   // استرجاع جميع طلبات الإنتاج مع معايير اختيارية
   getAll: async (query: Record<string, any> = {}) => {
