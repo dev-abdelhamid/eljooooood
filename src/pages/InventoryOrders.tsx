@@ -6,13 +6,11 @@ import { Card } from '../components/UI/Card';
 import { Select } from '../components/UI/Select';
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
-import { ProductSearchInput } from './OrdersTablePage';
-import {  ProductDropdown } from './FactoryInventory';
-
+import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid, Plus, MinusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI  , isValidObjectId} from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI, departmentAPI, factoryInventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem, User } from '../types/types';
@@ -22,6 +20,7 @@ import OrderTable from '../components/production/OrderTable';
 import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
+
 const QuantityInput = ({
   value,
   onChange,
@@ -79,6 +78,7 @@ const QuantityInput = ({
     </div>
   );
 };
+
 const normalizeText = (text: string) => {
   return text
     .normalize('NFD')
@@ -89,6 +89,7 @@ const normalizeText = (text: string) => {
     .toLowerCase()
     .trim();
 };
+
 interface State {
   orders: FactoryOrder[];
   selectedOrder: FactoryOrder | null;
@@ -114,6 +115,7 @@ interface State {
   viewMode: 'card' | 'table';
   formErrors: Record<string, string>;
 }
+
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -139,6 +141,7 @@ const initialState: State = {
   viewMode: 'card',
   formErrors: {},
 };
+
 const reducer = (state: State, action: any): State => {
   switch (action.type) {
     case 'SET_ORDERS':
