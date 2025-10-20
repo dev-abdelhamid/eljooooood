@@ -231,16 +231,16 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 20;
 
-  // Title
+  // Title (Centered)
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
-  doc.setFontSize(20);
+  doc.setFontSize(22);
   doc.setTextColor(33, 33, 33);
-  const titleWidth = doc.getTextWidth(title);
-  const titleX = isRtl ? pageWidth - margin - titleWidth : margin;
-  doc.text(title, titleX, 20, { align: isRtl ? 'right' : 'left' });
+  const titleText = `${title} - ${monthName}`;
+  const titleWidth = doc.getTextWidth(titleText);
+  doc.text(titleText, pageWidth / 2, 20, { align: 'center' });
 
   // Statistics
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
@@ -253,7 +253,7 @@ const generatePDFHeader = (
   // Divider Line
   doc.setLineWidth(0.5);
   doc.setDrawColor(245, 158, 11);
-  doc.line(margin, 25, pageWidth - margin, 25);
+  doc.line(margin, 26, pageWidth - margin, 26);
 
   // Footer on all pages
   const pageCount = doc.getNumberOfPages();
@@ -284,17 +284,27 @@ const generatePDFTable = (
 ) => {
   const numColumns = headers.length;
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 10;
+  const margin = 20; // Increased margin for centering
   const maxTableWidth = pageWidth - 2 * margin;
-  const firstThreeWidths = [20, 15, 15]; // Reduced widths for name, price, code
-  const otherColumnWidth = Math.max(10, (maxTableWidth - firstThreeWidths.reduce((a, b) => a + b, 0)) / (numColumns - 3));
-  const columnStyles = headers.reduce((styles, _, i) => {
+  
+  // Dynamic widths for first three columns based on content
+  const nameWidth = Math.min(35, Math.max(25, doc.getTextWidth(headers[0]) * 1.2));
+  const priceWidth = Math.min(20, Math.max(15, doc.getTextWidth(headers[1]) * 1.2));
+  const codeWidth = Math.min(20, Math.max(15, doc.getTextWidth(headers[2]) * 1.2));
+  const firstThreeWidths = [nameWidth, priceWidth, codeWidth];
+  const maxColumnWidth = 30;
+  const otherColumnWidth = Math.min(
+    maxColumnWidth,
+    Math.max(10, (maxTableWidth - firstThreeWidths.reduce((a, b) => a + b, 0)) / (numColumns - 3))
+  );
+  const columnStyles = headers.reduce((styles, header, i) => {
     const index = isRtl ? numColumns - 1 - i : i;
     styles[index] = {
       cellWidth: i < 3 ? firstThreeWidths[i] : otherColumnWidth,
       halign: 'center',
       valign: 'middle',
       overflow: 'linebreak',
+      maxWidth: i < 3 ? firstThreeWidths[i] : maxColumnWidth,
     };
     return styles;
   }, {});
@@ -305,28 +315,28 @@ const generatePDFTable = (
     theme: 'grid',
     startY: 30,
     margin: { top: 30, bottom: 15, left: margin, right: margin },
-    tableWidth: 'auto',
+    tableWidth: maxTableWidth, // Center table by setting fixed width
     columnStyles,
     headStyles: {
       fillColor: [245, 158, 11],
       textColor: [255, 255, 255],
-      fontSize: 8,
+      fontSize: 9,
       halign: 'center',
       valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
-      cellPadding: 1.5,
+      cellPadding: 1.2,
       minCellHeight: 8,
     },
     bodyStyles: {
-      fontSize: 7,
+      fontSize: 8,
       halign: 'center',
       valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
-      cellPadding: 1.5,
+      cellPadding: 1.2,
       minCellHeight: 6,
     },
     alternateRowStyles: {
@@ -336,7 +346,6 @@ const generatePDFTable = (
       if (hookData.section === 'body' || hookData.section === 'head') {
         hookData.cell.text = hookData.cell.text.map(text => {
           let processedText = text;
-          // Skip code column (index 2 in LTR, numColumns-3 in RTL) for Arabic numeral conversion
           if ((isRtl && hookData.column.index !== numColumns - 3) || (!isRtl && hookData.column.index !== 2)) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
           }
@@ -403,9 +412,9 @@ const exportToExcel = (dataRows: any[], headers: string[], monthName: string, is
     const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 20 }, // Name
-      { wch: 15 }, // Price
-      { wch: 15 }, // Code
+      { wch: 30 }, // Name
+      { wch: 18 }, // Price
+      { wch: 18 }, // Code
       ...Array(headers.length - 5).fill({ wch: 15 }), // Branches
       { wch: 15 }, // Total
       { wch: 15 }, // Unit
@@ -675,33 +684,33 @@ const DailyOrdersSummary: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+          className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white mx-auto max-w-full"
         >
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
+          <table className="w-full divide-y divide-gray-200 text-sm table-auto">
             <thead className="bg-amber-50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'الاسم' : 'Name'}</th>
-                <th className="px-1 py-3 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'السعر' : 'Price'}</th>
-                <th className="px-1 py-3 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[150px] max-w-[220px] w-[20%]">{isRtl ? 'الاسم' : 'Name'}</th>
+                <th className="px-1 py-3 font-semibold text-gray-700 text-center min-w-[80px] max-w-[120px] w-[10%]">{isRtl ? 'السعر' : 'Price'}</th>
+                <th className="px-1 py-3 font-semibold text-gray-700 text-center min-w-[80px] max-w-[120px] w-[10%]">{isRtl ? 'الكود' : 'Code'}</th>
                 {allBranches.map((branch) => (
-                  <th key={branch} className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                  <th key={branch} className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[100px] max-w-[160px] w-[10%]">
                     {branch}
                   </th>
                 ))}
-                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
-                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة' : 'Unit'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[100px] max-w-[140px] w-[10%]">{isRtl ? 'الإجمالي' : 'Total'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[100px] max-w-[140px] w-[10%]">{isRtl ? 'وحدة' : 'Unit'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredData.map((row) => (
                 <tr key={row.id} className="hover:bg-amber-50 transition-colors duration-200">
-                  <td className="px-2 py-3 text-gray-700 text-center truncate">{row.product}</td>
-                  <td className="px-1 py-3 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-1 py-3 text-gray-700 text-center">{row.code}</td>
+                  <td className="px-2 py-3 text-gray-700 text-center truncate max-w-[220px]">{row.product}</td>
+                  <td className="px-1 py-3 text-gray-700 text-center max-w-[120px]">{formatPrice(row.price, isRtl)}</td>
+                  <td className="px-1 py-3 text-gray-700 text-center max-w-[120px]">{row.code}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
-                      className={`px-2 py-3 text-center font-medium ${
+                      className={`px-2 py-3 text-center font-medium max-w-[160px] ${
                         row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
                       }`}
                       data-tooltip-id="branch-tooltip"
@@ -710,21 +719,21 @@ const DailyOrdersSummary: React.FC = () => {
                       {row.branchQuantities[branch] !== 0 ? formatNumber(row.branchQuantities[branch] || 0, isRtl) : '0'}
                     </td>
                   ))}
-                  <td className="px-2 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
-                  <td className="px-2 py-3 text-gray-700 text-center">{row.unit}</td>
+                  <td className="px-2 py-3 text-gray-700 text-center font-medium max-w-[140px]">{formatNumber(row.totalQuantity, isRtl)}</td>
+                  <td className="px-2 py-3 text-gray-700 text-center max-w-[140px]">{row.unit}</td>
                 </tr>
               ))}
               <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-2 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
-                <td className="px-1 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-                <td className="px-1 py-3 text-gray-800 text-center"></td>
+                <td className="px-2 py-3 text-gray-800 text-center max-w-[220px]">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                <td className="px-1 py-3 text-gray-800 text-center max-w-[120px]">{formatPrice(grandTotalPrice, isRtl)}</td>
+                <td className="px-1 py-3 text-gray-800 text-center max-w-[120px]"></td>
                 {allBranches.map((branch) => (
-                  <td key={branch} className="px-2 py-3 text-gray-800 text-center">
+                  <td key={branch} className="px-2 py-3 text-gray-800 text-center max-w-[160px]">
                     {formatNumber(filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0), isRtl)}
                   </td>
                 ))}
-                <td className="px-2 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-                <td className="px-2 py-3 text-gray-800 text-center"></td>
+                <td className="px-2 py-3 text-gray-800 text-center max-w-[140px]">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                <td className="px-2 py-3 text-gray-800 text-center max-w-[140px]"></td>
               </tr>
             </tbody>
           </table>
