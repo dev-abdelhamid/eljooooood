@@ -12,10 +12,8 @@ import autoTable from 'jspdf-autotable';
 import {
   startOfDay,
   endOfDay,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
+  subDays,
+  subMonths,
   format,
   isWithinInterval,
   parseISO,
@@ -45,8 +43,8 @@ interface Branch {
 // Period options
 const PERIOD_OPTIONS = [
   { value: 'today', labelAr: 'اليوم', labelEn: 'Today' },
-  { value: 'week', labelAr: 'هذا الأسبوع', labelEn: 'This Week' },
-  { value: 'month', labelAr: 'هذا الشهر', labelEn: 'This Month' },
+  { value: 'week', labelAr: 'آخر 7 أيام', labelEn: 'Last 7 Days' },
+  { value: 'month', labelAr: 'آخر 30 يوم', labelEn: 'Last 30 Days' },
   { value: 'custom', labelAr: 'فترة مخصصة', labelEn: 'Custom Range' },
 ];
 
@@ -258,33 +256,32 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 15;
 
-  doc.setFillColor(245, 158, 11);
-  doc.rect(0, 0, pageWidth, 40, 'F');
+  doc.setFillColor(220, 220, 220); // لون خلفية هيدر أكثر هدوءًا
+  doc.rect(0, 0, pageWidth, 20, 'F');
 
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.setTextColor(255, 255, 255);
-  const titleX = isRtl ? pageWidth - margin : margin;
-  doc.text(title, titleX, 25, { align: isRtl ? 'right' : 'left' });
+  doc.setFontSize(14);
+  doc.setTextColor(50, 50, 50);
 
-  doc.setFontSize(10);
-  doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
-  doc.setTextColor(255, 240, 220);
+  // العنوان على اليمين والإحصائيات على اليسار في نفس السطر
+  const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
+  doc.text(title, titleX, 15, { align: isRtl ? 'left' : 'right' });
+
   const stats = isRtl
     ? `المنتجات: ${toArabicNumerals(totalItems)} | الكمية: ${toArabicNumerals(totalQuantity)} وحدة | المبلغ: ${formatPrice(totalPrice, isRtl)}`
     : `Products: ${totalItems} | Quantity: ${totalQuantity} units | Amount: ${formatPrice(totalPrice, isRtl)}`;
-  const statsX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(stats);
-  doc.text(`الفترة: ${periodLabel} | ${stats}`, statsX, 35, { align: isRtl ? 'left' : 'right' });
+  const statsX = isRtl ? pageWidth - margin - doc.getTextWidth(stats) : margin;
+  doc.text(stats, statsX, 15, { align: isRtl ? 'right' : 'left' });
 
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.5);
-  doc.line(margin, 45, pageWidth - margin, 45);
+  doc.line(margin, 22, pageWidth - margin, 22);
 
-  const currentDate = new Date('2025-10-21T14:31:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T14:52:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
+  doc.setTextColor(100, 100, 100);
   const footerText = isRtl
     ? `نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
     : `Elgoodia Management System - ${currentDate}`;
@@ -309,8 +306,8 @@ const generatePDFTable = (
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 50,
-    margin: { top: 50, bottom: 15, left: margin, right: margin },
+    startY: 25,
+    margin: { top: 25, bottom: 15, left: margin, right: margin },
     tableWidth: 'auto',
     columnStyles: headers.reduce((styles, _, i) => {
       const index = isRtl ? numColumns - 1 - i : i;
@@ -318,8 +315,8 @@ const generatePDFTable = (
       return styles;
     }, {}),
     headStyles: {
-      fillColor: [245, 158, 11],
-      textColor: [255, 255, 255],
+      fillColor: [220, 220, 220], // لون هيدر الجدول متوافق مع التصميم
+      textColor: [50, 50, 50],
       fontSize: 10,
       halign: 'center',
       valign: 'middle',
@@ -405,10 +402,10 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
     const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 22 }, // Name
+      { wch: 25 }, // Name
       { wch: 15 }, // Price
-      { wch: 15 }, // Code
-      ...Array(headers.length - 5).fill({ wch: 14 }),
+      { wch: 20 }, // Code
+      ...Array(headers.length - 5).fill({ wch: 15 }),
       { wch: 15 }, // Total
       { wch: 12 }, // Unit
     ];
@@ -454,10 +451,8 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T14:31:00'); // Current date and time
+    const now = new Date('2025-10-21T14:52:00'); // Current date and time
     let start: Date, end: Date;
-
-    const weekOptions = { weekStartsOn: 1, locale: isRtl ? arSA : undefined };
 
     switch (selectedPeriod) {
       case 'today':
@@ -465,12 +460,12 @@ const DailyOrdersSummary: React.FC = () => {
         end = endOfDay(now);
         break;
       case 'week':
-        start = startOfWeek(now, weekOptions);
-        end = endOfWeek(now, weekOptions);
+        start = subDays(now, 6); // Last 7 days including today
+        end = endOfDay(now);
         break;
       case 'month':
-        start = startOfMonth(now);
-        end = endOfMonth(now);
+        start = subMonths(now, 1); // Last 30 days
+        end = endOfDay(now);
         break;
       case 'custom':
         if (!customStartDate || !customEndDate) return null;
@@ -486,8 +481,8 @@ const DailyOrdersSummary: React.FC = () => {
     }
 
     return {
-      start: start.toISOString(),
-      end: end.toISOString(),
+      start: start.toISOString().split('T')[0], // Only date part for API compatibility
+      end: end.toISOString().split('T')[0], // Only date part for API compatibility
       label: selectedPeriod === 'custom'
         ? `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`
         : periodOptions.find((p) => p.value === selectedPeriod)?.label || '',
@@ -540,7 +535,7 @@ const DailyOrdersSummary: React.FC = () => {
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
         if (item?.product?._id) {
           productDetails.set(item.product._id, {
-            code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
+            code: item.product.code || '',
             product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
             unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
             price: Number(item.product.price) || 0,
@@ -555,10 +550,16 @@ const DailyOrdersSummary: React.FC = () => {
 
       const orderMap = new Map<string, OrderRow>();
       orders.forEach((order: any) => {
-        const orderDate = parseISO(order.createdAt || order.date || '');
-        if (isNaN(orderDate.getTime())) return;
+        const orderDate = parseISO(order.createdAt || order.date || '1970-01-01');
+        if (isNaN(orderDate.getTime())) {
+          console.warn('Invalid order date:', order.createdAt || order.date);
+          return;
+        }
 
-        if (!isWithinInterval(orderDate, { start: parseISO(dateRange.start), end: parseISO(dateRange.end) })) return;
+        if (!isWithinInterval(orderDate, { start: parseISO(dateRange.start), end: parseISO(dateRange.end) })) {
+          console.log('Order excluded:', orderDate, dateRange);
+          return;
+        }
 
         const branchId = order.branch?._id || order.branch || order.branchId;
         const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
@@ -568,7 +569,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!productId) return;
 
           const details = productDetails.get(productId) || {
-            code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+            code: item.product?.code || '',
             product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
             unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
             price: Number(item.price) || 0,
