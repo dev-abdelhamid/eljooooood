@@ -409,7 +409,7 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
     const sheetData = isRtl ? dataRows.map(row => row.slice().reverse()) : dataRows;
     const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
     const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
-    if ( toArabicNumerals ) ws['!views'] = [{ RTL: true }];
+    if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
       { wch: 20 }, // Name
       { wch: 15 }, // Price
@@ -682,7 +682,7 @@ const DailyOrdersSummary: React.FC = () => {
                   <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="px-3 py-1.5 border rounded text-sm" />
                   <span className="text-gray-600">—</span>
                   <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="px-3 py-1.5 border rounded text-sm" />
- vaping                </div>
+                </div>
               )}
               <Button
                 variant={filteredData.length > 0 ? 'primary' : 'secondary'}
