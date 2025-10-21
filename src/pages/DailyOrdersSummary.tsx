@@ -179,7 +179,7 @@ const formatPrice = (amount: number, isRtl: boolean): string => {
 };
 
 const formatNumber = (num: number, isRtl: boolean): string => {
-  return isRtl ? toArabicNumerals(num) : num.toString();
+  return isRtl ? toArabicNumerals(num.toString()) : num.toString();
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -433,7 +433,7 @@ const DailyOrdersSummary: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-  const currentDate = new Date();
+  const currentDate = new Date('2025-10-21T11:55:00'); // Today's date and time
   const currentYear = currentDate.getFullYear();
   const [selectedMonth, setSelectedMonth] = useState<string>(currentDate.getMonth().toString());
   const [orderData, setOrderData] = useState<OrderRow[]>([]);
@@ -530,7 +530,7 @@ const DailyOrdersSummary: React.FC = () => {
         if (isNaN(date.getTime())) return;
         const orderMonth = date.getMonth();
         const year = date.getFullYear();
-        if (year === currentYear && orderMonth === parseInt(selectedMonth)) {
+        if (year === currentYear && orderMonth === parseInt(selectedMonth) && status === 'completed') {
           const branchId = order.branch?._id || order.branch || order.branchId;
           const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
           (order.items || []).forEach((item: any) => {
