@@ -256,14 +256,13 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 15;
 
-  doc.setFillColor(220, 220, 220); // لون خلفية هيدر أكثر هدوءًا
+  doc.setFillColor(220, 220, 220);
   doc.rect(0, 0, pageWidth, 20, 'F');
 
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(50, 50, 50);
 
-  // العنوان على اليمين والإحصائيات على اليسار في نفس السطر
   const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
   doc.text(title, titleX, 15, { align: isRtl ? 'left' : 'right' });
 
@@ -277,7 +276,7 @@ const generatePDFHeader = (
   doc.setLineWidth(0.5);
   doc.line(margin, 22, pageWidth - margin, 22);
 
-  const currentDate = new Date('2025-10-21T15:57:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T16:19:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(8);
@@ -315,7 +314,7 @@ const generatePDFTable = (
       return styles;
     }, {}),
     headStyles: {
-      fillColor: [220, 220, 220], // لون هيدر الجدول متوافق مع التصميم
+      fillColor: [220, 220, 220],
       textColor: [50, 50, 50],
       fontSize: 10,
       halign: 'center',
@@ -451,7 +450,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T15:57:00'); // Updated to current time: 3:57 PM EEST
+    const now = new Date('2025-10-21T16:19:00'); // Updated to 04:19 PM EEST
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -460,11 +459,11 @@ const DailyOrdersSummary: React.FC = () => {
         end = endOfDay(now);
         break;
       case 'week':
-        start = subDays(now, 6); // Last 7 days including today
+        start = subDays(now, 6);
         end = endOfDay(now);
         break;
       case 'month':
-        start = subMonths(now, 1); // Last 30 days
+        start = subMonths(now, 1);
         end = endOfDay(now);
         break;
       case 'custom':
@@ -481,8 +480,8 @@ const DailyOrdersSummary: React.FC = () => {
     }
 
     return {
-      start: start.toISOString(), // Include full timestamp for accuracy
-      end: end.toISOString(),    // Include full timestamp for accuracy
+      start: start.toISOString(),
+      end: end.toISOString(),
       label: selectedPeriod === 'custom'
         ? `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`
         : periodOptions.find((p) => p.value === selectedPeriod)?.label || '',
@@ -535,7 +534,7 @@ const DailyOrdersSummary: React.FC = () => {
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
         if (item?.product?._id) {
           productDetails.set(item.product._id, {
-            code: item.product.code || '', // استخدام الكود مباشرة من المنتج
+            code: item.product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
             product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
             unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
             price: Number(item.product.price) || 0,
@@ -569,7 +568,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!productId) return;
 
           const details = productDetails.get(productId) || {
-            code: item.product?.code || '', // استخدام الكود من المنتج أو العنصر إذا كان موجودًا
+            code: item.product?.code || 'N/A', // تأكيد الكود من العنصر أو قيمة افتراضية
             product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
             unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
             price: Number(item.price) || 0,
@@ -579,7 +578,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!orderMap.has(key)) {
             orderMap.set(key, {
               id: key,
-              code: details.code, // عرض الكود بشكل صحيح من المرجع
+              code: details.code, // تأكيد الكود هنا
               product: details.product,
               unit: details.unit,
               price: details.price,
@@ -642,7 +641,7 @@ const DailyOrdersSummary: React.FC = () => {
       ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
-        row.code, // تأكيد عرض الكود بشكل صحيح
+        row.code, // تأكيد الكود هنا
         ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
