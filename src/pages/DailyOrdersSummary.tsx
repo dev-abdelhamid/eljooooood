@@ -6,16 +6,17 @@ import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { Tooltip } from 'react-tooltip';
+import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  format,
   startOfDay,
   endOfDay,
   startOfWeek,
   endOfWeek,
   startOfMonth,
   endOfMonth,
+  format,
   isWithinInterval,
   parseISO,
 } from 'date-fns';
@@ -60,9 +61,9 @@ const Button: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex items-center gap-2.5 rounded-xl px-6 py-3 text-sm font-bold transition-all duration-200 shadow-lg hover:shadow-xl ${
+    className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-200 ${
       variant === 'primary' && !disabled
-        ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white'
+        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-md hover:shadow-lg'
         : 'bg-gray-200 text-gray-500 cursor-not-allowed'
     } ${className}`}
   >
@@ -70,7 +71,7 @@ const Button: React.FC<{
   </button>
 );
 
-// ProductSearchInput
+// ProductSearchInput component
 const ProductSearchInput: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -88,7 +89,7 @@ const ProductSearchInput: React.FC<{
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center px-3 text-gray-400 group-focus-within:text-amber-500 transition-colors`}
+        className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center px-3 text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
@@ -100,7 +101,7 @@ const ProductSearchInput: React.FC<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-base placeholder-gray-500 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-base placeholder-gray-500 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -109,7 +110,7 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center px-3 text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
+          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center px-3 text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-5 h-5" />
@@ -119,7 +120,7 @@ const ProductSearchInput: React.FC<{
   );
 };
 
-// ProductDropdown
+// Enhanced ProductDropdown component
 const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
@@ -148,7 +149,7 @@ const ProductDropdown: React.FC<{
     <div className={`relative group ${className}`} ref={dropdownRef}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-sm font-medium text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
@@ -161,7 +162,7 @@ const ProductDropdown: React.FC<{
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
-            className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto"
+            className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-lg shadow-2xl max-h-60 overflow-y-auto scrollbar-none"
           >
             {options.map((option) => (
               <button
@@ -170,7 +171,7 @@ const ProductDropdown: React.FC<{
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className="w-full px-4 py-3 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition-colors text-left font-medium"
+                className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition-colors text-left"
               >
                 {option.label}
               </button>
@@ -237,13 +238,12 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
-const generateFileName = (prefix: string, periodLabel: string, isRtl: boolean): string => {
+const generateFileName = (prefix: string, periodLabel: string, isRtl: boolean, extension: string): string => {
   const dateStr = new Date().toISOString().split('T')[0];
   const sanitizedLabel = periodLabel.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
-  return `${prefix}_${sanitizedLabel}_${dateStr}.pdf`;
+  return `${prefix}_${sanitizedLabel}_${dateStr}.${extension}`;
 };
 
-// PDF Header (أنيق وواضح)
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
@@ -256,56 +256,47 @@ const generatePDFHeader = (
   fontLoaded: boolean
 ) => {
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 18;
+  const margin = 20;
 
-  // خلفية الهيدر
-  doc.setFillColor(245, 158, 11);
-  doc.rect(0, 0, pageWidth, 60, 'F');
-
-  // العنوان
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
-  doc.setFontSize(28);
-  doc.setTextColor(255, 255, 255);
-  const titleX = isRtl ? pageWidth - margin - 10 : margin + 10;
-  doc.text(title, titleX, 35, { align: isRtl ? 'right' : 'left' });
-
-  // الفترة
-  doc.setFontSize(16);
-  doc.setTextColor(255, 255, 255);
-  const periodX = isRtl ? margin + 10 : pageWidth - margin - 10;
-  doc.text(`الفترة: ${periodLabel}`, periodX, 50, { align: isRtl ? 'left' : 'right' });
-
-  // خط فاصل
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.8);
-  doc.line(margin, 65, pageWidth - margin, 65);
-
-  // الإحصائيات
-  doc.setFontSize(12);
+  doc.setFontSize(20);
   doc.setTextColor(33, 33, 33);
-  const stats = [
-    `المنتجات: ${toArabicNumerals(totalItems)}`,
-    `الكمية: ${toArabicNumerals(totalQuantity)} وحدة`,
-    `المبلغ: ${formatPrice(totalPrice, isRtl)}`,
-  ];
-  stats.forEach((stat, i) => {
-    const x = isRtl ? margin + 10 : pageWidth - margin - 10;
-    doc.text(stat, x, 75 + i * 10, { align: isRtl ? 'left' : 'right' });
-  });
+  const titleWidth = doc.getTextWidth(title);
+  const titleX = isRtl ? pageWidth - margin - titleWidth : margin;
+  doc.text(title, titleX, 20, { align: isRtl ? 'right' : 'left' });
 
-  // التذييل
-  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  });
-  const footerText = isRtl
-    ? `نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
-    : `Elgoodia Management System - ${currentDate}`;
   doc.setFontSize(10);
-  doc.setTextColor(150, 150, 150);
-  doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 12, { align: 'center' });
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+  doc.setTextColor(100, 100, 100);
+  const stats = isRtl
+    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl)} | الفترة: ${periodLabel}`
+    : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl)} | Period: ${periodLabel}`;
+  const statsWidth = doc.getTextWidth(stats);
+  const statsX = isRtl ? margin : pageWidth - margin - statsWidth;
+  doc.text(stats, statsX, 28, { align: isRtl ? 'left' : 'right' });
+
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(245, 158, 11);
+  doc.line(margin, 33, pageWidth - margin, 33);
+
+  const pageCount = doc.getNumberOfPages();
+  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+    const footerText = isRtl
+      ? `تم إنشاؤه بواسطة نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
+      : `Generated by elgoodia Management System - ${currentDate}`;
+    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+  }
 };
 
-// PDF Table (متجاوب، واضح، أعمدة متساوية)
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -316,72 +307,74 @@ const generatePDFTable = (
 ) => {
   const numColumns = headers.length;
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 18;
+  const margin = 10;
   const maxTableWidth = pageWidth - 2 * margin;
-  const columnWidth = maxTableWidth / numColumns;
+  const firstThreeWidths = [20, 15, 15];
+  const otherColumnWidth = Math.max(10, (maxTableWidth - firstThreeWidths.reduce((a, b) => a + b, 0)) / (numColumns - 3));
+  const columnStyles = headers.reduce((styles, _, i) => {
+    const index = isRtl ? numColumns - 1 - i : i;
+    styles[index] = {
+      cellWidth: i < 3 ? firstThreeWidths[i] : otherColumnWidth,
+      halign: 'center',
+      valign: 'middle',
+      overflow: 'linebreak',
+    };
+    return styles;
+  }, {});
 
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 90,
-    margin: { top: 90, bottom: 25, left: margin, right: margin },
+    startY: 38,
+    margin: { top: 38, bottom: 15, left: margin, right: margin },
     tableWidth: 'auto',
-    columnStyles: headers.reduce((styles, _, i) => {
-      const index = isRtl ? numColumns - 1 - i : i;
-      styles[index] = {
-        cellWidth: columnWidth,
-        halign: 'center',
-        valign: 'middle',
-        overflow: 'linebreak',
-        fontSize: 10,
-      };
-      return styles;
-    }, {}),
+    columnStyles,
     headStyles: {
       fillColor: [245, 158, 11],
       textColor: [255, 255, 255],
-      fontSize: 11,
+      fontSize: 8,
       halign: 'center',
       valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
-      cellPadding: 4,
+      cellPadding: 1.5,
+      minCellHeight: 8,
     },
     bodyStyles: {
-      fontSize: 9,
+      fontSize: 7,
       halign: 'center',
       valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
-      textColor: [33, 33, 33],
-      lineColor: [220, 220, 220],
+      textColor: [33, 33, , 33],
+      lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
-      cellPadding: 4,
+      cellPadding: 1.5,
+      minCellHeight: 6,
     },
     alternateRowStyles: {
-      fillColor: [250, 250, 250],
+      fillColor: [245, 245, 245],
     },
     didParseCell: (hookData) => {
       if (hookData.section === 'body' || hookData.section === 'head') {
         hookData.cell.text = hookData.cell.text.map(text => {
           let processedText = text;
-          // تح: تحويل الأرقام فقط في الأعمدة التي تحتاج
-          if (hookData.column.index >= 1 && hookData.column.index <= numColumns - 2) {
+          if ((isRtl && hookData.column.index !== numColumns - 3) || (!isRtl && hookData.column.index !== 2)) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
           }
           return processedText;
         });
       }
-      if (hookData.section === 'body' && hookData.row.index === data.length - 1) {
+      if (hookData.section === 'body' && hookData.column.index === (isRtl ? numColumns - 4 : headers.length - 2)) {
         hookData.cell.styles.fontStyle = 'bold';
-        hookData.cell.styles.fillColor = [240, 240, 240];
-        hookData.cell.styles.fontSize = 11;
       }
+    },
+    didDrawPage: () => {
+      doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     },
   });
 };
 
-// PDF Export
 const exportToPDF = async (
   data: any[][],
   title: string,
@@ -393,7 +386,7 @@ const exportToPDF = async (
   totalPrice: number
 ) => {
   try {
-    toast.info(isRtl ? 'جارٍ إنشاء PDF...' : 'Generating PDF...', {
+    toast.info(isRtl ? 'جارٍ إنشاء ملف PDF...' : 'Generating PDF...', {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: false,
       toastId: 'pdf-export',
@@ -403,17 +396,54 @@ const exportToPDF = async (
     const fontLoaded = await loadFont(doc);
     generatePDFHeader(doc, isRtl, title, periodLabel, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName);
-    const fileName = generateFileName('OrdersSummary', periodLabel, isRtl);
+    const fileName = generateFileName('OrdersSummary', periodLabel, isRtl, 'pdf');
     doc.save(fileName);
     toast.update('pdf-export', {
-      render: isRtl ? 'تم تصدير PDF بنجاح' : 'PDF exported successfully',
+      render: isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully',
       type: 'success',
       autoClose: 3000,
     });
   } catch (error) {
     console.error('Error exporting PDF:', error);
     toast.update('pdf-export', {
-      render: isRtl ? 'فشل في تصدير PDF' : 'Failed to export PDF',
+      render: isRtl ? 'فشل في تصدير ملف PDF' : 'Failed to export PDF',
+      type: 'error',
+      autoClose: 3000,
+    });
+  }
+};
+
+const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, isRtl: boolean) => {
+  toast.info(isRtl ? 'جارٍ إنشاء ملف Excel...' : 'Generating Excel...', {
+    position: isRtl ? 'top-left' : 'top-right',
+    autoClose: false,
+    toastId: 'excel-export',
+  });
+  try {
+    const sheetData = isRtl ? dataRows.map(row => row.slice().reverse()) : dataRows;
+    const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
+    const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
+    if (isRtl) ws['!views'] = [{ RTL: true }];
+    ws['!cols'] = [
+      { wch: 22 }, // Name
+      { wch: 15 }, // Price
+      { wch: 15 }, // Code
+      ...Array(headers.length - 5).fill({ wch: 14 }),
+      { wch: 15 }, // Total
+      { wch: 12 }, // Unit
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Orders_${periodLabel.substring(0, 20)}`);
+    XLSX.writeFile(wb, generateFileName('OrdersSummary', periodLabel, isRtl, 'xlsx'));
+    toast.update('excel-export', {
+      render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
+      type: 'success',
+      autoClose: 3000,
+    });
+  } catch (error) {
+    console.error('Error exporting Excel:', error);
+    toast.update('excel-export', {
+      render: isRtl ? 'فشل في تصدير ملف Excel' : 'Failed to export Excel',
       type: 'error',
       autoClose: 3000,
     });
@@ -447,7 +477,7 @@ const DailyOrdersSummary: React.FC = () => {
     const now = new Date();
     let start: Date, end: Date;
 
-    const weekOptions = { weekStartsOn: 1, locale: isRtl ? arSA : undefined };
+    const weekOptions = isRtl ? { weekStartsOn: 1, locale: arSA } : { weekStartsOn: 1 };
 
     switch (selectedPeriod) {
       case 'today':
@@ -477,7 +507,7 @@ const DailyOrdersSummary: React.FC = () => {
       end: end.toISOString(),
       label:
         selectedPeriod === 'custom'
-          ? `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`
+          ? `${format(start, 'dd/MM/yyyy')} - ${format(end, 'dd/MM/yyyy')}`
           : periodOptions.find((p) => p.value === selectedPeriod)?.label || '',
     };
   }, [selectedPeriod, customStartDate, customEndDate, periodOptions, isRtl]);
@@ -620,7 +650,7 @@ const DailyOrdersSummary: React.FC = () => {
 
   const getTooltipContent = (qty: number, isRtl: boolean) => `${isRtl ? 'الكمية: ' : 'Quantity: '}${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`;
 
-  const exportTable = () => {
+  const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
       isRtl ? 'الاسم' : 'Name',
       isRtl ? 'السعر' : 'Price',
@@ -651,16 +681,20 @@ const DailyOrdersSummary: React.FC = () => {
       ],
     ];
 
-    exportToPDF(
-      rows,
-      isRtl ? 'ملخص الطلبات' : 'Orders Summary',
-      periodLabel,
-      headers,
-      isRtl,
-      filteredData.length,
-      grandTotalQuantity,
-      grandTotalPrice
-    );
+    if (format === 'excel') {
+      exportToExcel(rows, headers, periodLabel, isRtl);
+    } else if (format === 'pdf') {
+      exportToPDF(
+        rows,
+        isRtl ? 'ملخص الطلبات' : 'Orders Summary',
+        periodLabel,
+        headers,
+        isRtl,
+        filteredData.length,
+        grandTotalQuantity,
+        grandTotalPrice
+      );
+    }
   };
 
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
@@ -668,46 +702,56 @@ const DailyOrdersSummary: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gradient-to-br from-gray-50 to-gray-100`}>
-      <div className="mb-8 bg-white shadow-2xl rounded-3xl p-8 border border-gray-200">
-        <div className="flex flex-col gap-8">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6`}>
-            <h2 className="text-3xl font-bold text-gray-800 flex items-center gap-4">
-              <Calendar className="w-7 h-7 text-amber-600" />
-              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - <span className="text-amber-600">{periodLabel || '...'}</span>
+    <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
+      <div className="mb-6 bg-white shadow-md rounded-xl p-5 border border-gray-200">
+        <div className="flex flex-col gap-5">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
+            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-amber-600" />
+              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - {periodLabel || '...'}
             </h2>
-            <Button
-              variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-              onClick={exportTable}
-              disabled={filteredData.length === 0}
-            >
-              <Upload className="w-5 h-5" />
-              {isRtl ? 'تصدير PDF' : 'Export PDF'}
-            </Button>
+            <div className={`flex gap-2 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Button
+                variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+                onClick={() => exportTable('excel')}
+                disabled={filteredData.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'Excel' : 'Excel'}
+              </Button>
+              <Button
+                variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+                onClick={() => exportTable('pdf')}
+                disabled={filteredData.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'PDF' : 'PDF'}
+              </Button>
+            </div>
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-5 items-center">
+          <div className="flex flex-col lg:flex-row gap-4 items-center">
             <ProductDropdown
               value={selectedPeriod}
               onChange={setSelectedPeriod}
               options={periodOptions}
               ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
-              className="w-full sm:w-64"
+              className="w-full sm:w-48"
             />
             {selectedPeriod === 'custom' && (
-              <div className="flex gap-3 items-center w-full sm:w-auto">
+              <div className="flex gap-2 items-center w-full sm:w-auto">
                 <input
                   type="date"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="px-5 py-3 border border-gray-300 rounded-xl text-sm w-full sm:w-auto focus:ring-2 focus:ring-amber-500 transition-all"
+                  className="px-3 py-2 border rounded-lg text-sm w-full sm:w-auto"
                 />
-                <span className="text-gray-600 hidden sm:inline text-lg">→</span>
+                <span className="text-gray-600 hidden sm:inline">→</span>
                 <input
                   type="date"
                   value={customEndDate}
                   onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="px-5 py-3 border border-gray-300 rounded-xl text-sm w-full sm:w-auto focus:ring-2 focus:ring-amber-500 transition-all"
+                  className="px-3 py-2 border rounded-lg text-sm w-full sm:w-auto"
                 />
               </div>
             )}
@@ -723,47 +767,47 @@ const DailyOrdersSummary: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-amber-600"></div>
+        <div className="flex justify-center items-center py-16">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
         </div>
       ) : filteredData.length === 0 ? (
-        <div className="text-center py-20 text-gray-600 bg-white rounded-3xl shadow-xl p-10">
-          <p className="text-xl font-medium">{isRtl ? 'لا توجد بيانات في هذه الفترة' : 'No data for this period'}</p>
+        <div className="text-center py-16 text-gray-600">
+          {isRtl ? 'لا توجد بيانات في هذه الفترة' : 'No data for this period'}
         </div>
       ) : (
         <motion.div
-          initial={{ opacity: 0, y: 25 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="overflow-x-auto rounded-3xl shadow-2xl border border-gray-200 bg-white"
+          transition={{ duration: 0.3 }}
+          className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
         >
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gradient-to-r from-amber-50 to-amber-100 sticky top-0 z-10">
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
+            <thead className="bg-amber-50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-5 py-5 font-bold text-gray-700 text-center min-w-[180px]">{isRtl ? 'الاسم' : 'Name'}</th>
-                <th className="px-4 py-5 font-bold text-gray-700 text-center min-w-[90px]">{isRtl ? 'السعر' : 'Price'}</th>
-                <th className="px-4 py-5 font-bold text-gray-700 text-center min-w-[90px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-3 py-3 font-semibold text-gray-700 text-center min-w-[140px]">{isRtl ? 'الاسم' : 'Name'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'السعر' : 'Price'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'الكود' : 'Code'}</th>
                 {allBranches.map((branch) => (
-                  <th key={branch} className="px-4 py-5 font-bold text-gray-700 text-center min-w-[100px] break-words">
+                  <th key={branch} className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[85px] break-words">
                     {branch}
                   </th>
                 ))}
-                <th className="px-5 py-5 font-bold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
-                <th className="px-4 py-5 font-bold text-gray-700 text-center min-w-[90px]">{isRtl ? 'وحدة' : 'Unit'}</th>
+                <th className="px-3 py-3 font-semibold text-gray-700 text-center min-w-[85px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'وحدة' : 'Unit'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredData.map((row) => (
                 <tr key={row.id} className="hover:bg-amber-50 transition-colors duration-200">
-                  <td className="px-5 py-4 text-gray-700 text-center truncate max-w-[180px]" title={row.product}>
+                  <td className="px-3 py-3 text-gray-700 text-center truncate max-w-[140px]" title={row.product}>
                     {row.product}
                   </td>
-                  <td className="px-4 py-4 text-gray-700 text-center font-medium">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-4 py-4 text-gray-700 text-center">{row.code}</td>
+                  <td className="px-2 py-3 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
+                  <td className="px-2 py-3 text-gray-700 text-center">{row.code}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
-                      className={`px-4 py-4 text-center font-bold ${
+                      className={`px-2 py-3 text-center font-medium ${
                         row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
                       }`}
                       data-tooltip-id="branch-tooltip"
@@ -772,28 +816,28 @@ const DailyOrdersSummary: React.FC = () => {
                       {row.branchQuantities[branch] !== 0 ? formatNumber(row.branchQuantities[branch] || 0, isRtl) : '0'}
                     </td>
                   ))}
-                  <td className="px-5 py-4 text-gray-700 text-center font-bold">{formatNumber(row.totalQuantity, isRtl)}</td>
-                  <td className="px-4 py-4 text-gray-700 text-center">{row.unit}</td>
+                  <td className="px-3 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                  <td className="px-2 py-3 text-gray-700 text-center">{row.unit}</td>
                 </tr>
               ))}
-              <tr className={`font-bold bg-gradient-to-r from-gray-100 to-gray-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-5 py-5 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
-                <td className="px-4 py-5 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-                <td className="px-4 py-5 text-gray-800 text-center"></td>
+              <tr className={`font-bold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <td className="px-3 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                <td className="px-2 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+                <td className="px-2 py-3 text-gray-800 text-center"></td>
                 {allBranches.map((branch) => (
-                  <td key={branch} className="px-4 py-5 text-gray-800 text-center">
+                  <td key={branch} className="px-2 py-3 text-gray-800 text-center">
                     {formatNumber(filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0), isRtl)}
                   </td>
                 ))}
-                <td className="px-5 py-5 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-                <td className="px-4 py-5 text-gray-800 text-center"></td>
+                <td className="px-3 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                <td className="px-2 py-3 text-gray-800 text-center"></td>
               </tr>
             </tbody>
           </table>
           <Tooltip
             id="branch-tooltip"
             place="top"
-            className="z-[9999] bg-white border border-gray-300 rounded-xl p-4 shadow-2xl max-w-xs text-sm text-gray-800 font-medium"
+            className="z-[9999] bg-white border border-gray-300 rounded-md p-3 shadow-xl max-w-xs text-xs text-gray-800 font-medium"
           />
         </motion.div>
       )}
