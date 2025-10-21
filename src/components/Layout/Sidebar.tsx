@@ -14,7 +14,7 @@ import {
   ChefHat,
   Settings2,
   Warehouse,
-  
+  ArrowRightLeft ,
   TrendingUp,
   Users2,
   ListTodo,
@@ -86,7 +86,7 @@ export function Sidebar({
       { path: '/departments', icon: Users2, label: t('departments') },
       { path: '/orders', icon: ShoppingBag, label: t('orders') },  
       { path: '/daily-orders', icon: ClipboardCheck , label: t('dailyOrders') || 'Daily Orders' },
-      { path: '/dailyOrdersSummary', icon: Warehouse, label: t('dailyOrdersSummary') },
+      { path: '/dailyOrdersSummary', icon: ArrowRightLeft , label: t('dailyOrdersSummary') },
 
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/sales', icon: TrendingUp, label: t('sales') },
@@ -117,6 +117,7 @@ export function Sidebar({
       { path: '/orders', icon: ShoppingBag, label: t('orders') },
       
             { path: '/daily-orders', icon: ClipboardCheck , label: t('dailyOrders') || 'Daily Orders' },
+      { path: '/dailyOrdersSummary', icon: ArrowRightLeft , label: t('dailyOrdersSummary') },
 
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
