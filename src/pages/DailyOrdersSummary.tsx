@@ -280,7 +280,7 @@ const generatePDFHeader = (
   doc.setLineWidth(0.5);
   doc.line(margin, 45, pageWidth - margin, 45);
 
-  const currentDate = new Date('2025-10-21T14:31:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T14:39:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(8);
@@ -454,10 +454,10 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T14:31:00'); // Current date and time
+    const now = new Date('2025-10-21T14:39:00'); // Current date and time
     let start: Date, end: Date;
 
-    const weekOptions = { weekStartsOn: 1, locale: isRtl ? arSA : undefined };
+    const weekOptions = { weekStartsOn: 1, locale: isRtl ? arSA : undefined }; // Monday as start of week
 
     switch (selectedPeriod) {
       case 'today':
@@ -467,6 +467,7 @@ const DailyOrdersSummary: React.FC = () => {
       case 'week':
         start = startOfWeek(now, weekOptions);
         end = endOfWeek(now, weekOptions);
+        console.log('Week Range:', { start, end }); // Debug log
         break;
       case 'month':
         start = startOfMonth(now);
@@ -556,9 +557,15 @@ const DailyOrdersSummary: React.FC = () => {
       const orderMap = new Map<string, OrderRow>();
       orders.forEach((order: any) => {
         const orderDate = parseISO(order.createdAt || order.date || '');
-        if (isNaN(orderDate.getTime())) return;
+        if (isNaN(orderDate.getTime())) {
+          console.warn('Invalid order date:', order.createdAt || order.date); // Debug invalid dates
+          return;
+        }
 
-        if (!isWithinInterval(orderDate, { start: parseISO(dateRange.start), end: parseISO(dateRange.end) })) return;
+        if (!isWithinInterval(orderDate, { start: parseISO(dateRange.start), end: parseISO(dateRange.end) })) {
+          console.log('Order excluded:', orderDate, dateRange); // Debug excluded orders
+          return;
+        }
 
         const branchId = order.branch?._id || order.branch || order.branchId;
         const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
