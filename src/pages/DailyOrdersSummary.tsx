@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Upload, ChevronDown } from 'lucide-react';
+import { Search, X, Upload, ChevronDown, Calendar } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api';
@@ -20,6 +20,7 @@ import {
   isWithinInterval,
   parseISO,
 } from 'date-fns';
+import { arSA } from 'date-fns/locale';
 
 // Interfaces
 interface OrderRow {
@@ -60,9 +61,9 @@ const Button: React.FC<{
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+    className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-200 ${
       variant === 'primary' && !disabled
-        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-lg hover:shadow-xl'
+        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-md hover:shadow-lg'
         : 'bg-gray-200 text-gray-500 cursor-not-allowed'
     } ${className}`}
   >
@@ -88,7 +89,7 @@ const ProductSearchInput: React.FC<{
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center px-3 text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
@@ -100,7 +101,7 @@ const ProductSearchInput: React.FC<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-base placeholder-gray-500 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-base placeholder-gray-500 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -109,7 +110,7 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
+          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center px-3 text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-5 h-5" />
@@ -148,7 +149,7 @@ const ProductDropdown: React.FC<{
     <div className={`relative group ${className}`} ref={dropdownRef}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
@@ -170,7 +171,7 @@ const ProductDropdown: React.FC<{
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition-colors duration-200 text-left"
+                className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition-colors text-left"
               >
                 {option.label}
               </button>
@@ -217,10 +218,16 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
     bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
   };
   try {
-    const regularFontBytes = await fetch(fontUrls.regular).then((res) => res.arrayBuffer());
+    const [regularRes, boldRes] = await Promise.all([
+      fetch(fontUrls.regular),
+      fetch(fontUrls.bold),
+    ]);
+    const [regularFontBytes, boldFontBytes] = await Promise.all([
+      regularRes.arrayBuffer(),
+      boldRes.arrayBuffer(),
+    ]);
     doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
     doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
-    const boldFontBytes = await fetch(fontUrls.bold).then((res) => res.arrayBuffer());
     doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
     doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
     doc.setFont(fontName, 'normal');
@@ -233,7 +240,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
 
 const generateFileName = (prefix: string, periodLabel: string, isRtl: boolean, extension: string): string => {
   const dateStr = new Date().toISOString().split('T')[0];
-  const sanitizedLabel = periodLabel.replace(/[^a-zA-Z0-9]/g, '_');
+  const sanitizedLabel = periodLabel.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
   return `${prefix}_${sanitizedLabel}_${dateStr}.${extension}`;
 };
 
@@ -339,7 +346,7 @@ const generatePDFTable = (
       halign: 'center',
       valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
-      textColor: [33, 33, 33],
+      textColor: [33, 33, , 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
       cellPadding: 1.5,
@@ -418,15 +425,15 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
     const ws = XLSX.utils.aoa_to_sheet([sheetHeaders, ...sheetData]);
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 20 }, // Name
+      { wch: 22 }, // Name
       { wch: 15 }, // Price
       { wch: 15 }, // Code
-      ...Array(headers.length - 5).fill({ wch: 15 }),
+      ...Array(headers.length - 5).fill({ wch: 14 }),
       { wch: 15 }, // Total
-      { wch: 15 }, // Unit
+      { wch: 12 }, // Unit
     ];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Orders_${periodLabel}`);
+    XLSX.utils.book_append_sheet(wb, ws, `Orders_${periodLabel.substring(0, 20)}`);
     XLSX.writeFile(wb, generateFileName('OrdersSummary', periodLabel, isRtl, 'xlsx'));
     toast.update('excel-export', {
       render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
@@ -470,14 +477,16 @@ const DailyOrdersSummary: React.FC = () => {
     const now = new Date();
     let start: Date, end: Date;
 
+    const weekOptions = isRtl ? { weekStartsOn: 1, locale: arSA } : { weekStartsOn: 1 };
+
     switch (selectedPeriod) {
       case 'today':
         start = startOfDay(now);
         end = endOfDay(now);
         break;
       case 'week':
-        start = startOfWeek(now, { weekStartsOn: 1 });
-        end = endOfWeek(now, { weekStartsOn: 1 });
+        start = startOfWeek(now, weekOptions);
+        end = endOfWeek(now, weekOptions);
         break;
       case 'month':
         start = startOfMonth(now);
@@ -487,6 +496,7 @@ const DailyOrdersSummary: React.FC = () => {
         if (!customStartDate || !customEndDate) return null;
         start = startOfDay(parseISO(customStartDate));
         end = endOfDay(parseISO(customEndDate));
+        if (start > end) return null;
         break;
       default:
         return null;
@@ -500,7 +510,7 @@ const DailyOrdersSummary: React.FC = () => {
           ? `${format(start, 'dd/MM/yyyy')} - ${format(end, 'dd/MM/yyyy')}`
           : periodOptions.find((p) => p.value === selectedPeriod)?.label || '',
     };
-  }, [selectedPeriod, customStartDate, customEndDate, periodOptions]);
+  }, [selectedPeriod, customStartDate, customEndDate, periodOptions, isRtl]);
 
   const allBranches = useMemo(
     () => branches.map((b) => b.displayName).sort((a, b) => a.localeCompare(b, language)),
@@ -516,7 +526,9 @@ const DailyOrdersSummary: React.FC = () => {
 
     const dateRange = getDateRange();
     if (!dateRange) {
-      toast.warn(isRtl ? 'اختر فترة صالحة' : 'Select a valid period');
+      if (selectedPeriod === 'custom') {
+        toast.warn(isRtl ? 'اختر تاريخ البداية والنهاية' : 'Select start and end dates');
+      }
       setLoading(false);
       return;
     }
@@ -561,7 +573,7 @@ const DailyOrdersSummary: React.FC = () => {
 
       let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
       if (orders.length === 0) {
-        toast.warn(isRtl ? 'لا توجد طلبات' : 'No orders found');
+        toast.info(isRtl ? 'لا توجد طلبات في هذه الفترة' : 'No orders in this period');
       }
 
       const orderMap = new Map<string, OrderRow>();
@@ -691,11 +703,12 @@ const DailyOrdersSummary: React.FC = () => {
 
   return (
     <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
-      <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className="flex flex-col gap-4">
+      <div className="mb-6 bg-white shadow-md rounded-xl p-5 border border-gray-200">
+        <div className="flex flex-col gap-5">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
-            <h2 className="text-lg font-bold text-gray-800">
-              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - {periodLabel}
+            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-amber-600" />
+              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - {periodLabel || '...'}
             </h2>
             <div className={`flex gap-2 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Button
@@ -704,7 +717,7 @@ const DailyOrdersSummary: React.FC = () => {
                 disabled={filteredData.length === 0}
               >
                 <Upload className="w-4 h-4" />
-                {isRtl ? 'تصدير Excel' : 'Export Excel'}
+                {isRtl ? 'Excel' : 'Excel'}
               </Button>
               <Button
                 variant={filteredData.length > 0 ? 'primary' : 'secondary'}
@@ -712,7 +725,7 @@ const DailyOrdersSummary: React.FC = () => {
                 disabled={filteredData.length === 0}
               >
                 <Upload className="w-4 h-4" />
-                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+                {isRtl ? 'PDF' : 'PDF'}
               </Button>
             </div>
           </div>
@@ -723,22 +736,22 @@ const DailyOrdersSummary: React.FC = () => {
               onChange={setSelectedPeriod}
               options={periodOptions}
               ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
-              className="w-48"
+              className="w-full sm:w-48"
             />
             {selectedPeriod === 'custom' && (
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-center w-full sm:w-auto">
                 <input
                   type="date"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-sm"
+                  className="px-3 py-2 border rounded-lg text-sm w-full sm:w-auto"
                 />
-                <span className="text-gray-600">→</span>
+                <span className="text-gray-600 hidden sm:inline">→</span>
                 <input
                   type="date"
                   value={customEndDate}
                   onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="px-3 py-2 border rounded-lg text-sm"
+                  className="px-3 py-2 border rounded-lg text-sm w-full sm:w-auto"
                 />
               </div>
             )}
@@ -754,8 +767,12 @@ const DailyOrdersSummary: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center py-12">
+        <div className="flex justify-center items-center py-16">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+        </div>
+      ) : filteredData.length === 0 ? (
+        <div className="text-center py-16 text-gray-600">
+          {isRtl ? 'لا توجد بيانات في هذه الفترة' : 'No data for this period'}
         </div>
       ) : (
         <motion.div
@@ -767,24 +784,26 @@ const DailyOrdersSummary: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200 text-xs">
             <thead className="bg-amber-50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'الاسم' : 'Name'}</th>
-                <th className="px-1 py-3 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'السعر' : 'Price'}</th>
-                <th className="px-1 py-3 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-3 py-3 font-semibold text-gray-700 text-center min-w-[140px]">{isRtl ? 'الاسم' : 'Name'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'السعر' : 'Price'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'الكود' : 'Code'}</th>
                 {allBranches.map((branch) => (
-                  <th key={branch} className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                  <th key={branch} className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[85px] break-words">
                     {branch}
                   </th>
                 ))}
-                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
-                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة' : 'Unit'}</th>
+                <th className="px-3 py-3 font-semibold text-gray-700 text-center min-w-[85px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
+                <th className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'وحدة' : 'Unit'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredData.map((row) => (
                 <tr key={row.id} className="hover:bg-amber-50 transition-colors duration-200">
-                  <td className="px-2 py-3 text-gray-700 text-center truncate">{row.product}</td>
-                  <td className="px-1 py-3 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-1 py-3 text-gray-700 text-center">{row.code}</td>
+                  <td className="px-3 py-3 text-gray-700 text-center truncate max-w-[140px]" title={row.product}>
+                    {row.product}
+                  </td>
+                  <td className="px-2 py-3 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
+                  <td className="px-2 py-3 text-gray-700 text-center">{row.code}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
@@ -797,20 +816,20 @@ const DailyOrdersSummary: React.FC = () => {
                       {row.branchQuantities[branch] !== 0 ? formatNumber(row.branchQuantities[branch] || 0, isRtl) : '0'}
                     </td>
                   ))}
-                  <td className="px-2 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                  <td className="px-3 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
                   <td className="px-2 py-3 text-gray-700 text-center">{row.unit}</td>
                 </tr>
               ))}
-              <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-2 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
-                <td className="px-1 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-                <td className="px-1 py-3 text-gray-800 text-center"></td>
+              <tr className={`font-bold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <td className="px-3 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                <td className="px-2 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+                <td className="px-2 py-3 text-gray-800 text-center"></td>
                 {allBranches.map((branch) => (
                   <td key={branch} className="px-2 py-3 text-gray-800 text-center">
                     {formatNumber(filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0), isRtl)}
                   </td>
                 ))}
-                <td className="px-2 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                <td className="px-3 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
                 <td className="px-2 py-3 text-gray-800 text-center"></td>
               </tr>
             </tbody>
@@ -818,7 +837,7 @@ const DailyOrdersSummary: React.FC = () => {
           <Tooltip
             id="branch-tooltip"
             place="top"
-            className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
+            className="z-[9999] bg-white border border-gray-300 rounded-md p-3 shadow-xl max-w-xs text-xs text-gray-800 font-medium"
           />
         </motion.div>
       )}
