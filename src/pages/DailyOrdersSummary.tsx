@@ -10,20 +10,18 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  format,
   startOfDay,
   endOfDay,
   startOfWeek,
   endOfWeek,
   startOfMonth,
   endOfMonth,
+  format,
   isWithinInterval,
   parseISO,
 } from 'date-fns';
 
-// ============================================================
 // Interfaces
-// ============================================================
 interface OrderRow {
   id: string;
   code: string;
@@ -43,9 +41,15 @@ interface Branch {
   displayName: string;
 }
 
-// ============================================================
-// Button Component
-// ============================================================
+// Period options
+const PERIOD_OPTIONS = [
+  { value: 'today', labelAr: 'اليوم', labelEn: 'Today' },
+  { value: 'week', labelAr: 'هذا الأسبوع', labelEn: 'This Week' },
+  { value: 'month', labelAr: 'هذا الشهر', labelEn: 'This Month' },
+  { value: 'custom', labelAr: 'فترة مخصصة', labelEn: 'Custom Range' },
+];
+
+// Button component
 const Button: React.FC<{
   variant: 'primary' | 'secondary';
   onClick?: () => void;
@@ -66,9 +70,7 @@ const Button: React.FC<{
   </button>
 );
 
-// ============================================================
-// Search Input
-// ============================================================
+// ProductSearchInput component
 const ProductSearchInput: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -98,7 +100,7 @@ const ProductSearchInput: React.FC<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white shadow-md hover:shadow-lg text-base placeholder-gray-500 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-base placeholder-gray-500 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -117,13 +119,11 @@ const ProductSearchInput: React.FC<{
   );
 };
 
-// ============================================================
-// Dropdown Component
-// ============================================================
+// Enhanced ProductDropdown component
 const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
-  options: { [key: string]: string }[];
+  options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
   className?: string;
@@ -132,7 +132,7 @@ const ProductDropdown: React.FC<{
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0];
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -151,7 +151,7 @@ const ProductDropdown: React.FC<{
         className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right font-amiri' : 'text-left font-inter'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
-        <span className="truncate">{selectedOption?.label || (isRtl ? 'اختر' : 'Select')}</span>
+        <span className="truncate">{selectedOption.label}</span>
         <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence>
@@ -182,9 +182,7 @@ const ProductDropdown: React.FC<{
   );
 };
 
-// ============================================================
-// Utility Functions
-// ============================================================
+// Utility functions
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
@@ -219,13 +217,11 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
     bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
   };
   try {
-    const [regularFontBytes, boldFontBytes] = await Promise.all([
-      fetch(fontUrls.regular).then((res) => res.arrayBuffer()),
-      fetch(fontUrls.bold).then((res) => res.arrayBuffer()),
-    ]);
+    const regularFontBytes = await fetch(fontUrls.regular).then((res) => res.arrayBuffer());
     doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
-    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
     doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
+    const boldFontBytes = await fetch(fontUrls.bold).then((res) => res.arrayBuffer());
+    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
     doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
     doc.setFont(fontName, 'normal');
     return true;
@@ -237,7 +233,8 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
 
 const generateFileName = (prefix: string, periodLabel: string, isRtl: boolean, extension: string): string => {
   const dateStr = new Date().toISOString().split('T')[0];
-  return `${prefix}_${periodLabel.replace(/[^a-zA-Z0-9]/g, '_')}_${dateStr}.${extension}`;
+  const sanitizedLabel = periodLabel.replace(/[^a-zA-Z0-9]/g, '_');
+  return `${prefix}_${sanitizedLabel}_${dateStr}.${extension}`;
 };
 
 const generatePDFHeader = (
@@ -257,21 +254,23 @@ const generatePDFHeader = (
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(33, 33, 33);
-  const titleX = isRtl ? pageWidth - margin : margin;
+  const titleWidth = doc.getTextWidth(title);
+  const titleX = isRtl ? pageWidth - margin - titleWidth : margin;
   doc.text(title, titleX, 20, { align: isRtl ? 'right' : 'left' });
 
   doc.setFontSize(10);
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
-    ? `الفترة: ${periodLabel} | إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl)}`
-    : `Period: ${periodLabel} | Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl)}`;
-  const statsX = isRtl ? margin : pageWidth - margin;
+    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl)} | الفترة: ${periodLabel}`
+    : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl)} | Period: ${periodLabel}`;
+  const statsWidth = doc.getTextWidth(stats);
+  const statsX = isRtl ? margin : pageWidth - margin - statsWidth;
   doc.text(stats, statsX, 28, { align: isRtl ? 'left' : 'right' });
 
   doc.setLineWidth(0.5);
   doc.setDrawColor(245, 158, 11);
-  doc.line(margin, 32, pageWidth - margin, 32);
+  doc.line(margin, 33, pageWidth - margin, 33);
 
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
@@ -320,8 +319,8 @@ const generatePDFTable = (
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 35,
-    margin: { top: 35, bottom: 15, left: margin, right: margin },
+    startY: 38,
+    margin: { top: 38, bottom: 15, left: margin, right: margin },
     tableWidth: 'auto',
     columnStyles,
     headStyles: {
@@ -346,13 +345,21 @@ const generatePDFTable = (
       cellPadding: 1.5,
       minCellHeight: 6,
     },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245],
+    },
     didParseCell: (hookData) => {
       if (hookData.section === 'body' || hookData.section === 'head') {
         hookData.cell.text = hookData.cell.text.map(text => {
-          const isCodeColumn = (isRtl && hookData.column.index === numColumns - 3) || (!isRtl && hookData.column.index === 2);
-          return isCodeColumn ? text : toArabicNumerals(text);
+          let processedText = text;
+          if ((isRtl && hookData.column.index !== numColumns - 3) || (!isRtl && hookData.column.index !== 2)) {
+            processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
+          }
+          return processedText;
         });
+      }
+      if (hookData.section === 'body' && hookData.column.index === (isRtl ? numColumns - 4 : headers.length - 2)) {
+        hookData.cell.styles.fontStyle = 'bold';
       }
     },
     didDrawPage: () => {
@@ -382,7 +389,7 @@ const exportToPDF = async (
     const fontLoaded = await loadFont(doc);
     generatePDFHeader(doc, isRtl, title, periodLabel, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName);
-    const fileName = generateFileName('DailyOrdersSummary', periodLabel, isRtl, 'pdf');
+    const fileName = generateFileName('OrdersSummary', periodLabel, isRtl, 'pdf');
     doc.save(fileName);
     toast.update('pdf-export', {
       render: isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully',
@@ -420,7 +427,7 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Orders_${periodLabel}`);
-    XLSX.writeFile(wb, generateFileName('DailyOrdersSummary', periodLabel, isRtl, 'xlsx'));
+    XLSX.writeFile(wb, generateFileName('OrdersSummary', periodLabel, isRtl, 'xlsx'));
     toast.update('excel-export', {
       render: isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully',
       type: 'success',
@@ -436,63 +443,80 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
   }
 };
 
-// ============================================================
-// Main Component: DailyOrdersSummary
-// ============================================================
-type PeriodType = 'daily' | 'weekly' | 'monthly' | 'custom';
-
+// Main Component
 const DailyOrdersSummary: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
 
-  // Period State
-  const [period, setPeriod] = useState<PeriodType>('daily');
-  const [customStart, setCustomStart] = useState<string>('');
-  const [customEnd, setCustomEnd] = useState<string>('');
-
-  // Data State
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('today');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
   const [orderData, setOrderData] = useState<OrderRow[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Compute Date Range
-  const { start, end, label } = useMemo(() => {
-    const now = new Date();
-    let s: Date, e: Date, l: string;
+  const periodOptions = useMemo(
+    () =>
+      PERIOD_OPTIONS.map((p) => ({
+        value: p.value,
+        label: isRtl ? p.labelAr : p.labelEn,
+      })),
+    [isRtl]
+  );
 
-    if (period === 'daily') {
-      s = startOfDay(now);
-      e = endOfDay(now);
-      l = format(now, isRtl ? 'dd MMMM yyyy' : 'MMMM dd, yyyy');
-    } else if (period === 'weekly') {
-      s = startOfWeek(now, { weekStartsOn: 0 });
-      e = endOfWeek(now, { weekStartsOn: 0 });
-      l = isRtl ? 'هذا الأسبوع' : 'This Week';
-    } else if (period === 'monthly') {
-      s = startOfMonth(now);
-      e = endOfMonth(now);
-      l = format(now, isRtl ? 'MMMM yyyy' : 'MMMM yyyy');
-    } else {
-      const startDate = customStart ? parseISO(customStart) : startOfDay(now);
-      const endDate = customEnd ? parseISO(customEnd) : endOfDay(now);
-      s = startOfDay(startDate);
-      e = endOfDay(endDate);
-      l = `${format(startDate, 'dd/MM')} - ${format(endDate, 'dd/MM/yyyy')}`;
+  const getDateRange = useCallback(() => {
+    const now = new Date();
+    let start: Date, end: Date;
+
+    switch (selectedPeriod) {
+      case 'today':
+        start = startOfDay(now);
+        end = endOfDay(now);
+        break;
+      case 'week':
+        start = startOfWeek(now, { weekStartsOn: 1 });
+        end = endOfWeek(now, { weekStartsOn: 1 });
+        break;
+      case 'month':
+        start = startOfMonth(now);
+        end = endOfMonth(now);
+        break;
+      case 'custom':
+        if (!customStartDate || !customEndDate) return null;
+        start = startOfDay(parseISO(customStartDate));
+        end = endOfDay(parseISO(customEndDate));
+        break;
+      default:
+        return null;
     }
 
-    return { start: s, end: e, label: l };
-  }, [period, customStart, customEnd, isRtl]);
+    return {
+      start: start.toISOString(),
+      end: end.toISOString(),
+      label:
+        selectedPeriod === 'custom'
+          ? `${format(start, 'dd/MM/yyyy')} - ${format(end, 'dd/MM/yyyy')}`
+          : periodOptions.find((p) => p.value === selectedPeriod)?.label || '',
+    };
+  }, [selectedPeriod, customStartDate, customEndDate, periodOptions]);
 
-  const allBranches = useMemo(() => 
-    branches.map(b => b.displayName).sort((a, b) => a.localeCompare(b, language))
-  , [branches, language]);
+  const allBranches = useMemo(
+    () => branches.map((b) => b.displayName).sort((a, b) => a.localeCompare(b, language)),
+    [branches, language]
+  );
 
-  // Fetch Data
   const fetchData = useCallback(async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'production')) {
-      toast.error(isRtl ? 'لا توجد صلاحية' : 'No access');
+      toast.error(isRtl ? 'لا يوجد صلاحية' : 'No access');
+      setLoading(false);
+      return;
+    }
+
+    const dateRange = getDateRange();
+    if (!dateRange) {
+      toast.warn(isRtl ? 'اختر فترة صالحة' : 'Select a valid period');
       setLoading(false);
       return;
     }
@@ -501,31 +525,29 @@ const DailyOrdersSummary: React.FC = () => {
     try {
       const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
         inventoryAPI.getInventory({}, isRtl),
-        ordersAPI.getAll({ page: 1, limit: 20000 }, isRtl),
+        ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page: 1, limit: 10000 }, isRtl),
         branchesAPI.getAll(),
         salesAPI.getAnalytics({
-          startDate: start.toISOString(),
-          endDate: end.toISOString(),
+          startDate: dateRange.start,
+          endDate: dateRange.end,
           lang: language,
         }),
       ]);
 
-      // Branches
-      const fetchedBranches: Branch[] = (branchesResponse || [])
-        .filter((b: any) => b?._id)
-        .map((b: any) => ({
-          _id: b._id,
-          name: b.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          nameEn: b.nameEn || b.name,
-          displayName: isRtl ? b.name : (b.nameEn || b.name),
+      const fetchedBranches = branchesResponse
+        .filter((branch: any) => branch && branch._id)
+        .map((branch: any) => ({
+          _id: branch._id,
+          name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+          nameEn: branch.nameEn || branch.name,
+          displayName: isRtl ? branch.name : branch.nameEn || branch.name,
         }))
-        .sort((a, b) => a.displayName.localeCompare(b.displayName, language));
-
+        .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
       setBranches(fetchedBranches);
-      const branchMap = new Map(fetchedBranches.map(b => [b._id, b.displayName]));
 
-      // Product Details
+      const branchMap = new Map<string, string>(fetchedBranches.map((b) => [b._id, b.displayName]));
       const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
+
       inventory.forEach((item: any) => {
         if (item?.product?._id) {
           productDetails.set(item.product._id, {
@@ -537,29 +559,29 @@ const DailyOrdersSummary: React.FC = () => {
         }
       });
 
-      // Filter Approved Orders Only
-      const approvedOrders = (Array.isArray(ordersResponse) ? ordersResponse : []).filter((order: any) => {
-        const status = order.status || order.orderStatus;
-        return ['completed', 'approved'].includes(status);
-      });
+      let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
+      if (orders.length === 0) {
+        toast.warn(isRtl ? 'لا توجد طلبات' : 'No orders found');
+      }
 
       const orderMap = new Map<string, OrderRow>();
-      approvedOrders.forEach((order: any) => {
+      orders.forEach((order: any) => {
         const orderDate = new Date(order.createdAt || order.date);
         if (isNaN(orderDate.getTime())) return;
-        if (!isWithinInterval(orderDate, { start, end })) return;
+
+        if (!isWithinInterval(orderDate, { start: new Date(dateRange.start), end: new Date(dateRange.end) })) return;
 
         const branchId = order.branch?._id || order.branch || order.branchId;
-        const branchName = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+        const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
 
         (order.items || []).forEach((item: any) => {
           const productId = item.product?._id || item.productId;
           if (!productId) return;
 
           const details = productDetails.get(productId) || {
-            code: item.product?.code || '',
-            product: isRtl ? (item.product?.name || '') : (item.product?.nameEn || ''),
-            unit: isRtl ? (item.product?.unit || '') : (item.product?.unitEn || ''),
+            code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+            product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
+            unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
             price: Number(item.price) || 0,
           };
 
@@ -579,14 +601,13 @@ const DailyOrdersSummary: React.FC = () => {
           }
 
           const row = orderMap.get(key)!;
-          const qty = Number(item.quantity) || 0;
-          row.branchQuantities[branchName] = (row.branchQuantities[branchName] || 0) + qty;
-          row.totalQuantity += qty;
-          row.totalPrice += qty * details.price;
+          const quantity = Number(item.quantity) || 0;
+          row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+          row.totalQuantity += quantity;
+          row.totalPrice += quantity * details.price;
         });
       });
 
-      // Actual Sales
       for (const row of orderMap.values()) {
         const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id);
         if (salesItem) row.actualSales = Number(salesItem.totalQuantity) || 0;
@@ -594,29 +615,29 @@ const DailyOrdersSummary: React.FC = () => {
 
       setOrderData(Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity));
     } catch (error) {
-      console.error('Fetch Error:', error);
-      toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to load data');
+      console.error('Failed to fetch data:', error);
+      toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data');
     } finally {
       setLoading(false);
     }
-  }, [user, start, end, isRtl, language]);
+  }, [user, getDateRange, language, isRtl]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Filtered Data
-  const filteredData = useMemo(() => {
-    return orderData.filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [orderData, searchTerm]);
+  const filteredData = useMemo(
+    () => orderData.filter((row) => row.product.toLowerCase().includes(searchTerm.toLowerCase())),
+    [orderData, searchTerm]
+  );
 
   const grandTotalQuantity = useMemo(() => filteredData.reduce((sum, row) => sum + row.totalQuantity, 0), [filteredData]);
   const grandTotalPrice = useMemo(() => filteredData.reduce((sum, row) => sum + row.totalPrice, 0), [filteredData]);
 
-  // Tooltip
+  const periodLabel = useMemo(() => getDateRange()?.label || '', [getDateRange]);
+
   const getTooltipContent = (qty: number, isRtl: boolean) => `${isRtl ? 'الكمية: ' : 'Quantity: '}${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`;
 
-  // Export
   const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
       isRtl ? 'الاسم' : 'Name',
@@ -626,12 +647,13 @@ const DailyOrdersSummary: React.FC = () => {
       isRtl ? 'الإجمالي' : 'Total',
       isRtl ? 'وحدة' : 'Unit',
     ];
+
     const rows = [
-      ...filteredData.map(row => [
+      ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
         row.code,
-        ...allBranches.map(b => formatNumber(row.branchQuantities[b] || 0, isRtl)),
+        ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
       ]),
@@ -639,68 +661,95 @@ const DailyOrdersSummary: React.FC = () => {
         isRtl ? 'الإجمالي' : 'Total',
         formatPrice(grandTotalPrice, isRtl),
         '',
-        ...allBranches.map(b => formatNumber(filteredData.reduce((s, r) => s + (r.branchQuantities[b] || 0), 0), isRtl)),
+        ...allBranches.map((branch) =>
+          formatNumber(filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0), isRtl)
+        ),
         formatNumber(grandTotalQuantity, isRtl),
         '',
       ],
     ];
 
-    if (format === 'pdf') {
-      exportToPDF(rows, isRtl ? 'ملخص الطلبات اليومية' : 'Daily Orders Summary', label, headers, isRtl, filteredData.length, grandTotalQuantity, grandTotalPrice);
-    } else {
-      exportToExcel(rows, headers, label, isRtl);
+    if (format === 'excel') {
+      exportToExcel(rows, headers, periodLabel, isRtl);
+    } else if (format === 'pdf') {
+      exportToPDF(
+        rows,
+        isRtl ? 'ملخص الطلبات' : 'Orders Summary',
+        periodLabel,
+        headers,
+        isRtl,
+        filteredData.length,
+        grandTotalQuantity,
+        grandTotalPrice
+      );
     }
   };
 
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
-    return <div className="text-center py-16 text-lg font-medium text-gray-800">{isRtl ? 'لا توجد صلاحية' : 'No access'}</div>;
+    return <div className="text-center py-16 text-lg font-medium text-gray-800">{isRtl ? 'لا يوجد صلاحية' : 'No access'}</div>;
   }
 
   return (
     <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4`}>
             <h2 className="text-lg font-bold text-gray-800">
-              {isRtl ? 'ملخص الطلبات اليومية' : 'Daily Orders Summary'} - {label}
+              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - {periodLabel}
             </h2>
-            <div className="flex flex-wrap gap-2 items-center">
-              <ProductDropdown
-                value={period}
-                onChange={(v) => { setPeriod(v as PeriodType); setCustomStart(''); setCustomEnd(''); }}
-                options={[
-                  { value: 'daily', label: isRtl ? 'يومي' : 'Daily' },
-                  { value: 'weekly', label: isRtl ? 'أسبوعي' : 'Weekly' },
-                  { value: 'monthly', label: isRtl ? 'شهري' : 'Monthly' },
-                  { value: 'custom', label: isRtl ? 'فترة مخصصة' : 'Custom Range' },
-                ]}
-                ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
-                className="w-44"
-              />
-              {period === 'custom' && (
-                <div className="flex gap-2 items-center">
-                  <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="px-3 py-1.5 border rounded text-sm" />
-                  <span className="text-gray-600">—</span>
-                  <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="px-3 py-1.5 border rounded text-sm" />
-                </div>
-              )}
+            <div className={`flex gap-2 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Button
+                variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+                onClick={() => exportTable('excel')}
+                disabled={filteredData.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير Excel' : 'Export Excel'}
+              </Button>
               <Button
                 variant={filteredData.length > 0 ? 'primary' : 'secondary'}
                 onClick={() => exportTable('pdf')}
                 disabled={filteredData.length === 0}
               >
                 <Upload className="w-4 h-4" />
-                PDF
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
               </Button>
             </div>
           </div>
-          <ProductSearchInput
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={isRtl ? 'ابحث عن منتج...' : 'Search product...'}
-            ariaLabel={isRtl ? 'بحث' : 'Search'}
-            className="flex-1"
-          />
+
+          <div className="flex flex-col lg:flex-row gap-4 items-center">
+            <ProductDropdown
+              value={selectedPeriod}
+              onChange={setSelectedPeriod}
+              options={periodOptions}
+              ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
+              className="w-48"
+            />
+            {selectedPeriod === 'custom' && (
+              <div className="flex gap-2 items-center">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+                <span className="text-gray-600">→</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                />
+              </div>
+            )}
+            <ProductSearchInput
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={isRtl ? 'ابحث عن منتج...' : 'Search for product...'}
+              ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
+              className="flex-1"
+            />
+          </div>
         </div>
       </div>
 
