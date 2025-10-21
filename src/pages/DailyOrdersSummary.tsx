@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Upload, ChevronDown, Calendar } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { inventoryAPI, ordersAPI, branchesAPI, salesAPI, productsAPI } from '../services/api';
+import { ordersAPI, branchesAPI, salesAPI, productsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { Tooltip } from 'react-tooltip';
 import * as XLSX from 'xlsx';
@@ -286,7 +286,7 @@ const generatePDFHeader = (
   doc.setLineWidth(0.5);
   doc.line(margin, 22, pageWidth - margin, 22);
 
-  const currentDate = new Date('2025-10-21T16:40:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T16:57:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(8);
@@ -461,7 +461,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T16:40:00'); // Updated to 04:40 PM EEST
+    const now = new Date('2025-10-21T16:57:00'); // Updated to 04:57 PM EEST
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -519,8 +519,7 @@ const DailyOrdersSummary: React.FC = () => {
 
     setLoading(true);
     try {
-      const [inventory, ordersResponse, branchesResponse, salesResponse, productsResponse] = await Promise.all([
-        inventoryAPI.getInventory({}, isRtl),
+      const [ordersResponse, branchesResponse, salesResponse, productsResponse] = await Promise.all([
         ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page: 1, limit: 10000 }, isRtl),
         branchesAPI.getAll(),
         salesAPI.getAnalytics({ startDate: dateRange.start, endDate: dateRange.end, lang: language }),
@@ -543,11 +542,11 @@ const DailyOrdersSummary: React.FC = () => {
       const fetchedProducts = Array.isArray(productsResponse)
         ? productsResponse.map((product: any) => ({
             _id: product._id,
-            name: product.name,
-            nameEn: product.nameEn,
-            code: product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
-            unit: product.unit,
-            unitEn: product.unitEn,
+            name: product.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+            nameEn: product.nameEn || product.name,
+            code: product.code || 'غير محدد', // قيمة افتراضية واضحة
+            unit: product.unit || (isRtl ? 'غير محدد' : 'N/A'),
+            unitEn: product.unitEn || product.unit || 'N/A',
             price: Number(product.price) || 0,
           }))
         : [];
@@ -556,26 +555,14 @@ const DailyOrdersSummary: React.FC = () => {
       const branchMap = new Map<string, string>(fetchedBranches.map((b) => [b._id, b.displayName]));
       const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
 
-      // تحديث productDetails من المنتجات المجلوبة
+      // تحديث productDetails فقط من المنتجات المجلوبة
       fetchedProducts.forEach((product) => {
         productDetails.set(product._id, {
           code: product.code,
           product: isRtl ? product.name : (product.nameEn || product.name),
-          unit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          unit: isRtl ? product.unit : (product.unitEn || product.unit),
           price: product.price,
         });
-      });
-
-      // تعبئة من inventory كمخطط احتياطي
-      (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
-        if (item?.product?._id && !productDetails.has(item.product._id)) {
-          productDetails.set(item.product._id, {
-            code: item.product.code || 'N/A',
-            product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
-            unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
-            price: Number(item.product.price) || 0,
-          });
-        }
       });
 
       const orders = Array.isArray(ordersResponse) ? ordersResponse : [];
@@ -604,10 +591,10 @@ const DailyOrdersSummary: React.FC = () => {
           if (!productId) return;
 
           const details = productDetails.get(productId) || {
-            code: item.product?.code || 'N/A',
-            product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
-            unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
-            price: Number(item.price) || 0,
+            code: 'غير محدد',
+            product: isRtl ? 'منتج غير معروف' : 'Unknown Product',
+            unit: isRtl ? 'غير محدد' : 'N/A',
+            price: 0,
           };
 
           const key = productId;
