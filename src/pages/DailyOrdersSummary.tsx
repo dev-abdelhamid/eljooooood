@@ -40,7 +40,6 @@ interface Branch {
   displayName: string;
 }
 
-// Period options
 const PERIOD_OPTIONS = [
   { value: 'today', labelAr: 'اليوم', labelEn: 'Today' },
   { value: 'week', labelAr: 'آخر 7 أيام', labelEn: 'Last 7 Days' },
@@ -48,7 +47,6 @@ const PERIOD_OPTIONS = [
   { value: 'custom', labelAr: 'فترة مخصصة', labelEn: 'Custom Range' },
 ];
 
-// Button component
 const Button: React.FC<{
   variant: 'primary' | 'secondary';
   onClick?: () => void;
@@ -69,7 +67,6 @@ const Button: React.FC<{
   </button>
 );
 
-// ProductSearchInput component
 const ProductSearchInput: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -118,7 +115,6 @@ const ProductSearchInput: React.FC<{
   );
 };
 
-// ProductDropdown component
 const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
@@ -181,7 +177,6 @@ const ProductDropdown: React.FC<{
   );
 };
 
-// Utility functions
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
@@ -276,7 +271,7 @@ const generatePDFHeader = (
   doc.setLineWidth(0.5);
   doc.line(margin, 22, pageWidth - margin, 22);
 
-  const currentDate = new Date('2025-10-21T16:19:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T16:26:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(8);
@@ -426,18 +421,17 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
   }
 };
 
-// Main Component
 const DailyOrdersSummary: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-
   const [selectedPeriod, setSelectedPeriod] = useState<string>('today');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [orderData, setOrderData] = useState<OrderRow[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [searchInput, setSearchInput] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const periodOptions = useMemo(
@@ -450,7 +444,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T16:19:00'); // Updated to 04:19 PM EEST
+    const now = new Date('2025-10-21T16:26:00'); // Updated to 04:26 PM EEST
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -534,7 +528,7 @@ const DailyOrdersSummary: React.FC = () => {
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
         if (item?.product?._id) {
           productDetails.set(item.product._id, {
-            code: item.product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
+            code: item.product.code || 'N/A',
             product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
             unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
             price: Number(item.product.price) || 0,
@@ -568,7 +562,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!productId) return;
 
           const details = productDetails.get(productId) || {
-            code: item.product?.code || 'N/A', // تأكيد الكود من العنصر أو قيمة افتراضية
+            code: item.product?.code || 'N/A',
             product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
             unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
             price: Number(item.price) || 0,
@@ -578,7 +572,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!orderMap.has(key)) {
             orderMap.set(key, {
               id: key,
-              code: details.code, // تأكيد الكود هنا
+              code: details.code,
               product: details.product,
               unit: details.unit,
               price: details.price,
@@ -641,7 +635,7 @@ const DailyOrdersSummary: React.FC = () => {
       ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
-        row.code, // تأكيد الكود هنا
+        row.code,
         ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
@@ -679,41 +673,52 @@ const DailyOrdersSummary: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-6 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
-      <div className="mb-6 bg-white shadow-lg rounded-xl p-4 border border-gray-200">
-        <div className="flex flex-col gap-4">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3`}>
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-amber-600" />
-              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - {periodLabel || '...'}
-            </h2>
-            <div className={`flex gap-2 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <Button
-                variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-                onClick={() => exportTable('excel')}
-                disabled={filteredData.length === 0}
-              >
-                <Upload className="w-4 h-4" />
-                {isRtl ? 'Excel' : 'Excel'}
-              </Button>
-              <Button
-                variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-                onClick={() => exportTable('pdf')}
-                disabled={filteredData.length === 0}
-              >
-                <Upload className="w-4 h-4" />
-                {isRtl ? 'PDF' : 'PDF'}
-              </Button>
-            </div>
+    <div className={`min-h-screen px-4 py-6 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-6 h-6 text-amber-600" />
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">{isRtl ? 'إدارة ملخص الطلبات' : 'Manage Orders Summary'}</h1>
+            <p className="text-gray-600 text-xs">{isRtl ? 'عرض أو تصدير ملخص الطلبات' : 'View or export orders summary'}</p>
           </div>
+        </div>
+        <div className="flex gap-2 items-center">
+          <Button
+            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+            onClick={() => exportTable('excel')}
+            disabled={filteredData.length === 0}
+          >
+            <Upload className="w-4 h-4" />
+            {isRtl ? 'Excel' : 'Excel'}
+          </Button>
+          <Button
+            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+            onClick={() => exportTable('pdf')}
+            disabled={filteredData.length === 0}
+          >
+            <Upload className="w-4 h-4" />
+            {isRtl ? 'PDF' : 'PDF'}
+          </Button>
+        </div>
+      </div>
 
-          <div className="flex flex-col lg:flex-row gap-3 items-center">
+      <div className="space-y-3">
+        <div className="p-4 bg-white rounded-xl shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <ProductSearchInput
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value);
+                setSearchTerm(e.target.value); // Simplified without debounce for now
+              }}
+              placeholder={isRtl ? 'ابحث عن منتج...' : 'Search for product...'}
+              ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
+            />
             <ProductDropdown
               value={selectedPeriod}
               onChange={setSelectedPeriod}
               options={periodOptions}
               ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
-              className="w-full sm:w-44"
             />
             {selectedPeriod === 'custom' && (
               <div className="flex gap-2 items-center w-full sm:w-auto">
@@ -732,92 +737,56 @@ const DailyOrdersSummary: React.FC = () => {
                 />
               </div>
             )}
-            <ProductSearchInput
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={isRtl ? 'ابحث عن منتج...' : 'Search for product...'}
-              ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
-              className="flex-1"
-            />
           </div>
         </div>
-      </div>
+        <div className="text-center text-xs text-gray-600">
+          {isRtl ? `عدد المنتجات: ${filteredData.length}` : `Products Count: ${filteredData.length}`}
+        </div>
 
-      {loading ? (
-        <div className="flex justify-center items-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-amber-600"></div>
-        </div>
-      ) : filteredData.length === 0 ? (
-        <div className="text-center py-12 text-gray-600 bg-white rounded-xl shadow-md p-4">
-          <p className="text-sm font-medium">{isRtl ? 'لا توجد بيانات في هذه الفترة' : 'No data for this period'}</p>
-        </div>
-      ) : (
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
-          className="overflow-x-auto rounded-xl shadow-lg border border-gray-200 bg-white"
-        >
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
-            <thead className="bg-amber-50 sticky top-0 z-10">
-              <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[140px]">{isRtl ? 'الاسم' : 'Name'}</th>
-                <th className="px-1.5 py-2 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'السعر' : 'Price'}</th>
-                <th className="px-1.5 py-2 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'الكود' : 'Code'}</th>
-                {allBranches.map((branch) => (
-                  <th key={branch} className="px-1.5 py-2 font-semibold text-gray-700 text-center min-w-[80px] break-words">
-                    {branch}
-                  </th>
-                ))}
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الإجمالي' : 'Total'}</th>
-                <th className="px-1.5 py-2 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'وحدة' : 'Unit'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredData.map((row) => (
-                <tr key={row.id} className="hover:bg-amber-50 transition-colors duration-200">
-                  <td className="px-2 py-1.5 text-gray-700 text-center truncate max-w-[140px]" title={row.product}>
-                    {row.product}
-                  </td>
-                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.code || 'N/A'}</td>
-                  {allBranches.map((branch) => (
-                    <td
-                      key={branch}
-                      className={`px-1.5 py-1.5 text-center font-medium ${
-                        row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
-                      }`}
-                      data-tooltip-id="branch-tooltip"
-                      data-tooltip-content={getTooltipContent(row.branchQuantities[branch] || 0, isRtl)}
-                    >
-                      {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
-                    </td>
-                  ))}
-                  <td className="px-2 py-1.5 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
-                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.unit}</td>
-                </tr>
-              ))}
-              <tr className={`font-bold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-2 py-2 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
-                <td className="px-1.5 py-2 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-                <td className="px-1.5 py-2 text-gray-800 text-center"></td>
-                {allBranches.map((branch) => (
-                  <td key={branch} className="px-1.5 py-2 text-gray-800 text-center">
-                    {formatNumber(filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0), isRtl)}
-                  </td>
-                ))}
-                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-                <td className="px-1.5 py-2 text-gray-800 text-center"></td>
-              </tr>
-            </tbody>
-          </table>
-          <Tooltip
-            id="branch-tooltip"
-            place="top"
-            className="z-[9999] bg-white border border-gray-300 rounded-md p-2 shadow-lg max-w-xs text-xs text-gray-800"
-          />
-        </motion.div>
-      )}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto">
+            {[...Array(6)].map((_, index) => (
+              <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
+                <div className="space-y-2 animate-pulse">
+                  <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-2 bg-gray-200 rounded w-1/4"></div>
+                  <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredData.length === 0 ? (
+          <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+            <Calendar className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد بيانات في هذه الفترة' : 'No data for this period'}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto">
+            {filteredData.map((row) => (
+              <div
+                key={row.id}
+                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-gray-900 text-sm truncate">{row.product}</h3>
+                    <p className="text-xs text-gray-500">{row.code}</p>
+                  </div>
+                  <p className="text-xs text-amber-600">
+                    {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: {formatNumber(row.totalQuantity, isRtl)}
+                  </p>
+                  <p className="font-semibold text-gray-900 text-xs">
+                    {formatPrice(row.totalPrice, isRtl)} / {row.unit}
+                  </p>
+                </div>
+                <div className="mt-3 flex items-center justify-end gap-1.5">
+                  {/* Add edit/delete buttons if needed */}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
