@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Upload, ChevronDown, Calendar } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api';
+import { inventoryAPI, ordersAPI, branchesAPI, salesAPI, productsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { Tooltip } from 'react-tooltip';
 import * as XLSX from 'xlsx';
@@ -38,6 +38,16 @@ interface Branch {
   name: string;
   nameEn: string;
   displayName: string;
+}
+
+interface Product {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  unit?: string;
+  unitEn?: string;
+  price: number;
 }
 
 // Period options
@@ -276,7 +286,7 @@ const generatePDFHeader = (
   doc.setLineWidth(0.5);
   doc.line(margin, 22, pageWidth - margin, 22);
 
-  const currentDate = new Date('2025-10-21T16:19:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T16:40:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(8);
@@ -437,6 +447,7 @@ const DailyOrdersSummary: React.FC = () => {
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [orderData, setOrderData] = useState<OrderRow[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
@@ -450,7 +461,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T16:19:00'); // Updated to 04:19 PM EEST
+    const now = new Date('2025-10-21T16:40:00'); // Updated to 04:40 PM EEST
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -508,11 +519,12 @@ const DailyOrdersSummary: React.FC = () => {
 
     setLoading(true);
     try {
-      const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
+      const [inventory, ordersResponse, branchesResponse, salesResponse, productsResponse] = await Promise.all([
         inventoryAPI.getInventory({}, isRtl),
         ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page: 1, limit: 10000 }, isRtl),
         branchesAPI.getAll(),
         salesAPI.getAnalytics({ startDate: dateRange.start, endDate: dateRange.end, lang: language }),
+        productsAPI.getAll({ limit: 0 }), // جلب كل المنتجات
       ]);
 
       const fetchedBranches = Array.isArray(branchesResponse)
@@ -528,13 +540,37 @@ const DailyOrdersSummary: React.FC = () => {
         : [];
       setBranches(fetchedBranches);
 
+      const fetchedProducts = Array.isArray(productsResponse)
+        ? productsResponse.map((product: any) => ({
+            _id: product._id,
+            name: product.name,
+            nameEn: product.nameEn,
+            code: product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
+            unit: product.unit,
+            unitEn: product.unitEn,
+            price: Number(product.price) || 0,
+          }))
+        : [];
+      setProducts(fetchedProducts);
+
       const branchMap = new Map<string, string>(fetchedBranches.map((b) => [b._id, b.displayName]));
       const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
 
+      // تحديث productDetails من المنتجات المجلوبة
+      fetchedProducts.forEach((product) => {
+        productDetails.set(product._id, {
+          code: product.code,
+          product: isRtl ? product.name : (product.nameEn || product.name),
+          unit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          price: product.price,
+        });
+      });
+
+      // تعبئة من inventory كمخطط احتياطي
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
-        if (item?.product?._id) {
+        if (item?.product?._id && !productDetails.has(item.product._id)) {
           productDetails.set(item.product._id, {
-            code: item.product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
+            code: item.product.code || 'N/A',
             product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
             unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
             price: Number(item.product.price) || 0,
@@ -568,7 +604,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!productId) return;
 
           const details = productDetails.get(productId) || {
-            code: item.product?.code || 'N/A', // تأكيد الكود من العنصر أو قيمة افتراضية
+            code: item.product?.code || 'N/A',
             product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
             unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
             price: Number(item.price) || 0,
@@ -578,7 +614,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!orderMap.has(key)) {
             orderMap.set(key, {
               id: key,
-              code: details.code, // تأكيد الكود هنا
+              code: details.code,
               product: details.product,
               unit: details.unit,
               price: details.price,
@@ -616,7 +652,10 @@ const DailyOrdersSummary: React.FC = () => {
   }, [fetchData]);
 
   const filteredData = useMemo(
-    () => orderData.filter((row) => row.product.toLowerCase().includes(searchTerm.toLowerCase())),
+    () => orderData.filter((row) => 
+      row.product.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      row.code.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
     [orderData, searchTerm]
   );
 
@@ -641,7 +680,7 @@ const DailyOrdersSummary: React.FC = () => {
       ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
-        row.code, // تأكيد الكود هنا
+        row.code,
         ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
@@ -735,8 +774,8 @@ const DailyOrdersSummary: React.FC = () => {
             <ProductSearchInput
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={isRtl ? 'ابحث عن منتج...' : 'Search for product...'}
-              ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
+              placeholder={isRtl ? 'ابحث عن منتج أو كود...' : 'Search for product or code...'}
+              ariaLabel={isRtl ? 'بحث المنتج أو الكود' : 'Product or code search'}
               className="flex-1"
             />
           </div>
@@ -780,7 +819,7 @@ const DailyOrdersSummary: React.FC = () => {
                     {row.product}
                   </td>
                   <td className="px-1.5 py-1.5 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.code || 'N/A'}</td>
+                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.code}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
