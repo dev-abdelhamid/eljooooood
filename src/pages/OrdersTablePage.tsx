@@ -23,8 +23,7 @@ const Button: React.FC<{
     <button
       onClick={onClick}
       disabled={disabled}
-      
-      className={`flex items-center gap-2 rounded-full flex-row   px-4 py-2 text-xs font-medium transition-all duration-200 ${
+      className={`flex items-center gap-2 rounded-full flex-row px-4 py-2 text-xs font-medium transition-all duration-200 ${
         variant === 'primary' && !disabled
           ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
           : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -51,11 +50,10 @@ export const ProductSearchInput: React.FC<{
   };
 
   return (
-    <div className={`relative group w-full ${className} ` }>
+    <div className={`relative group w-full ${className}`}>
       <motion.div
         className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
-        
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
@@ -102,8 +100,6 @@ export const ProductDropdown = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
-  // Log options for debugging
-  console.log(`[${new Date().toISOString()}] ProductDropdown options:`, options);
   const selectedOption =
     options.find((opt) => opt.value === value) ||
     options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
@@ -139,6 +135,7 @@ export const ProductDropdown = ({
     </div>
   );
 };
+
 // Utility functions
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -203,7 +200,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
 };
 
 const generateFileName = (title: string, monthName: string, isRtl: boolean, format: string): string => {
-  const date = new Date().toISOString().split('T')[0];
+  const date = new Date('2025-10-21').toISOString().split('T')[0];
   return `${title}_${monthName}_${date}.${format}`;
 };
 
@@ -233,7 +230,7 @@ const generatePDFHeader = (
   doc.setDrawColor(245, 158, 11);
   doc.line(20, 25, pageWidth - 20, 25);
   const pageCount = doc.getNumberOfPages();
-  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T16:02:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -304,7 +301,6 @@ const generatePDFTable = (
           let processedText = text;
           if (isRtl) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
-          
           }
           return processedText;
         });
@@ -382,7 +378,7 @@ const DailyOrdersPage: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
-  const currentDate = new Date();
+  const currentDate = new Date('2025-10-21T16:02:00'); // Updated to 4:02 PM EEST
   const currentYear = currentDate.getFullYear();
   const currentDay = currentDate.getDate();
   const initialWeek = `week${Math.ceil(currentDay / 7)}`;
@@ -495,7 +491,7 @@ const DailyOrdersPage: React.FC = () => {
           .flatMap((item: any) => {
             return (item.movements || []).map((movement: any) => ({
               status: 'completed',
-              createdAt: movement.createdAt || new Date().toISOString(),
+              createdAt: movement.createdAt || new Date('2025-10-21T16:02:00').toISOString(),
               branch: {
                 _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id,
               },
@@ -593,7 +589,7 @@ const DailyOrdersPage: React.FC = () => {
   const filteredData = useMemo(() => {
     const data = orderData[parseInt(selectedMonth)] || [];
     return data
-      .filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()))
+      .filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()) || row.code.toLowerCase().includes(searchTerm.toLowerCase()))
       .map(row => {
         let displayedDailyQuantities = row.dailyQuantities.slice(startDay - 1, endDay);
         let displayedDailyBranchDetails = row.dailyBranchDetails.slice(startDay - 1, endDay);
@@ -697,8 +693,7 @@ const DailyOrdersPage: React.FC = () => {
           { wch: 12 },
         ];
         ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
-        // Add styles
-        const amberColor = 'FFF59E0B'; // Amber ARGB
+        const amberColor = 'FFF59E0B';
         const whiteColor = 'FFFFFFFF';
         const blackColor = 'FF000000';
         for (let c = 0; c < sheetHeaders.length; c++) {
@@ -722,7 +717,6 @@ const DailyOrdersPage: React.FC = () => {
             }
           }
         }
-        // Bold the total row
         for (let c = 0; c < sheetHeaders.length; c++) {
           const cell = XLSX.utils.encode_cell({ r: rows.length, c });
           if (ws[cell]) {
@@ -759,9 +753,9 @@ const DailyOrdersPage: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-8 `}>
+    <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 `}>
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4`}>
           <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
           <div className="flex gap-2 items-center">
             <ProductDropdown
@@ -771,7 +765,6 @@ const DailyOrdersPage: React.FC = () => {
               ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
               className="w-40"
             />
-           
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
@@ -783,11 +776,11 @@ const DailyOrdersPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4 `}>
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4`}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
+            placeholder={isRtl ? 'بحث حسب المنتج أو الكود' : 'Search by product or code'}
             ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
             className="md:col-span-1 max-w-none"
           />
