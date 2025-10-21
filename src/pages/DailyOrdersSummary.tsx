@@ -277,7 +277,7 @@ const generatePDFHeader = (
   doc.setLineWidth(0.5);
   doc.line(margin, 22, pageWidth - margin, 22);
 
-  const currentDate = new Date('2025-10-21T14:52:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date('2025-10-21T15:57:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(8);
@@ -451,7 +451,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T14:52:00'); // Current date and time
+    const now = new Date('2025-10-21T15:57:00'); // Updated to current time: 3:57 PM EEST
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -481,8 +481,8 @@ const DailyOrdersSummary: React.FC = () => {
     }
 
     return {
-      start: start.toISOString().split('T')[0], // Only date part for API compatibility
-      end: end.toISOString().split('T')[0], // Only date part for API compatibility
+      start: start.toISOString(), // Include full timestamp for accuracy
+      end: end.toISOString(),    // Include full timestamp for accuracy
       label: selectedPeriod === 'custom'
         ? `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`
         : periodOptions.find((p) => p.value === selectedPeriod)?.label || '',
@@ -535,7 +535,7 @@ const DailyOrdersSummary: React.FC = () => {
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
         if (item?.product?._id) {
           productDetails.set(item.product._id, {
-            code: item.product.code || '',
+            code: item.product.code || '', // استخدام الكود مباشرة من المنتج
             product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
             unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
             price: Number(item.product.price) || 0,
@@ -544,8 +544,8 @@ const DailyOrdersSummary: React.FC = () => {
       });
 
       const orders = Array.isArray(ordersResponse) ? ordersResponse : [];
-      if (orders.length === 0) {
-        toast.info(isRtl ? 'لا توجد طلبات في هذه الفترة' : 'No orders in this period');
+      if (orders.length === 0 && selectedPeriod === 'today') {
+        console.log(`No orders found for today (${dateRange.start} to ${dateRange.end})`);
       }
 
       const orderMap = new Map<string, OrderRow>();
@@ -569,7 +569,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!productId) return;
 
           const details = productDetails.get(productId) || {
-            code: item.product?.code || '',
+            code: item.product?.code || '', // استخدام الكود من المنتج أو العنصر إذا كان موجودًا
             product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
             unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
             price: Number(item.price) || 0,
@@ -579,7 +579,7 @@ const DailyOrdersSummary: React.FC = () => {
           if (!orderMap.has(key)) {
             orderMap.set(key, {
               id: key,
-              code: details.code,
+              code: details.code, // عرض الكود بشكل صحيح من المرجع
               product: details.product,
               unit: details.unit,
               price: details.price,
@@ -642,7 +642,7 @@ const DailyOrdersSummary: React.FC = () => {
       ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
-        row.code,
+        row.code, // تأكيد عرض الكود بشكل صحيح
         ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
@@ -781,7 +781,7 @@ const DailyOrdersSummary: React.FC = () => {
                     {row.product}
                   </td>
                   <td className="px-1.5 py-1.5 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.code}</td>
+                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.code || 'N/A'}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
