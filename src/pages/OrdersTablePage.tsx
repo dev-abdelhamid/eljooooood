@@ -261,21 +261,22 @@ const generatePDFTable = (
   // Calculate approximate table width
   let tableWidth = 0;
   headers.forEach(header => {
-    tableWidth += doc.getTextWidth(header) + 20; // Approximate cell padding
+    tableWidth += doc.getTextWidth(header) + 10; // Reduced padding for smaller table
   });
 
   const leftMargin = (pageWidth - tableWidth) / 2;
 
   const numColumns = headers.length;
-  const fontSizeHead = Math.max(6, Math.min(9, Math.floor(280 / numColumns)));
+  const fontSizeHead = Math.max(5, Math.min(8, Math.floor(280 / numColumns))); // Smaller font
   const fontSizeBody = fontSizeHead - 1;
-  const cellPadding = numColumns > 20 ? 1 : 2;
+  const cellPadding = numColumns > 20 ? 0.5 : 1; // Smaller padding
   const columnStyles = {};
   headers.forEach((_, i) => {
     columnStyles[i] = {
       cellWidth: 'auto',
-      minCellWidth: 5,
+      minCellWidth: 4, // Smaller min width
       halign: 'center',
+      fontStyle: 'bold', // Bold lines
     };
   });
 
