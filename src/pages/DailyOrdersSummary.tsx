@@ -263,9 +263,7 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 15;
 
-  // Gradient background for header (creative touch)
-  const gradient = doc.linearGradient(0, 0, pageWidth, 30, '#FFC107', '#FFFFFF');
-  doc.setFillColor(gradient);
+  doc.setFillColor(220, 220, 220);
   doc.rect(0, 0, pageWidth, 30, 'F');
 
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
@@ -273,11 +271,14 @@ const generatePDFHeader = (
   doc.setTextColor(50, 50, 50);
 
   const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
-  doc.text(title, titleX, 20, { align: isRtl ? 'left' : 'right' });
+  doc.text(title, titleX, 15, { align: isRtl ? 'left' : 'right' });
+
+  const periodX = isRtl ? pageWidth - margin - doc.getTextWidth(periodLabel) : margin;
+  doc.text(periodLabel, periodX, 25, { align: isRtl ? 'right' : 'left' });
 
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.5);
-  doc.line(margin, 32, pageWidth - margin, 32);
+  doc.line(margin, 35, pageWidth - margin, 35);
 
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -308,7 +309,7 @@ const generatePDFTable = (
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 40, // Increased space for header
+    startY: 40,
     margin: { top: 25, bottom: 15, left: margin, right: margin },
     tableWidth: 'auto',
     columnStyles: headers.reduce((styles, _, i) => {
@@ -459,7 +460,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date(); // Use current date for dynamic fetching
+    const now = new Date();
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -575,7 +576,7 @@ const DailyOrdersSummary: React.FC = () => {
         }
       });
 
-      // Full pagination to fetch all orders, similar to comprehensive data handling in DailyOrdersTable
+      // Full pagination to fetch all orders
       let allOrders: any[] = [];
       let page = 1;
       let hasMore = true;
@@ -583,7 +584,7 @@ const DailyOrdersSummary: React.FC = () => {
         const ordersResponse = await ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page, limit: 5000 }, isRtl);
         const fetchedOrders = Array.isArray(ordersResponse) ? ordersResponse : [];
         allOrders = [...allOrders, ...fetchedOrders];
-        hasMore = fetchedOrders.length === 5000; // Continue if full page returned
+        hasMore = fetchedOrders.length === 5000;
         page++;
       }
 
