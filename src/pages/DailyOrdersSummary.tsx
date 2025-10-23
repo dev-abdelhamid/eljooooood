@@ -15,6 +15,7 @@ import {
   subDays,
   subMonths,
   format,
+  isWithinInterval,
   parseISO,
 } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -209,10 +210,6 @@ const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num.toString()) : num.toString();
 };
 
-const formatProductCode = (code: string): string => {
-  return code; // عرض الكود كما هو دون تحويل الأرقام
-};
-
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -250,7 +247,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
 };
 
 const generateFileName = (prefix: string, periodLabel: string, isRtl: boolean, extension: string): string => {
-  const dateStr = new Date('2025-10-23').toISOString().split('T')[0];
+  const dateStr = new Date().toISOString().split('T')[0];
   const sanitizedLabel = periodLabel.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
   return `${prefix}_${sanitizedLabel}_${dateStr}.${extension}`;
 };
@@ -266,37 +263,30 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 15;
 
-  // إطار علوي
-  doc.setFillColor(245, 245, 245);
+  // Gradient background for header (creative touch)
+  const gradient = doc.linearGradient(0, 0, pageWidth, 30, '#FFC107', '#FFFFFF');
+  doc.setFillColor(gradient);
   doc.rect(0, 0, pageWidth, 30, 'F');
 
-  // العنوان
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(33, 33, 33);
+  doc.setFontSize(14);
+  doc.setTextColor(50, 50, 50);
+
   const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
   doc.text(title, titleX, 20, { align: isRtl ? 'left' : 'right' });
 
-  // التاريخ
-  const currentDate = new Date('2025-10-23T19:50:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
-    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  const dateX = isRtl ? pageWidth - margin - doc.getTextWidth(currentDate) : margin;
-  doc.text(currentDate, dateX, 20, { align: isRtl ? 'right' : 'left' });
-
-  // خط فاصل
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.5);
   doc.line(margin, 32, pageWidth - margin, 32);
 
-  // تذييل
-  const footerText = isRtl
-    ? `نظام إدارة الجودياء`
-    : `Elgoodia Management System`;
+  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
+  const footerText = isRtl
+    ? `نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
+    : `Elgoodia Management System - ${currentDate}`;
   doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
 };
 
@@ -310,53 +300,31 @@ const generatePDFTable = (
 ) => {
   const numColumns = headers.length;
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 15;
+  const margin = 10;
   const maxTableWidth = pageWidth - 2 * margin;
-
-  // تخصيص عرض الأعمدة
-  const columnWidths = {
-    name: 0.25, // 25% للاسم
-    price: 0.15, // 15% للسعر
-    code: 0.15, // 15% للكود
-    branches: 0.3 / (numColumns - 4), // توزيع متساوٍ للفروع
-    total: 0.15, // 15% للإجمالي
-    unit: 0.15, // 15% للوحدة
-  };
+  const columnWidth = maxTableWidth / numColumns;
 
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 35,
-    margin: { top: 35, bottom: 20, left: margin, right: margin },
-    tableWidth: maxTableWidth,
-    columnStyles: headers.reduce((styles, header, i) => {
+    startY: 40, // Increased space for header
+    margin: { top: 25, bottom: 15, left: margin, right: margin },
+    tableWidth: 'auto',
+    columnStyles: headers.reduce((styles, _, i) => {
       const index = isRtl ? numColumns - 1 - i : i;
-      let cellWidth: number;
-      if (i === 0) cellWidth = maxTableWidth * columnWidths.name;
-      else if (i === 1) cellWidth = maxTableWidth * columnWidths.price;
-      else if (i === 2) cellWidth = maxTableWidth * columnWidths.code;
-      else if (i === numColumns - 1) cellWidth = maxTableWidth * columnWidths.unit;
-      else if (i === numColumns - 2) cellWidth = maxTableWidth * columnWidths.total;
-      else cellWidth = maxTableWidth * columnWidths.branches;
-      styles[index] = {
-        cellWidth,
-        halign: i === 0 ? (isRtl ? 'right' : 'left') : 'center',
-        valign: 'middle',
-        fontSize: 8,
-        cellPadding: 3,
-      };
+      styles[index] = { cellWidth: columnWidth, halign: 'center', valign: 'middle', fontSize: 8, overflow: 'linebreak', cellPadding: 4 };
       return styles;
     }, {}),
     headStyles: {
-      fillColor: [240, 240, 240],
-      textColor: [33, 33, 33],
+      fillColor: [220, 220, 220],
+      textColor: [50, 50, 50],
       fontSize: 10,
       halign: 'center',
       valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
-      cellPadding: 3,
+      cellPadding: 2,
       lineWidth: 0.2,
       lineColor: [200, 200, 200],
     },
@@ -368,27 +336,24 @@ const generatePDFTable = (
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
-      cellPadding: 3,
+      cellPadding: 2,
       lineWidth: 0.2,
     },
-    alternateRowStyles: {
-      fillColor: [245, 245, 245],
-    },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
     didParseCell: (hookData) => {
       if (hookData.section === 'body' && hookData.row.index === data.length - 1) {
         hookData.cell.styles.fontStyle = 'bold';
         hookData.cell.styles.fillColor = [240, 240, 240];
       }
       if (hookData.section === 'body' || hookData.section === 'head') {
-        hookData.cell.text = hookData.cell.text.map(text => {
-          if (typeof text === 'string' && hookData.column.index === 2 && hookData.section === 'body') {
-            return formatProductCode(text); // عدم تحويل أرقام الكود
-          }
-          if (typeof text === 'string' && /[0-9]/.test(text)) {
-            return isRtl ? toArabicNumerals(text) : text;
-          }
-          return text;
-        });
+        if (hookData.column.index !== 2) { // Exclude code column (index 2 for code)
+          hookData.cell.text = hookData.cell.text.map(text => {
+            if (typeof text === 'string' && /[0-9]/.test(text)) {
+              return text.replace(/[0-9]/g, d => toArabicNumerals(d));
+            }
+            return text;
+          });
+        }
       }
     },
   });
@@ -399,7 +364,10 @@ const exportToPDF = async (
   title: string,
   periodLabel: string,
   headers: string[],
-  isRtl: boolean
+  isRtl: boolean,
+  totalItems: number,
+  totalQuantity: number,
+  totalPrice: number
 ) => {
   try {
     toast.info(isRtl ? 'جارٍ إنشاء ملف PDF...' : 'Generating PDF...', {
@@ -443,7 +411,7 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
     ws['!cols'] = [
       { wch: 25 }, // Name
       { wch: 15 }, // Price
-      { wch: 15 }, // Code
+      { wch: 20 }, // Code
       ...Array(headers.length - 5).fill({ wch: 15 }),
       { wch: 15 }, // Total
       { wch: 12 }, // Unit
@@ -491,7 +459,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-23T19:50:00');
+    const now = new Date(); // Use current date for dynamic fetching
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -549,34 +517,12 @@ const DailyOrdersSummary: React.FC = () => {
 
     setLoading(true);
     try {
-      let allOrders: any[] = [];
-      let page = 1;
-      const pageSize = 1000; // عدد الطلبات لكل صفحة
-
-      // جلب جميع الطلبات باستخدام التصفح الخلفي
-      while (true) {
-        const [inventory, ordersResponse, branchesResponse, salesResponse, productsResponse] = await Promise.all([
-          inventoryAPI.getInventory({}, isRtl),
-          ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page, limit: pageSize }, isRtl),
-          branchesAPI.getAll(),
-          salesAPI.getAnalytics({ startDate: dateRange.start, endDate: dateRange.end, lang: language }),
-          productsAPI.getAll({ limit: 0 }),
-        ]);
-
-        const fetchedOrders = Array.isArray(ordersResponse.data) ? ordersResponse.data : ordersResponse;
-        allOrders = [...allOrders, ...fetchedOrders];
-
-        // التحقق مما إذا كان هناك المزيد من الصفحات
-        if (!ordersResponse.total || allOrders.length >= ordersResponse.total || fetchedOrders.length < pageSize) {
-          break;
-        }
-        page++;
-        console.log(`Fetched page ${page - 1}, orders: ${fetchedOrders.length}, total so far: ${allOrders.length}`);
-      }
-
-      if (allOrders.length === 0 && selectedPeriod === 'today') {
-        console.log(`No orders found for today (${dateRange.start} to ${dateRange.end})`);
-      }
+      const [inventory, branchesResponse, salesResponse, productsResponse] = await Promise.all([
+        inventoryAPI.getInventory({}, isRtl),
+        branchesAPI.getAll(),
+        salesAPI.getAnalytics({ startDate: dateRange.start, endDate: dateRange.end, lang: language }),
+        productsAPI.getAll({ limit: 0 }), // جلب كل المنتجات
+      ]);
 
       const fetchedBranches = Array.isArray(branchesResponse)
         ? branchesResponse
@@ -596,7 +542,7 @@ const DailyOrdersSummary: React.FC = () => {
             _id: product._id,
             name: product.name,
             nameEn: product.nameEn,
-            code: product.code || 'N/A',
+            code: product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
             unit: product.unit,
             unitEn: product.unitEn,
             price: Number(product.price) || 0,
@@ -607,6 +553,7 @@ const DailyOrdersSummary: React.FC = () => {
       const branchMap = new Map<string, string>(fetchedBranches.map((b) => [b._id, b.displayName]));
       const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
 
+      // تحديث productDetails من المنتجات المجلوبة
       fetchedProducts.forEach((product) => {
         productDetails.set(product._id, {
           code: product.code,
@@ -616,6 +563,7 @@ const DailyOrdersSummary: React.FC = () => {
         });
       });
 
+      // تعبئة من inventory كمخطط احتياطي
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
         if (item?.product?._id && !productDetails.has(item.product._id)) {
           productDetails.set(item.product._id, {
@@ -627,8 +575,35 @@ const DailyOrdersSummary: React.FC = () => {
         }
       });
 
+      // Full pagination to fetch all orders, similar to comprehensive data handling in DailyOrdersTable
+      let allOrders: any[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const ordersResponse = await ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page, limit: 5000 }, isRtl);
+        const fetchedOrders = Array.isArray(ordersResponse) ? ordersResponse : [];
+        allOrders = [...allOrders, ...fetchedOrders];
+        hasMore = fetchedOrders.length === 5000; // Continue if full page returned
+        page++;
+      }
+
+      if (allOrders.length === 0 && selectedPeriod === 'today') {
+        console.log(`No orders found for today (${dateRange.start} to ${dateRange.end})`);
+      }
+
       const orderMap = new Map<string, OrderRow>();
       allOrders.forEach((order: any) => {
+        const orderDate = parseISO(order.createdAt || order.date || '1970-01-01');
+        if (isNaN(orderDate.getTime())) {
+          console.warn('Invalid order date:', order.createdAt || order.date);
+          return;
+        }
+
+        if (!isWithinInterval(orderDate, { start: parseISO(dateRange.start), end: parseISO(dateRange.end) })) {
+          console.log('Order excluded:', orderDate, dateRange);
+          return;
+        }
+
         const branchId = order.branch?._id || order.branch || order.branchId;
         const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
 
@@ -672,9 +647,9 @@ const DailyOrdersSummary: React.FC = () => {
       }
 
       setOrderData(Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity));
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to fetch data:', error);
-      toast.error(isRtl ? `فشل في جلب البيانات: ${error.message}` : `Failed to fetch data: ${error.message}`);
+      toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data');
     } finally {
       setLoading(false);
     }
@@ -713,7 +688,7 @@ const DailyOrdersSummary: React.FC = () => {
       ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
-        formatProductCode(row.code),
+        row.code,
         ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
@@ -738,7 +713,10 @@ const DailyOrdersSummary: React.FC = () => {
         isRtl ? 'ملخص الطلبات' : 'Orders Summary',
         periodLabel,
         headers,
-        isRtl
+        isRtl,
+        filteredData.length,
+        grandTotalQuantity,
+        grandTotalPrice
       );
     }
   };
@@ -849,7 +827,7 @@ const DailyOrdersSummary: React.FC = () => {
                     {row.product}
                   </td>
                   <td className="px-1.5 py-1.5 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{formatProductCode(row.code)}</td>
+                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.code}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
