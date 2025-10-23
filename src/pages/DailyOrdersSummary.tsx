@@ -17,7 +17,6 @@ import {
   format,
   isWithinInterval,
   parseISO,
-  isSameDay,
 } from 'date-fns';
 import { arSA } from 'date-fns/locale';
 
@@ -54,8 +53,8 @@ interface Product {
 // Period options
 const PERIOD_OPTIONS = [
   { value: 'today', labelAr: 'اليوم', labelEn: 'Today' },
-  { value: 'week', labelAr: 'آخر ٧ أيام', labelEn: 'Last 7 Days' },
-  { value: 'month', labelAr: 'آخر ٣٠ يوم', labelEn: 'Last 30 Days' },
+  { value: 'week', labelAr: 'آخر 7 أيام', labelEn: 'Last 7 Days' },
+  { value: 'month', labelAr: 'آخر 30 يوم', labelEn: 'Last 30 Days' },
   { value: 'custom', labelAr: 'فترة مخصصة', labelEn: 'Custom Range' },
 ];
 
@@ -271,9 +270,11 @@ const generatePDFHeader = (
   doc.setFontSize(14);
   doc.setTextColor(50, 50, 50);
 
-  const fullTitle = isRtl ? `ملخص الطلبات - ${periodLabel}` : `Orders Summary - ${periodLabel}`;
-  const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(fullTitle);
-  doc.text(fullTitle, titleX, 15, { align: isRtl ? 'right' : 'left' });
+  const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
+  doc.text(title, titleX, 15, { align: isRtl ? 'right' : 'left' });
+
+  const periodX = isRtl ? pageWidth - margin - doc.getTextWidth(periodLabel) : margin;
+  doc.text(periodLabel, periodX, 25, { align: isRtl ? 'right' : 'left' });
 
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.5);
@@ -461,25 +462,19 @@ const DailyOrdersSummary: React.FC = () => {
   const getDateRange = useCallback(() => {
     const now = new Date();
     let start: Date, end: Date;
-    let label: string;
 
     switch (selectedPeriod) {
       case 'today':
         start = startOfDay(now);
         end = endOfDay(now);
-        label = isRtl
-          ? `اليوم - ${format(start, 'EEEE d/M/yyyy', { locale: arSA })}`
-          : `Today - ${format(start, 'EEEE d/M/yyyy')}`;
         break;
       case 'week':
         start = subDays(now, 6);
         end = endOfDay(now);
-        label = isRtl ? 'آخر ٧ أيام' : 'Last 7 Days';
         break;
       case 'month':
         start = subMonths(now, 1);
         end = endOfDay(now);
-        label = isRtl ? 'آخر ٣٠ يوم' : 'Last 30 Days';
         break;
       case 'custom':
         if (!customStartDate || !customEndDate) return null;
@@ -489,15 +484,6 @@ const DailyOrdersSummary: React.FC = () => {
           toast.warn(isRtl ? 'تاريخ النهاية يجب أن يكون بعد تاريخ البداية' : 'End date must be after start date');
           return null;
         }
-        if (isSameDay(start, end)) {
-          label = isRtl
-            ? `اليوم - ${format(start, 'EEEE d/M/yyyy', { locale: arSA })}`
-            : `Today - ${format(start, 'EEEE d/M/yyyy')}`;
-        } else {
-          label = isRtl
-            ? `${format(start, 'd/M/yyyy', { locale: arSA })} - ${format(end, 'd/M/yyyy', { locale: arSA })}`
-            : `${format(start, 'd/M/yyyy')} - ${format(end, 'd/M/yyyy')}`;
-        }
         break;
       default:
         return null;
@@ -506,9 +492,11 @@ const DailyOrdersSummary: React.FC = () => {
     return {
       start: start.toISOString(),
       end: end.toISOString(),
-      label,
+      label: selectedPeriod === 'custom'
+        ? `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`
+        : periodOptions.find((p) => p.value === selectedPeriod)?.label || '',
     };
-  }, [selectedPeriod, customStartDate, customEndDate, isRtl]);
+  }, [selectedPeriod, customStartDate, customEndDate, periodOptions, isRtl]);
 
   const allBranches = useMemo(
     () => branches.map((b) => b.displayName).sort((a, b) => a.localeCompare(b, language)),
@@ -534,7 +522,7 @@ const DailyOrdersSummary: React.FC = () => {
         inventoryAPI.getInventory({}, isRtl),
         branchesAPI.getAll(),
         salesAPI.getAnalytics({ startDate: dateRange.start, endDate: dateRange.end, lang: language }),
-        productsAPI.getAll({ limit: 0 }),
+        productsAPI.getAll({ limit: 0 }), // جلب كل المنتجات
       ]);
 
       const fetchedBranches = Array.isArray(branchesResponse)
@@ -555,7 +543,7 @@ const DailyOrdersSummary: React.FC = () => {
             _id: product._id,
             name: product.name,
             nameEn: product.nameEn,
-            code: product.code || 'N/A',
+            code: product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
             unit: product.unit,
             unitEn: product.unitEn,
             price: Number(product.price) || 0,
@@ -566,6 +554,7 @@ const DailyOrdersSummary: React.FC = () => {
       const branchMap = new Map<string, string>(fetchedBranches.map((b) => [b._id, b.displayName]));
       const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
 
+      // تحديث productDetails من المنتجات المجلوبة
       fetchedProducts.forEach((product) => {
         productDetails.set(product._id, {
           code: product.code,
@@ -575,6 +564,7 @@ const DailyOrdersSummary: React.FC = () => {
         });
       });
 
+      // تعبئة من inventory كمخطط احتياطي
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
         if (item?.product?._id && !productDetails.has(item.product._id)) {
           productDetails.set(item.product._id, {
@@ -586,6 +576,7 @@ const DailyOrdersSummary: React.FC = () => {
         }
       });
 
+      // Full pagination to fetch all orders
       let allOrders: any[] = [];
       let page = 1;
       let hasMore = true;
@@ -742,7 +733,7 @@ const DailyOrdersSummary: React.FC = () => {
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3`}>
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-amber-600" />
-              {isRtl ? `ملخص الطلبات - ${periodLabel || '...'}` : `Orders Summary - ${periodLabel || '...'}`}
+              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - {periodLabel || '...'}
             </h2>
             <div className={`flex gap-2 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Button
