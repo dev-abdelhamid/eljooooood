@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef, useReducer } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Upload, ChevronDown, Calendar } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -48,44 +48,6 @@ interface Product {
   unitEn?: string;
   price: number;
 }
-
-interface State {
-  orderData: OrderRow[];
-  branches: Branch[];
-  products: Product[];
-  loading: boolean;
-  error: string | null;
-  searchTerm: string;
-}
-
-type Action =
-  | { type: 'SET_ORDER_DATA'; payload: OrderRow[] }
-  | { type: 'SET_BRANCHES'; payload: Branch[] }
-  | { type: 'SET_PRODUCTS'; payload: Product[] }
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'SET_ERROR'; payload: string | null }
-  | { type: 'SET_SEARCH_TERM'; payload: string };
-
-const initialState: State = {
-  orderData: [],
-  branches: [],
-  products: [],
-  loading: true,
-  error: null,
-  searchTerm: '',
-};
-
-const reducer = (state: State, action: Action): State => {
-  switch (action.type) {
-    case 'SET_ORDER_DATA': return { ...state, orderData: action.payload };
-    case 'SET_BRANCHES': return { ...state, branches: action.payload };
-    case 'SET_PRODUCTS': return { ...state, products: action.payload };
-    case 'SET_LOADING': return { ...state, loading: action.payload };
-    case 'SET_ERROR': return { ...state, error: action.payload };
-    case 'SET_SEARCH_TERM': return { ...state, searchTerm: action.payload };
-    default: return state;
-  }
-};
 
 // Period options
 const PERIOD_OPTIONS = [
@@ -288,7 +250,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
 };
 
 const generateFileName = (prefix: string, periodLabel: string, isRtl: boolean, extension: string): string => {
-  const dateStr = new Date('2025-10-21').toISOString().split('T')[0];
+  const dateStr = new Date('2025-10-23').toISOString().split('T')[0];
   const sanitizedLabel = periodLabel.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
   return `${prefix}_${sanitizedLabel}_${dateStr}.${extension}`;
 };
@@ -304,19 +266,19 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 15;
 
-  // إضافة إطار علوي
+  // إطار علوي
   doc.setFillColor(245, 245, 245);
   doc.rect(0, 0, pageWidth, 30, 'F');
 
-  // تحسين العنوان
+  // العنوان
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(33, 33, 33);
   const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
   doc.text(title, titleX, 20, { align: isRtl ? 'left' : 'right' });
 
-  // إضافة التاريخ
-  const currentDate = new Date('2025-10-21T19:43:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  // التاريخ
+  const currentDate = new Date('2025-10-23T19:50:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   doc.setFontSize(10);
@@ -509,10 +471,15 @@ const DailyOrdersSummary: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-  const [state, dispatch] = useReducer(reducer, initialState);
+
   const [selectedPeriod, setSelectedPeriod] = useState<string>('today');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [orderData, setOrderData] = useState<OrderRow[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   const periodOptions = useMemo(
     () =>
@@ -524,7 +491,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-23T19:43:00');
+    const now = new Date('2025-10-23T19:50:00');
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -563,24 +530,24 @@ const DailyOrdersSummary: React.FC = () => {
   }, [selectedPeriod, customStartDate, customEndDate, periodOptions, isRtl]);
 
   const allBranches = useMemo(
-    () => state.branches.map((b) => b.displayName).sort((a, b) => a.localeCompare(b, language)),
-    [state.branches, language]
+    () => branches.map((b) => b.displayName).sort((a, b) => a.localeCompare(b, language)),
+    [branches, language]
   );
 
   const fetchData = useCallback(async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'production')) {
-      dispatch({ type: 'SET_ERROR', payload: isRtl ? 'لا يوجد صلاحية' : 'No access' });
-      dispatch({ type: 'SET_LOADING', payload: false });
+      toast.error(isRtl ? 'لا يوجد صلاحية' : 'No access');
+      setLoading(false);
       return;
     }
 
     const dateRange = getDateRange();
     if (!dateRange) {
-      dispatch({ type: 'SET_LOADING', payload: false });
+      setLoading(false);
       return;
     }
 
-    dispatch({ type: 'SET_LOADING', payload: true });
+    setLoading(true);
     try {
       let allOrders: any[] = [];
       let page = 1;
@@ -604,6 +571,7 @@ const DailyOrdersSummary: React.FC = () => {
           break;
         }
         page++;
+        console.log(`Fetched page ${page - 1}, orders: ${fetchedOrders.length}, total so far: ${allOrders.length}`);
       }
 
       if (allOrders.length === 0 && selectedPeriod === 'today') {
@@ -621,7 +589,7 @@ const DailyOrdersSummary: React.FC = () => {
             }))
             .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language))
         : [];
-      dispatch({ type: 'SET_BRANCHES', payload: fetchedBranches });
+      setBranches(fetchedBranches);
 
       const fetchedProducts = Array.isArray(productsResponse)
         ? productsResponse.map((product: any) => ({
@@ -634,7 +602,7 @@ const DailyOrdersSummary: React.FC = () => {
             price: Number(product.price) || 0,
           }))
         : [];
-      dispatch({ type: 'SET_PRODUCTS', payload: fetchedProducts });
+      setProducts(fetchedProducts);
 
       const branchMap = new Map<string, string>(fetchedBranches.map((b) => [b._id, b.displayName]));
       const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
@@ -703,20 +671,12 @@ const DailyOrdersSummary: React.FC = () => {
         if (salesItem) row.actualSales = Number(salesItem.totalQuantity) || 0;
       }
 
-      dispatch({
-        type: 'SET_ORDER_DATA',
-        payload: Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity),
-      });
-      dispatch({ type: 'SET_ERROR', payload: null });
+      setOrderData(Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity));
     } catch (error: any) {
       console.error('Failed to fetch data:', error);
-      dispatch({
-        type: 'SET_ERROR',
-        payload: isRtl ? `فشل في جلب البيانات: ${error.message}` : `Failed to fetch data: ${error.message}`,
-      });
       toast.error(isRtl ? `فشل في جلب البيانات: ${error.message}` : `Failed to fetch data: ${error.message}`);
     } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
+      setLoading(false);
     }
   }, [user, getDateRange, language, isRtl]);
 
@@ -725,13 +685,11 @@ const DailyOrdersSummary: React.FC = () => {
   }, [fetchData]);
 
   const filteredData = useMemo(
-    () =>
-      state.orderData.filter(
-        (row) =>
-          row.product.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
-          row.code.toLowerCase().includes(state.searchTerm.toLowerCase())
-      ),
-    [state.orderData, state.searchTerm]
+    () => orderData.filter((row) => 
+      row.product.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      row.code.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [orderData, searchTerm]
   );
 
   const grandTotalQuantity = useMemo(() => filteredData.reduce((sum, row) => sum + row.totalQuantity, 0), [filteredData]);
@@ -755,7 +713,7 @@ const DailyOrdersSummary: React.FC = () => {
       ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
-        formatProductCode(row.code), // استخدام دالة مخصصة للكود
+        formatProductCode(row.code),
         ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
@@ -775,7 +733,13 @@ const DailyOrdersSummary: React.FC = () => {
     if (format === 'excel') {
       exportToExcel(rows, headers, periodLabel, isRtl);
     } else if (format === 'pdf') {
-      exportToPDF(rows, isRtl ? 'ملخص الطلبات' : 'Orders Summary', periodLabel, headers, isRtl);
+      exportToPDF(
+        rows,
+        isRtl ? 'ملخص الطلبات' : 'Orders Summary',
+        periodLabel,
+        headers,
+        isRtl
+      );
     }
   };
 
@@ -838,8 +802,8 @@ const DailyOrdersSummary: React.FC = () => {
               </div>
             )}
             <ProductSearchInput
-              value={state.searchTerm}
-              onChange={(e) => dispatch({ type: 'SET_SEARCH_TERM', payload: e.target.value })}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={isRtl ? 'ابحث عن منتج أو كود...' : 'Search for product or code...'}
               ariaLabel={isRtl ? 'بحث المنتج أو الكود' : 'Product or code search'}
               className="flex-1"
@@ -848,20 +812,7 @@ const DailyOrdersSummary: React.FC = () => {
         </div>
       </div>
 
-      {state.error && (
-        <div className="text-center py-12 text-gray-600 bg-white rounded-xl shadow-md p-4">
-          <p className="text-sm font-medium">{state.error}</p>
-          <Button
-            variant="primary"
-            onClick={() => fetchData()}
-            className="mt-3"
-          >
-            {isRtl ? 'إعادة المحاولة' : 'Retry'}
-          </Button>
-        </div>
-      )}
-
-      {state.loading ? (
+      {loading ? (
         <div className="flex justify-center items-center py-12">
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-amber-600"></div>
         </div>
