@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, useReducer } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Upload, ChevronDown, Calendar } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -15,7 +15,6 @@ import {
   subDays,
   subMonths,
   format,
-  isWithinInterval,
   parseISO,
 } from 'date-fns';
 import { arSA } from 'date-fns/locale';
@@ -49,6 +48,44 @@ interface Product {
   unitEn?: string;
   price: number;
 }
+
+interface State {
+  orderData: OrderRow[];
+  branches: Branch[];
+  products: Product[];
+  loading: boolean;
+  error: string | null;
+  searchTerm: string;
+}
+
+type Action =
+  | { type: 'SET_ORDER_DATA'; payload: OrderRow[] }
+  | { type: 'SET_BRANCHES'; payload: Branch[] }
+  | { type: 'SET_PRODUCTS'; payload: Product[] }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_SEARCH_TERM'; payload: string };
+
+const initialState: State = {
+  orderData: [],
+  branches: [],
+  products: [],
+  loading: true,
+  error: null,
+  searchTerm: '',
+};
+
+const reducer = (state: State, action: Action): State => {
+  switch (action.type) {
+    case 'SET_ORDER_DATA': return { ...state, orderData: action.payload };
+    case 'SET_BRANCHES': return { ...state, branches: action.payload };
+    case 'SET_PRODUCTS': return { ...state, products: action.payload };
+    case 'SET_LOADING': return { ...state, loading: action.payload };
+    case 'SET_ERROR': return { ...state, error: action.payload };
+    case 'SET_SEARCH_TERM': return { ...state, searchTerm: action.payload };
+    default: return state;
+  }
+};
 
 // Period options
 const PERIOD_OPTIONS = [
@@ -210,6 +247,10 @@ const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num.toString()) : num.toString();
 };
 
+const formatProductCode = (code: string): string => {
+  return code; // عرض الكود كما هو دون تحويل الأرقام
+};
+
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -257,43 +298,43 @@ const generatePDFHeader = (
   isRtl: boolean,
   title: string,
   periodLabel: string,
-  totalItems: number,
-  totalQuantity: number,
-  totalPrice: number,
   fontName: string,
   fontLoaded: boolean
 ) => {
   const pageWidth = doc.internal.pageSize.width;
   const margin = 15;
 
-  doc.setFillColor(220, 220, 220);
-  doc.rect(0, 0, pageWidth, 20, 'F');
+  // إضافة إطار علوي
+  doc.setFillColor(245, 245, 245);
+  doc.rect(0, 0, pageWidth, 30, 'F');
 
+  // تحسين العنوان
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(50, 50, 50);
-
+  doc.setFontSize(16);
+  doc.setTextColor(33, 33, 33);
   const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
-  doc.text(title, titleX, 15, { align: isRtl ? 'left' : 'right' });
+  doc.text(title, titleX, 20, { align: isRtl ? 'left' : 'right' });
 
-  const stats = isRtl
-    ? `المنتجات: ${toArabicNumerals(totalItems)} | الكمية: ${toArabicNumerals(totalQuantity)} وحدة | المبلغ: ${formatPrice(totalPrice, isRtl)}`
-    : `Products: ${totalItems} | Quantity: ${totalQuantity} units | Amount: ${formatPrice(totalPrice, isRtl)}`;
-  const statsX = isRtl ? pageWidth - margin - doc.getTextWidth(stats) : margin;
-  doc.text(stats, statsX, 15, { align: isRtl ? 'right' : 'left' });
-
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.5);
-  doc.line(margin, 22, pageWidth - margin, 22);
-
-  const currentDate = new Date('2025-10-21T16:40:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  // إضافة التاريخ
+  const currentDate = new Date('2025-10-21T19:43:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  const dateX = isRtl ? pageWidth - margin - doc.getTextWidth(currentDate) : margin;
+  doc.text(currentDate, dateX, 20, { align: isRtl ? 'right' : 'left' });
+
+  // خط فاصل
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.5);
+  doc.line(margin, 32, pageWidth - margin, 32);
+
+  // تذييل
+  const footerText = isRtl
+    ? `نظام إدارة الجودياء`
+    : `Elgoodia Management System`;
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  const footerText = isRtl
-    ? `نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
-    : `Elgoodia Management System - ${currentDate}`;
   doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
 };
 
@@ -307,31 +348,55 @@ const generatePDFTable = (
 ) => {
   const numColumns = headers.length;
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 10;
+  const margin = 15;
   const maxTableWidth = pageWidth - 2 * margin;
-  const columnWidth = maxTableWidth / numColumns;
+
+  // تخصيص عرض الأعمدة
+  const columnWidths = {
+    name: 0.25, // 25% للاسم
+    price: 0.15, // 15% للسعر
+    code: 0.15, // 15% للكود
+    branches: 0.3 / (numColumns - 4), // توزيع متساوٍ للفروع
+    total: 0.15, // 15% للإجمالي
+    unit: 0.15, // 15% للوحدة
+  };
 
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 25,
-    margin: { top: 25, bottom: 15, left: margin, right: margin },
-    tableWidth: 'auto',
-    columnStyles: headers.reduce((styles, _, i) => {
+    startY: 35,
+    margin: { top: 35, bottom: 20, left: margin, right: margin },
+    tableWidth: maxTableWidth,
+    columnStyles: headers.reduce((styles, header, i) => {
       const index = isRtl ? numColumns - 1 - i : i;
-      styles[index] = { cellWidth: columnWidth, halign: 'center', valign: 'middle', fontSize: 8 };
+      let cellWidth: number;
+      if (i === 0) cellWidth = maxTableWidth * columnWidths.name;
+      else if (i === 1) cellWidth = maxTableWidth * columnWidths.price;
+      else if (i === 2) cellWidth = maxTableWidth * columnWidths.code;
+      else if (i === numColumns - 1) cellWidth = maxTableWidth * columnWidths.unit;
+      else if (i === numColumns - 2) cellWidth = maxTableWidth * columnWidths.total;
+      else cellWidth = maxTableWidth * columnWidths.branches;
+      styles[index] = {
+        cellWidth,
+        halign: i === 0 ? (isRtl ? 'right' : 'left') : 'center',
+        valign: 'middle',
+        fontSize: 8,
+        cellPadding: 3,
+      };
       return styles;
     }, {}),
     headStyles: {
-      fillColor: [220, 220, 220],
-      textColor: [50, 50, 50],
+      fillColor: [240, 240, 240],
+      textColor: [33, 33, 33],
       fontSize: 10,
       halign: 'center',
       valign: 'middle',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
-      cellPadding: 2,
+      cellPadding: 3,
+      lineWidth: 0.2,
+      lineColor: [200, 200, 200],
     },
     bodyStyles: {
       fontSize: 8,
@@ -341,9 +406,12 @@ const generatePDFTable = (
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
-      cellPadding: 2,
+      cellPadding: 3,
+      lineWidth: 0.2,
     },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245],
+    },
     didParseCell: (hookData) => {
       if (hookData.section === 'body' && hookData.row.index === data.length - 1) {
         hookData.cell.styles.fontStyle = 'bold';
@@ -351,8 +419,11 @@ const generatePDFTable = (
       }
       if (hookData.section === 'body' || hookData.section === 'head') {
         hookData.cell.text = hookData.cell.text.map(text => {
+          if (typeof text === 'string' && hookData.column.index === 2 && hookData.section === 'body') {
+            return formatProductCode(text); // عدم تحويل أرقام الكود
+          }
           if (typeof text === 'string' && /[0-9]/.test(text)) {
-            return text.replace(/[0-9]/g, d => toArabicNumerals(d));
+            return isRtl ? toArabicNumerals(text) : text;
           }
           return text;
         });
@@ -366,10 +437,7 @@ const exportToPDF = async (
   title: string,
   periodLabel: string,
   headers: string[],
-  isRtl: boolean,
-  totalItems: number,
-  totalQuantity: number,
-  totalPrice: number
+  isRtl: boolean
 ) => {
   try {
     toast.info(isRtl ? 'جارٍ إنشاء ملف PDF...' : 'Generating PDF...', {
@@ -380,7 +448,7 @@ const exportToPDF = async (
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const fontName = 'Amiri';
     const fontLoaded = await loadFont(doc);
-    generatePDFHeader(doc, isRtl, title, periodLabel, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
+    generatePDFHeader(doc, isRtl, title, periodLabel, fontName, fontLoaded);
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName);
     const fileName = generateFileName('OrdersSummary', periodLabel, isRtl, 'pdf');
     doc.save(fileName);
@@ -413,7 +481,7 @@ const exportToExcel = (dataRows: any[], headers: string[], periodLabel: string, 
     ws['!cols'] = [
       { wch: 25 }, // Name
       { wch: 15 }, // Price
-      { wch: 20 }, // Code
+      { wch: 15 }, // Code
       ...Array(headers.length - 5).fill({ wch: 15 }),
       { wch: 15 }, // Total
       { wch: 12 }, // Unit
@@ -441,15 +509,10 @@ const DailyOrdersSummary: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-
+  const [state, dispatch] = useReducer(reducer, initialState);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('today');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
-  const [orderData, setOrderData] = useState<OrderRow[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [searchTerm, setSearchTerm] = useState<string>('');
 
   const periodOptions = useMemo(
     () =>
@@ -461,7 +524,7 @@ const DailyOrdersSummary: React.FC = () => {
   );
 
   const getDateRange = useCallback(() => {
-    const now = new Date('2025-10-21T16:40:00'); // Updated to 04:40 PM EEST
+    const now = new Date('2025-10-23T19:43:00');
     let start: Date, end: Date;
 
     switch (selectedPeriod) {
@@ -500,32 +563,52 @@ const DailyOrdersSummary: React.FC = () => {
   }, [selectedPeriod, customStartDate, customEndDate, periodOptions, isRtl]);
 
   const allBranches = useMemo(
-    () => branches.map((b) => b.displayName).sort((a, b) => a.localeCompare(b, language)),
-    [branches, language]
+    () => state.branches.map((b) => b.displayName).sort((a, b) => a.localeCompare(b, language)),
+    [state.branches, language]
   );
 
   const fetchData = useCallback(async () => {
     if (!user || (user.role !== 'admin' && user.role !== 'production')) {
-      toast.error(isRtl ? 'لا يوجد صلاحية' : 'No access');
-      setLoading(false);
+      dispatch({ type: 'SET_ERROR', payload: isRtl ? 'لا يوجد صلاحية' : 'No access' });
+      dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
 
     const dateRange = getDateRange();
     if (!dateRange) {
-      setLoading(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
 
-    setLoading(true);
+    dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const [inventory, ordersResponse, branchesResponse, salesResponse, productsResponse] = await Promise.all([
-        inventoryAPI.getInventory({}, isRtl),
-        ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page: 1, limit: 10000 }, isRtl),
-        branchesAPI.getAll(),
-        salesAPI.getAnalytics({ startDate: dateRange.start, endDate: dateRange.end, lang: language }),
-        productsAPI.getAll({ limit: 0 }), // جلب كل المنتجات
-      ]);
+      let allOrders: any[] = [];
+      let page = 1;
+      const pageSize = 1000; // عدد الطلبات لكل صفحة
+
+      // جلب جميع الطلبات باستخدام التصفح الخلفي
+      while (true) {
+        const [inventory, ordersResponse, branchesResponse, salesResponse, productsResponse] = await Promise.all([
+          inventoryAPI.getInventory({}, isRtl),
+          ordersAPI.getAll({ startDate: dateRange.start, endDate: dateRange.end, page, limit: pageSize }, isRtl),
+          branchesAPI.getAll(),
+          salesAPI.getAnalytics({ startDate: dateRange.start, endDate: dateRange.end, lang: language }),
+          productsAPI.getAll({ limit: 0 }),
+        ]);
+
+        const fetchedOrders = Array.isArray(ordersResponse.data) ? ordersResponse.data : ordersResponse;
+        allOrders = [...allOrders, ...fetchedOrders];
+
+        // التحقق مما إذا كان هناك المزيد من الصفحات
+        if (!ordersResponse.total || allOrders.length >= ordersResponse.total || fetchedOrders.length < pageSize) {
+          break;
+        }
+        page++;
+      }
+
+      if (allOrders.length === 0 && selectedPeriod === 'today') {
+        console.log(`No orders found for today (${dateRange.start} to ${dateRange.end})`);
+      }
 
       const fetchedBranches = Array.isArray(branchesResponse)
         ? branchesResponse
@@ -538,25 +621,24 @@ const DailyOrdersSummary: React.FC = () => {
             }))
             .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language))
         : [];
-      setBranches(fetchedBranches);
+      dispatch({ type: 'SET_BRANCHES', payload: fetchedBranches });
 
       const fetchedProducts = Array.isArray(productsResponse)
         ? productsResponse.map((product: any) => ({
             _id: product._id,
             name: product.name,
             nameEn: product.nameEn,
-            code: product.code || 'N/A', // تأكيد الكود مع قيمة افتراضية
+            code: product.code || 'N/A',
             unit: product.unit,
             unitEn: product.unitEn,
             price: Number(product.price) || 0,
           }))
         : [];
-      setProducts(fetchedProducts);
+      dispatch({ type: 'SET_PRODUCTS', payload: fetchedProducts });
 
       const branchMap = new Map<string, string>(fetchedBranches.map((b) => [b._id, b.displayName]));
       const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
 
-      // تحديث productDetails من المنتجات المجلوبة
       fetchedProducts.forEach((product) => {
         productDetails.set(product._id, {
           code: product.code,
@@ -566,7 +648,6 @@ const DailyOrdersSummary: React.FC = () => {
         });
       });
 
-      // تعبئة من inventory كمخطط احتياطي
       (Array.isArray(inventory) ? inventory : []).forEach((item: any) => {
         if (item?.product?._id && !productDetails.has(item.product._id)) {
           productDetails.set(item.product._id, {
@@ -578,24 +659,8 @@ const DailyOrdersSummary: React.FC = () => {
         }
       });
 
-      const orders = Array.isArray(ordersResponse) ? ordersResponse : [];
-      if (orders.length === 0 && selectedPeriod === 'today') {
-        console.log(`No orders found for today (${dateRange.start} to ${dateRange.end})`);
-      }
-
       const orderMap = new Map<string, OrderRow>();
-      orders.forEach((order: any) => {
-        const orderDate = parseISO(order.createdAt || order.date || '1970-01-01');
-        if (isNaN(orderDate.getTime())) {
-          console.warn('Invalid order date:', order.createdAt || order.date);
-          return;
-        }
-
-        if (!isWithinInterval(orderDate, { start: parseISO(dateRange.start), end: parseISO(dateRange.end) })) {
-          console.log('Order excluded:', orderDate, dateRange);
-          return;
-        }
-
+      allOrders.forEach((order: any) => {
         const branchId = order.branch?._id || order.branch || order.branchId;
         const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
 
@@ -638,12 +703,20 @@ const DailyOrdersSummary: React.FC = () => {
         if (salesItem) row.actualSales = Number(salesItem.totalQuantity) || 0;
       }
 
-      setOrderData(Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity));
-    } catch (error) {
+      dispatch({
+        type: 'SET_ORDER_DATA',
+        payload: Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity),
+      });
+      dispatch({ type: 'SET_ERROR', payload: null });
+    } catch (error: any) {
       console.error('Failed to fetch data:', error);
-      toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data');
+      dispatch({
+        type: 'SET_ERROR',
+        payload: isRtl ? `فشل في جلب البيانات: ${error.message}` : `Failed to fetch data: ${error.message}`,
+      });
+      toast.error(isRtl ? `فشل في جلب البيانات: ${error.message}` : `Failed to fetch data: ${error.message}`);
     } finally {
-      setLoading(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [user, getDateRange, language, isRtl]);
 
@@ -652,11 +725,13 @@ const DailyOrdersSummary: React.FC = () => {
   }, [fetchData]);
 
   const filteredData = useMemo(
-    () => orderData.filter((row) => 
-      row.product.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      row.code.toLowerCase().includes(searchTerm.toLowerCase())
-    ),
-    [orderData, searchTerm]
+    () =>
+      state.orderData.filter(
+        (row) =>
+          row.product.toLowerCase().includes(state.searchTerm.toLowerCase()) ||
+          row.code.toLowerCase().includes(state.searchTerm.toLowerCase())
+      ),
+    [state.orderData, state.searchTerm]
   );
 
   const grandTotalQuantity = useMemo(() => filteredData.reduce((sum, row) => sum + row.totalQuantity, 0), [filteredData]);
@@ -680,7 +755,7 @@ const DailyOrdersSummary: React.FC = () => {
       ...filteredData.map((row) => [
         row.product,
         formatPrice(row.price, isRtl),
-        row.code,
+        formatProductCode(row.code), // استخدام دالة مخصصة للكود
         ...allBranches.map((branch) => formatNumber(row.branchQuantities[branch] || 0, isRtl)),
         formatNumber(row.totalQuantity, isRtl),
         row.unit,
@@ -700,16 +775,7 @@ const DailyOrdersSummary: React.FC = () => {
     if (format === 'excel') {
       exportToExcel(rows, headers, periodLabel, isRtl);
     } else if (format === 'pdf') {
-      exportToPDF(
-        rows,
-        isRtl ? 'ملخص الطلبات' : 'Orders Summary',
-        periodLabel,
-        headers,
-        isRtl,
-        filteredData.length,
-        grandTotalQuantity,
-        grandTotalPrice
-      );
+      exportToPDF(rows, isRtl ? 'ملخص الطلبات' : 'Orders Summary', periodLabel, headers, isRtl);
     }
   };
 
@@ -772,8 +838,8 @@ const DailyOrdersSummary: React.FC = () => {
               </div>
             )}
             <ProductSearchInput
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={state.searchTerm}
+              onChange={(e) => dispatch({ type: 'SET_SEARCH_TERM', payload: e.target.value })}
               placeholder={isRtl ? 'ابحث عن منتج أو كود...' : 'Search for product or code...'}
               ariaLabel={isRtl ? 'بحث المنتج أو الكود' : 'Product or code search'}
               className="flex-1"
@@ -782,7 +848,20 @@ const DailyOrdersSummary: React.FC = () => {
         </div>
       </div>
 
-      {loading ? (
+      {state.error && (
+        <div className="text-center py-12 text-gray-600 bg-white rounded-xl shadow-md p-4">
+          <p className="text-sm font-medium">{state.error}</p>
+          <Button
+            variant="primary"
+            onClick={() => fetchData()}
+            className="mt-3"
+          >
+            {isRtl ? 'إعادة المحاولة' : 'Retry'}
+          </Button>
+        </div>
+      )}
+
+      {state.loading ? (
         <div className="flex justify-center items-center py-12">
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-amber-600"></div>
         </div>
@@ -819,7 +898,7 @@ const DailyOrdersSummary: React.FC = () => {
                     {row.product}
                   </td>
                   <td className="px-1.5 py-1.5 text-gray-700 text-center">{formatPrice(row.price, isRtl)}</td>
-                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{row.code}</td>
+                  <td className="px-1.5 py-1.5 text-gray-700 text-center">{formatProductCode(row.code)}</td>
                   {allBranches.map((branch) => (
                     <td
                       key={branch}
