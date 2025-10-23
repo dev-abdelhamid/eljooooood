@@ -273,7 +273,7 @@ const generatePDFHeader = (
 
   const fullTitle = isRtl ? `ملخص الطلبات - ${periodLabel}` : `Orders Summary - ${periodLabel}`;
   const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(fullTitle);
-  doc.text(fullTitle, titleX, 25, { align: isRtl ? 'left' : 'right' });
+  doc.text(fullTitle, titleX, 25, { align: 'center' });
 
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.5);
