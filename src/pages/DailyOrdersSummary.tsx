@@ -263,7 +263,6 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const margin = 15;
 
-  doc.setFillColor(220, 220, 220);
   doc.rect(0, 0, pageWidth, 30, 'F');
 
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold');
@@ -271,7 +270,7 @@ const generatePDFHeader = (
   doc.setTextColor(50, 50, 50);
 
   const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
-  doc.text(title, titleX, 15, { align: isRtl ? 'right' : 'left' });
+  doc.text(title, titleX, 25, { align: isRtl ? 'right' : 'left' });
 
   const periodX = isRtl ? pageWidth - margin - doc.getTextWidth(periodLabel) : margin;
   doc.text(periodLabel, periodX, 25, { align: isRtl ? 'right' : 'left' });
