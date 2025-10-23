@@ -200,7 +200,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
 };
 
 const generateFileName = (title: string, monthName: string, isRtl: boolean, format: string): string => {
-  const date = new Date('2025-10-21').toISOString().split('T')[0];
+  const date = new Date().toISOString().split('T')[0];
   return `${title}_${monthName}_${date}.${format}`;
 };
 
@@ -230,7 +230,7 @@ const generatePDFHeader = (
   doc.setDrawColor(245, 158, 11);
   doc.line(20, 25, pageWidth - 20, 25);
   const pageCount = doc.getNumberOfPages();
-  const currentDate = new Date('2025-10-21T16:02:00').toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -255,6 +255,17 @@ const generatePDFTable = (
   fontLoaded: boolean,
   fontName: string
 ) => {
+  const pageWidth = doc.internal.pageSize.width;
+  const margin = 10;
+
+  // Calculate approximate table width
+  let tableWidth = 0;
+  headers.forEach(header => {
+    tableWidth += doc.getTextWidth(header) + 20; // Approximate cell padding
+  });
+
+  const leftMargin = (pageWidth - tableWidth) / 2;
+
   const numColumns = headers.length;
   const fontSizeHead = Math.max(6, Math.min(9, Math.floor(280 / numColumns)));
   const fontSizeBody = fontSizeHead - 1;
@@ -273,8 +284,8 @@ const generatePDFTable = (
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
     startY: 30,
-    margin: { top: 10, bottom: 10, left: 10, right: 10 },
-    tableWidth: 'wrap',
+    margin: { top: 10, bottom: 10, left: leftMargin, right: pageWidth - leftMargin - tableWidth },
+    tableWidth: tableWidth,
     columnStyles,
     headStyles: {
       fillColor: [245, 158, 11],
@@ -378,7 +389,7 @@ const DailyOrdersPage: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
-  const currentDate = new Date('2025-10-21T16:02:00'); // Updated to 4:02 PM EEST
+  const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentDay = currentDate.getDate();
   const initialWeek = `week${Math.ceil(currentDay / 7)}`;
@@ -447,9 +458,8 @@ const DailyOrdersPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
+      const [inventory, branchesResponse, salesResponse] = await Promise.all([
         inventoryAPI.getInventory({}, isRtl),
-        ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl),
         branchesAPI.getAll(),
         salesAPI.getAnalytics({
           startDate: new Date(currentYear, parseInt(selectedMonth), 1).toISOString(),
@@ -480,18 +490,27 @@ const DailyOrdersPage: React.FC = () => {
           });
         }
       });
-      let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
-      if (orders.length === 0) {
+      let allOrders = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const ordersResponse = await ordersAPI.getAll({ page, limit: 5000 }, isRtl);
+        const fetchedOrders = Array.isArray(ordersResponse) ? ordersResponse : [];
+        allOrders = [...allOrders, ...fetchedOrders];
+        hasMore = fetchedOrders.length === 5000;
+        page++;
+      }
+      if (allOrders.length === 0) {
         toast.warn(isRtl ? 'لا توجد طلبات، استخدام بيانات احتياطية' : 'No orders found, using fallback data', {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
-        orders = inventory
+        allOrders = inventory
           .filter((item: any) => item?.product?._id)
           .flatMap((item: any) => {
             return (item.movements || []).map((movement: any) => ({
               status: 'completed',
-              createdAt: movement.createdAt || new Date('2025-10-21T16:02:00').toISOString(),
+              createdAt: movement.createdAt || new Date().toISOString(),
               branch: {
                 _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id,
               },
@@ -519,7 +538,7 @@ const DailyOrdersPage: React.FC = () => {
       for (let month = 0; month < 12; month++) {
         const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
         const orderMap = new Map<string, OrderRow>();
-        orders.forEach((order: any) => {
+        allOrders.forEach((order: any) => {
           const date = new Date(order.createdAt || order.date);
           if (isNaN(date.getTime())) return;
           const orderMonth = date.getMonth();
