@@ -271,11 +271,9 @@ const generatePDFHeader = (
   doc.setFontSize(14);
   doc.setTextColor(50, 50, 50);
 
-  const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(title);
-  doc.text(title, titleX, 15, { align: isRtl ? 'right' : 'left' });
-
-  const periodX = isRtl ? pageWidth - margin - doc.getTextWidth(periodLabel) : margin;
-  doc.text(periodLabel, periodX, 25, { align: isRtl ? 'right' : 'left' });
+  const fullTitle = isRtl ? `ملخص الطلبات - ${periodLabel}` : `Orders Summary - ${periodLabel}`;
+  const titleX = isRtl ? margin : pageWidth - margin - doc.getTextWidth(fullTitle);
+  doc.text(fullTitle, titleX, 15, { align: isRtl ? 'right' : 'left' });
 
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.5);
@@ -469,17 +467,19 @@ const DailyOrdersSummary: React.FC = () => {
       case 'today':
         start = startOfDay(now);
         end = endOfDay(now);
-        label = format(start, 'EEEE، dd/MM/yyyy', { locale: isRtl ? arSA : undefined });
+        label = isRtl
+          ? `اليوم - ${format(start, 'EEEE d/M/yyyy', { locale: arSA })}`
+          : `Today - ${format(start, 'EEEE d/M/yyyy')}`;
         break;
       case 'week':
         start = subDays(now, 6);
         end = endOfDay(now);
-        label = `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`;
+        label = isRtl ? 'آخر ٧ أيام' : 'Last 7 Days';
         break;
       case 'month':
         start = subMonths(now, 1);
         end = endOfDay(now);
-        label = `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`;
+        label = isRtl ? 'آخر ٣٠ يوم' : 'Last 30 Days';
         break;
       case 'custom':
         if (!customStartDate || !customEndDate) return null;
@@ -490,9 +490,13 @@ const DailyOrdersSummary: React.FC = () => {
           return null;
         }
         if (isSameDay(start, end)) {
-          label = format(start, 'EEEE، dd/MM/yyyy', { locale: isRtl ? arSA : undefined });
+          label = isRtl
+            ? `اليوم - ${format(start, 'EEEE d/M/yyyy', { locale: arSA })}`
+            : `Today - ${format(start, 'EEEE d/M/yyyy')}`;
         } else {
-          label = `${format(start, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })} - ${format(end, 'dd/MM/yyyy', { locale: isRtl ? arSA : undefined })}`;
+          label = isRtl
+            ? `${format(start, 'd/M/yyyy', { locale: arSA })} - ${format(end, 'd/M/yyyy', { locale: arSA })}`
+            : `${format(start, 'd/M/yyyy')} - ${format(end, 'd/M/yyyy')}`;
         }
         break;
       default:
@@ -738,7 +742,7 @@ const DailyOrdersSummary: React.FC = () => {
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3`}>
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-amber-600" />
-              {isRtl ? 'ملخص الطلبات' : 'Orders Summary'} - {periodLabel || '...'}
+              {isRtl ? `ملخص الطلبات - ${periodLabel || '...'}` : `Orders Summary - ${periodLabel || '...'}`}
             </h2>
             <div className={`flex gap-2 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Button
