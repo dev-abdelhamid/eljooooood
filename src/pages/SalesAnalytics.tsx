@@ -277,7 +277,7 @@ const exportToCSV = (data: any[], filename: string, columns: { key: string; labe
     const headers = columns.map(col => `"${col.label.replace(/"/g, '""')}"`).join(',');
     const rows = data.map(item =>
       columns.map(col => {
-        const value = col.key.includes('total') || col.key === 'averageOrderValue' || col.key === 'totalRevenue' || col.key === 'totalSpent' || col.key === 'totalQuantity' || col.key === 'saleCount' || col.key === 'totalOrders' || col.key === 'totalReturns' || col.key === 'totalValue' || col.key === 'averageReturnValue'
+        const value = col.key.includes('total') || col.key === 'averageOrderValue' || col.key === 'averageReturnValue' || col.key === 'totalRevenue' || col.key === 'totalSpent' || col.key === 'totalQuantity' || col.key === 'saleCount' || col.key === 'totalOrders' || col.key === 'totalReturns' || col.key === 'totalValue'
           ? `"${safeNumber(item[col.key]).toFixed(2)} ${currency}"`
           : `"${safeString(item[col.key]).replace(/"/g, '""')}"`
       }).join(',')
@@ -467,7 +467,7 @@ const DataTable: React.FC<{
               <tr key={index} className="border-t hover:bg-gray-50 transition-colors">
                 {columns.map((col) => (
                   <td key={col.key} className={`p-2 ${col.width || 'w-auto'} font-alexandria text-gray-700`}>
-                    {col.key === 'totalSales' || col.key === 'averageOrderValue' || col.key === 'totalRevenue' || col.key === 'total' || col.key === 'totalSpent' || col.key === 'totalQuantity' || col.key === 'saleCount' || col.key === 'totalOrders' || col.key === 'totalReturns' || col.key === 'totalValue' || col.key === 'averageReturnValue'
+                    {col.key.includes('total') || col.key === 'averageOrderValue' || col.key === 'averageReturnValue' || col.key === 'totalRevenue' || col.key === 'totalSpent' || col.key === 'totalQuantity' || col.key === 'saleCount' || col.key === 'totalOrders' || col.key === 'totalReturns' || col.key === 'totalValue'
                       ? `${safeNumber(item[col.key]).toFixed(2)} ${currency || ''}`
                       : safeString(item[col.key], '-') || '-'}
                   </td>
@@ -685,8 +685,8 @@ const ReportsAnalytics: React.FC = () => {
     try {
       const params: any = {
         branch: selectedBranch,
-        startDate: new Date(startDate).toISOString(),
-        endDate: new Date(endDate).toISOString(),
+        startDate: new Date(startDate).toISOString().split('T')[0],
+        endDate: new Date(endDate).toISOString().split('T')[0],
         lang: language,
       };
       console.log(`[${new Date().toISOString()}] Fetching ${type} with params:`, params);
@@ -778,10 +778,11 @@ const ReportsAnalytics: React.FC = () => {
         });
       } else if (type === 'orders') {
         response = await ordersAPI.getAll(params);
-        if (!response || !Array.isArray(response)) {
+        const rawResponse = Array.isArray(response) ? response : response.orders || [];
+        if (!Array.isArray(rawResponse)) {
           throw new Error(t.errors.invalid_data);
         }
-        const orderList = response.map((order: any) => ({
+        const orderList = rawResponse.map((order: any) => ({
           _id: safeString(order._id),
           orderNumber: safeString(order.orderNumber, 'N/A'),
           date: safeString(order.createdAt),
@@ -809,18 +810,19 @@ const ReportsAnalytics: React.FC = () => {
         });
       } else if (type === 'returns') {
         response = await returnsAPI.getAll(params);
-        if (!response || typeof response !== 'object') {
+        const rawResponse = Array.isArray(response) ? response : response.returns || [];
+        if (!Array.isArray(rawResponse)) {
           throw new Error(t.errors.invalid_data);
         }
-        const returnList = response.map((ret: any) => ({
+        const returnList = rawResponse.map((ret: any) => ({
           _id: safeString(ret._id),
           returnNumber: safeString(ret.returnNumber, 'N/A'),
           date: safeString(ret.createdAt),
-          total: safeNumber(ret.totalAmount),
+          total: safeNumber(ret.totalAmount || ret.items?.reduce((sum: number, item: any) => sum + (item.quantity * item.price), 0) || 0),
           status: safeString(ret.status, 'Unknown'),
           branchName: isRtl ? safeString(ret.branch?.name, 'Unknown') : safeString(ret.branch?.nameEn || ret.branch?.name, 'Unknown'),
           branch: ret.branch || {},
-          totalAmount: safeNumber(ret.totalAmount),
+          totalAmount: safeNumber(ret.totalAmount || ret.items?.reduce((sum: number, item: any) => sum + (item.quantity * item.price), 0) || 0),
           createdAt: safeString(ret.createdAt),
         }));
         setReturns(returnList);
@@ -1290,7 +1292,7 @@ const ReportsAnalytics: React.FC = () => {
   return (
     <div className="min-h-screen p-4 bg-gray-50 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600&display=swap" rel="stylesheet" />
-      <header className="mb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <BarChart2 className="w-5 h-5 text-amber-600" />
           <div>
@@ -1298,23 +1300,25 @@ const ReportsAnalytics: React.FC = () => {
             <p className="text-xs text-gray-500">{t.subtitle}</p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-center">
-          <ProductSearchInput
-            value={searchTerm}
-            onChange={(e) => debouncedSearch(e.target.value)}
-            placeholder={t.searchPlaceholder}
-            ariaLabel={t.searchPlaceholder}
-            className="w-full sm:w-48"
-          />
-          <ProductDropdown
-            value={selectedBranch}
-            onChange={setSelectedBranch}
-            options={branchOptions}
-            ariaLabel={t.branchFilterPlaceholder}
-            className="w-full sm:w-40"
-          />
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-            <div>
+        <div className="flex flex-wrap gap-3 items-end w-full md:w-auto">
+          <div className="flex-grow min-w-[200px]">
+            <ProductSearchInput
+              value={searchTerm}
+              onChange={(e) => debouncedSearch(e.target.value)}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
+            />
+          </div>
+          <div className="flex-grow min-w-[150px]">
+            <ProductDropdown
+              value={selectedBranch}
+              onChange={setSelectedBranch}
+              options={branchOptions}
+              ariaLabel={t.branchFilterPlaceholder}
+            />
+          </div>
+          <div className="flex flex-wrap gap-3 flex-grow min-w-[300px]">
+            <div className="flex-grow min-w-[140px]">
               <label className="block text-xs text-gray-700 font-alexandria">{t.startDate}</label>
               <input
                 type="date"
@@ -1324,7 +1328,7 @@ const ReportsAnalytics: React.FC = () => {
                 aria-label={t.startDate}
               />
             </div>
-            <div>
+            <div className="flex-grow min-w-[140px]">
               <label className="block text-xs text-gray-700 font-alexandria">{t.endDate}</label>
               <input
                 type="date"
@@ -1368,8 +1372,8 @@ const ReportsAnalytics: React.FC = () => {
           className="space-y-4"
         >
           {activeTab === 'sales' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
-              <div className="col-span-1 sm:col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.salesTrends}</h3>
                 {analytics.salesTrends.length > 0 ? (
                   <div className="h-56">
@@ -1440,7 +1444,6 @@ const ReportsAnalytics: React.FC = () => {
                     { key: 'totalRevenue', label: t.totalSales, width: 'w-1/5' },
                     { key: 'totalQuantity', label: t.totalCount, width: 'w-1/5' },
                   ]}
-
                   isRtl={isRtl}
                   currency={t.currency}
                   className="text-xs"
@@ -1547,8 +1550,8 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'orders' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
-              <div className="col-span-1 sm:col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.orderTrends}</h3>
                 {orderAnalytics.orderTrends.length > 0 ? (
                   <div className="h-56">
@@ -1604,14 +1607,14 @@ const ReportsAnalytics: React.FC = () => {
                   className="text-xs"
                 />
               </div>
-              <div className="col-span-1 sm:col-span-2">
+              <div className="col-span-2">
                 <OrdersTable orders={filteredData.orders} isRtl={isRtl} currency={t.currency} language={language} className="text-xs" />
               </div>
             </div>
           )}
           {activeTab === 'returns' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
-              <div className="col-span-1 sm:col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.returnTrends}</h3>
                 {returnAnalytics.returnTrends.length > 0 ? (
                   <div className="h-56">
@@ -1667,7 +1670,7 @@ const ReportsAnalytics: React.FC = () => {
                   className="text-xs"
                 />
               </div>
-              <div className="col-span-1 sm:col-span-2">
+              <div className="col-span-2">
                 <ReturnsTable returns={filteredData.returns} isRtl={isRtl} currency={t.currency} language={language} className="text-xs" />
               </div>
             </div>
