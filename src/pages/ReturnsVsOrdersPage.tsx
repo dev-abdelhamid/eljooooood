@@ -1,5 +1,4 @@
-// src/pages/ReturnsVsOrdersPage.tsx
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Search, X, Upload, ChevronDown, AlertCircle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -11,7 +10,6 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// === Utility Functions ===
 const toArabicNumerals = (num: number | string): string => {
   return String(num).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]);
 };
@@ -26,7 +24,6 @@ const getRatioColor = (ratio: number): string => {
   return 'text-green-700 bg-green-50';
 };
 
-// === PDF Export ===
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontUrl = 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf';
   try {
@@ -42,50 +39,6 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
-const exportToPDF = async (data: any[], headers: string[], title: string, month: string, isRtl: boolean, totalOrders: number, totalReturns: number) => {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const fontLoaded = await loadFont(doc);
-
-  // Header
-  doc.setFontSize(16);
-  doc.text(title, isRtl ? 280 : 15, 15, { align: isRtl ? 'right' : 'left' });
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  const stats = isRtl
-    ? `إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | المرتجعات: ${toArabicNumerals(totalReturns)} | نسبة: ${((totalReturns / totalOrders) * 100).toFixed(1)}%`
-    : `Orders: ${totalOrders} | Returns: ${totalReturns} | Ratio: ${((totalReturns / totalOrders) * 100).toFixed(1)}%`;
-  doc.text(stats, isRtl ? 280 : 15, 22, { align: isRtl ? 'right' : 'left' });
-
-  // Table
-  autoTable(doc, {
-    head: [isRtl ? headers.slice().reverse() : headers],
-    body: isRtl ? data.map(row => row.slice().reverse()) : data,
-    startY: 30,
-    theme: 'striped',
-    headStyles: { fillColor: [59, 130, 246], fontSize: 9, halign: 'center' },
-    bodyStyles: { fontSize: 8, halign: 'center' },
-    didParseCell: (d) => {
-      if (isRtl && typeof d.cell.text[0] === 'string') {
-        d.cell.text[0] = d.cell.text[0].replace(/\d/g, m => toArabicNumerals(m));
-      }
-    },
-  });
-
-  doc.save(`${title}_${month}.pdf`);
-};
-
-// === Interfaces ===
-interface ProductRow {
-  id: string;
-  code: string;
-  name: string;
-  unit: string;
-  orders: number;
-  returns: number;
-  ratio: number;
-}
-
-// === Main Component ===
 const ReturnsVsOrdersPage: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -112,7 +65,6 @@ const ReturnsVsOrdersPage: React.FC = () => {
     }));
   }, [currentYear, language]);
 
-  // === Fetch Data ===
   const fetchData = useCallback(async () => {
     if (!user || !['admin', 'production'].includes(user.role)) {
       toast.error(isRtl ? 'غير مصرح' : 'Unauthorized');
@@ -205,7 +157,6 @@ const ReturnsVsOrdersPage: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // === Filtered Data ===
   const filteredData = useMemo(() => {
     return data
       .filter(row => 
@@ -224,7 +175,6 @@ const ReturnsVsOrdersPage: React.FC = () => {
 
   const overallRatio = totals.orders > 0 ? (totals.returns / totals.orders) * 100 : 0;
 
-  // === Export ===
   const exportExcel = () => {
     const headers = isRtl
       ? ['الكود', 'المنتج', 'الوحدة', 'الطلبات', 'المرتجعات', 'النسبة %']
@@ -246,26 +196,6 @@ const ReturnsVsOrdersPage: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Returns_vs_Orders');
     XLSX.writeFile(wb, `Returns_vs_Orders_${monthName}.xlsx`);
     toast.success(isRtl ? 'تم التصدير' : 'Exported');
-  };
-
-  const exportPDF = () => {
-    const headers = isRtl
-      ? ['رقم', 'كود', 'منتج', 'وحدة', 'طلبات', 'مرتجعات', 'نسبة %']
-      : ['No.', 'Code', 'Product', 'Unit', 'Orders', 'Returns', 'Ratio %'];
-
-    const rows = filteredData.map((r, i) => [
-      formatNumber(i + 1, isRtl),
-      r.code,
-      r.name,
-      r.unit,
-      formatNumber(r.orders, isRtl),
-      formatNumber(r.returns, isRtl),
-      r.ratio.toFixed(2) + '%',
-    ]);
-
-    rows.push(['', '', isRtl ? 'الإجمالي' : 'Total', '', formatNumber(totals.orders, isRtl), formatNumber(totals.returns, isRtl), overallRatio.toFixed(2) + '%']);
-
-    exportToPDF(rows, headers, isRtl ? 'تقرير المرتجعات مقابل الطلبات' : 'Returns vs Orders Report', monthName, isRtl, totals.orders, totals.returns);
   };
 
   if (!user || !['admin', 'production'].includes(user.role)) {
