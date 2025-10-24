@@ -74,6 +74,7 @@ const translations = {
     orderCreated: 'تم إنشاء الطلب بنجاح',
     orderCleared: 'تم مسح الطلب',
     scrollToSummary: 'التمرير للملخص',
+    invalidQuantity: 'الكميات يجب أن تكون مضاعفات 0.5',
   },
   en: {
     createOrder: 'Create New Order',
@@ -106,6 +107,7 @@ const translations = {
     orderCreated: 'Order created successfully',
     orderCleared: 'Order cleared',
     scrollToSummary: 'Scroll to Summary',
+    invalidQuantity: 'Quantities must be multiples of 0.5',
   },
 };
 
@@ -127,7 +129,7 @@ export const ProductSearchInput = ({
       <div
         className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
       >
-        <Search className="w-4 h-4" /> 
+        <Search className="w-4 h-4" />
       </div>
       <input
         type="text"
@@ -214,19 +216,29 @@ const QuantityInput = ({
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+
+  // التحقق من أن القيمة مضاعفة 0.5
+  const validateQuantity = (val: string) => {
+    const num = parseFloat(val);
+    if (isNaN(num) || num <= 0) return '';
+    if (num % 0.5 !== 0) return value.toFixed(1); // إعادة القيمة الحالية إذا لم تكن مضاعف 0.5
+    return num.toFixed(1);
+  };
+
   return (
     <div className="flex items-center gap-2">
       <button
         onClick={onDecrement}
         className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+        disabled={value <= 0.5}
       >
         <Minus className="w-4 h-4" />
       </button>
       <input
         type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={value.toFixed(1)}
+        onChange={(e) => onChange(validateQuantity(e.target.value))}
         className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
         style={{ appearance: 'none' }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
@@ -256,19 +268,23 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
     <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>{product.displayName}</h3>
+          <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
+            {product.displayName || (isRtl ? 'غير معروف' : 'Unknown')}
+          </h3>
           <p className="text-sm text-gray-500">{product.code}</p>
         </div>
-        <p className="text-sm text-amber-600">{t.department}: {product.department.displayName}</p>
-        <p className="font-semibold text-gray-900 text-sm">{t.price}: {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}</p>
+        <p className="text-sm text-amber-600">{t.department}: {product.department.displayName || (isRtl ? 'غير معروف' : 'Unknown')}</p>
+        <p className="font-semibold text-gray-900 text-sm">
+          {t.price}: {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit || (isRtl ? 'غير محدد' : 'N/A')}
+        </p>
       </div>
       <div className="mt-4 flex justify-end">
         {cartItem ? (
           <QuantityInput
             value={cartItem.quantity}
-            onChange={(val) => onUpdate(parseInt(val) || 0)}
-            onIncrement={() => onUpdate(cartItem.quantity + 1)}
-            onDecrement={() => onUpdate(cartItem.quantity - 1)}
+            onChange={(val) => onUpdate(parseFloat(val) || 0)}
+            onIncrement={() => onUpdate(cartItem.quantity + 0.5)}
+            onDecrement={() => onUpdate(cartItem.quantity - 0.5)}
           />
         ) : (
           <button
@@ -431,11 +447,11 @@ export function NewOrder() {
 
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
           ...product,
-          displayName: isRtl ? product.name : (product.nameEn || product.name),
+          displayName: isRtl ? product.name : (product.nameEn || product.name || 'Unknown'),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
           department: {
             ...product.department,
-            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name || 'Unknown'),
           },
         }));
         setProducts(productsWithDisplay);
@@ -443,7 +459,7 @@ export function NewOrder() {
           Array.isArray(branchesResponse)
             ? branchesResponse.map((b: Branch) => ({
                 ...b,
-                displayName: isRtl ? b.name : (b.nameEn || b.name),
+                displayName: isRtl ? b.name : (b.nameEn || b.name || 'Unknown'),
               }))
             : []
         );
@@ -451,7 +467,7 @@ export function NewOrder() {
           Array.isArray(departmentsResponse.data)
             ? departmentsResponse.data.map((d: Department) => ({
                 ...d,
-                displayName: isRtl ? d.name : (d.nameEn || d.name),
+                displayName: isRtl ? d.name : (d.nameEn || d.name || 'Unknown'),
               }))
             : []
         );
@@ -470,31 +486,29 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
-  // تحديث displayName و displayUnit للمنتجات و orderItems عند تغيير اللغة
+  // تحديث displayName و displayUnit عند تغيير اللغة
   useEffect(() => {
-    // تحديث المنتجات
     setProducts((prev) =>
       prev.map((product) => ({
         ...product,
-        displayName: isRtl ? product.name : (product.nameEn || product.name),
+        displayName: isRtl ? product.name : (product.nameEn || product.name || 'Unknown'),
         displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         department: {
           ...product.department,
-          displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+          displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name || 'Unknown'),
         },
       }))
     );
-    // تحديث orderItems
     setOrderItems((prev) =>
       prev.map((item) => ({
         ...item,
         product: {
           ...item.product,
-          displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
+          displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name || 'Unknown'),
           displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
           department: {
             ...item.product.department,
-            displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+            displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || 'Unknown'),
           },
         },
       }))
@@ -508,10 +522,8 @@ export function NewOrder() {
       console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
       if (user?.role === 'branch' && user?.branchId) {
         socket.emit('joinRoom', `branch-${user.branchId}`);
-      } else if (user?.role === 'admin' || user?.role === "production") {
-        socket.emit('joinRoom', 'admin' || 'production' );
-                
-
+      } else if (user?.role === 'admin' || user?.role === 'production') {
+        socket.emit('joinRoom', user.role);
       }
     });
 
@@ -521,25 +533,32 @@ export function NewOrder() {
         return;
       }
       const eventId = orderData.eventId || crypto.randomUUID();
-      // تخصيص الرسالة بناءً على الدور
       let message = languageT('notifications.order_created', {
         orderNumber: orderData.orderNumber,
-        branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
+        branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name || 'Unknown'),
       });
       if (user.role === 'branch') {
-        message = t.orderCreated; // "تم إنشاء الطلب بنجاح"
+        message = t.orderCreated;
       }
       addNotification({
         _id: eventId,
         type: 'success',
         message,
-        data: { orderId: orderData._id, eventId },
+        data: {
+          orderId: orderData._id,
+          eventId,
+          items: orderData.items.map((item) => ({
+            ...item,
+            quantity: Number(item.quantity.toFixed(1)),
+            productName: isRtl ? item.product.name : (item.product.nameEn || item.product.name || 'Unknown'),
+            unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+          })),
+        },
         read: false,
         createdAt: new Date().toISOString(),
         sound: '/sounds/notification.mp3',
         vibrate: [200, 100, 200],
       });
-      // هنا يمكن تحديث state صفحة المتابعة إذا كانت موجودة، عبر dispatch أو setState
     });
 
     return () => {
@@ -552,7 +571,7 @@ export function NewOrder() {
       const existingItem = prev.find((item) => item.productId === product._id);
       if (existingItem) {
         return prev.map((item) =>
-          item.productId === product._id ? { ...item, quantity: item.quantity + 1 } : item
+          item.productId === product._id ? { ...item, quantity: item.quantity + 0.5 } : item
         );
       }
       return [
@@ -561,14 +580,14 @@ export function NewOrder() {
           productId: product._id,
           product: {
             ...product,
-            displayName: isRtl ? product.name : (product.nameEn || product.name),
+            displayName: isRtl ? product.name : (product.nameEn || product.name || 'Unknown'),
             displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
             department: {
               ...product.department,
-              displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+              displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name || 'Unknown'),
             },
           },
-          quantity: 1,
+          quantity: 0.5,
           price: product.price,
         },
       ];
@@ -576,23 +595,25 @@ export function NewOrder() {
   }, [isRtl]);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
-    if (quantity <= 0) {
+    if (quantity < 0.5) {
       removeFromOrder(productId);
       return;
     }
+    const validQuantity = Math.round(quantity * 2) / 2;
     setOrderItems((prev) =>
-      prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
+      prev.map((item) => (item.productId === productId ? { ...item, quantity: validQuantity } : item))
     );
   }, []);
 
   const handleQuantityInput = useCallback(
     (productId: string, value: string) => {
-      const quantity = parseInt(value) || 0;
-      if (value === '' || quantity <= 0) {
+      const quantity = parseFloat(value);
+      if (isNaN(quantity) || quantity < 0.5) {
         updateQuantity(productId, 0);
         return;
       }
-      updateQuantity(productId, quantity);
+      const validQuantity = Math.round(quantity * 2) / 2;
+      updateQuantity(productId, validQuantity);
     },
     [updateQuantity]
   );
@@ -642,7 +663,7 @@ export function NewOrder() {
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
           product: item.productId,
-          quantity: item.quantity,
+          quantity: Number(item.quantity.toFixed(1)),
           price: item.price,
           productName: item.product.name,
           productNameEn: item.product.nameEn,
@@ -656,17 +677,27 @@ export function NewOrder() {
         isRtl,
         eventId,
       };
+
+      const invalidItems = orderData.items.filter((item) => item.quantity < 0.5 || item.quantity % 0.5 !== 0);
+      if (invalidItems.length > 0) {
+        throw new Error(t.invalidQuantity);
+      }
+
       const response = await ordersAPI.create(orderData, isRtl);
       const branchData = branches.find((b) => b._id === orderData.branchId);
       socket.emit('orderCreated', {
         _id: response.data.id,
         orderNumber: response.data.orderNumber,
         branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'Unknown', nameEn: t.branches?.unknown || 'Unknown' },
-        items: response.data.items,
+        items: response.data.items.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity.toFixed(1)),
+          productName: isRtl ? item.product.name : (item.product.nameEn || item.product.name || 'Unknown'),
+          unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+        })),
         eventId,
         isRtl,
       });
-      // الإشعار المحلي للفرع
       addNotification({
         _id: eventId,
         type: 'success',
@@ -699,7 +730,7 @@ export function NewOrder() {
   };
 
   return (
-    <div className={`mx-auto px-4 py-8 min-h-screen `} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 py-8 min-h-screen`} dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
@@ -797,17 +828,17 @@ export function NewOrder() {
                 {orderItems.map((item) => (
                   <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900 text-sm">{item.product.displayName}</p>
+                      <p className="font-semibold text-gray-900 text-sm">{item.product.displayName || (isRtl ? 'غير معروف' : 'Unknown')}</p>
                       <p className="text-sm text-gray-600">
-                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
+                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit || (isRtl ? 'غير محدد' : 'N/A')} (x{item.quantity.toFixed(1)})
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <QuantityInput
                         value={item.quantity}
                         onChange={(val) => handleQuantityInput(item.productId, val)}
-                        onIncrement={() => updateQuantity(item.productId, item.quantity + 1)}
-                        onDecrement={() => updateQuantity(item.productId, item.quantity - 1)}
+                        onIncrement={() => updateQuantity(item.productId, item.quantity + 0.5)}
+                        onDecrement={() => updateQuantity(item.productId, item.quantity - 0.5)}
                       />
                       <button
                         onClick={() => removeFromOrder(item.productId)}
