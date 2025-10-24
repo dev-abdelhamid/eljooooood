@@ -39,6 +39,7 @@ import ReturnStats from './pages/ReturnStats';
 import InventoryOrders from './pages/InventoryOrders';
 import { FactoryInventory } from './pages/FactoryInventory';
 import DailyOrdersSummary from './pages/DailyOrdersSummary';
+import ReturnsVsOrdersPage from './pages/ReturnsVsOrdersPage';
 
 // New imports for separate pages
 import OrdersTablePage from './pages/OrdersTablePage';
@@ -113,11 +114,10 @@ function AppContent() {
                   <Route path="/departments" element={<Departments />} />
                   <Route path="/inventory" element={<div className="p-8 text-center">قريباً: إدارة المخزون</div>} />
                   <Route path="/sales" element={<SalesReport />} />
-                  <Route path="/reports" element={<div className="p-8 text-center">قريباً: التقارير والتحليلات</div>} />
-                  <Route path="/settings" element={<div className="p-8 text-center">قريباً: الإعدادات</div>} />
 
                   {/* New separate pages */}
                   <Route path="/daily-orders" element={<OrdersTablePage />} />
+                  <Route path="/returns-vs-orders" element={<ReturnsVsOrdersPage />} />
                 
                 </Routes>
               </Layout>
