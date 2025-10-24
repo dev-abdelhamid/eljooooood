@@ -1,528 +1,557 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, Fragment } from 'react';
 import { motion } from 'framer-motion';
-import { Search, X, Upload, AlertCircle } from 'lucide-react';
-import { useLanguage } from '../contexts/LanguageContext';
-import { useAuth } from '../contexts/AuthContext';
-import { ordersAPI, returnsAPI, inventoryAPI, branchesAPI } from '../services/api';
-import { toast } from 'react-toastify';
+import { Button } from '../components/UI/Button';
+import { Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { toast } from 'react-toastify';
+import { Tooltip } from 'react-tooltip';
+import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
-interface ProductRow {
-  id: string;
-  code: string;
-  name: string;
-  unit: string;
-  orders: number;
-  returns: number;
-  ratio: number;
-}
-
-// تحويل الأرقام إلى عربية
-const toArabicNumerals = (num: number | string): string => {
-  return String(num).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]);
+const toArabicNumerals = (number: string | number): string => {
+  const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
 const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
-// تحميل خط Amiri للـ PDF
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+};
+
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
-  const fontUrl = 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf';
+  const fontName = 'Amiri';
+  const fontUrls = {
+    regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
+    bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
+  };
   try {
-    const res = await fetch(fontUrl);
-    if (!res.ok) throw new Error('Font fetch failed');
-    const buffer = await res.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-    doc.addFileToVFS('Amiri.ttf', base64);
-    doc.addFont('Amiri.ttf', 'Amiri', 'normal');
-    doc.setFont('Amiri');
+    const regularFontBytes = await fetch(fontUrls.regular).then((res) => res.arrayBuffer());
+    doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
+    doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
+    const boldFontBytes = await fetch(fontUrls.bold).then((res) => res.arrayBuffer());
+    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
+    doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
+    doc.setFont(fontName, 'normal');
     return true;
-  } catch (err) {
-    console.warn('Font load failed, using Helvetica', err);
-    doc.setFont('helvetica');
+  } catch (error) {
+    console.error('Font loading error:', error);
+    doc.setFont('helvetica', 'normal');
+    toast.error('Failed to load Amiri font, using default', {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
     return false;
   }
 };
 
-const ReturnsVsOrdersPage: React.FC = () => {
-  const { language } = useLanguage();
-  const { user } = useAuth();
-  const isRtl = language === 'ar';
+const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
+  const date = new Date().toISOString().split('T')[0];
+  return isRtl ? `${title}_${monthName}_${date}.pdf` : `${title}_${monthName}_${date}.pdf`;
+};
 
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
+const generatePDFHeader = (
+  doc: jsPDF,
+  isRtl: boolean,
+  title: string,
+  monthName: string,
+  totalItems: number,
+  totalQuantity: number,
+  totalPrice: number,
+  fontName: string,
+  fontLoaded: boolean
+) => {
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+  doc.setFontSize(18);
+  doc.setTextColor(33, 33, 33);
+  const pageWidth = doc.internal.pageSize.width;
+  doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  const stats = isRtl
+    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${toArabicNumerals(totalPrice)} ر.س`
+    : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${totalPrice} SAR`;
+  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(255, 193, 7);
+  doc.line(20, 25, pageWidth - 20, 25);
+  const pageCount = doc.getNumberOfPages();
+  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+    const footerText = isRtl
+      ? `تم إنشاؤه بواسطة نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
+      : `Generated by elgoodia Management System - ${currentDate}`;
+    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+  }
+};
 
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-  const [data, setData] = useState<ProductRow[]>([]);
-  const [branches, setBranches] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+const generatePDFTable = (
+  doc: jsPDF,
+  headers: string[],
+  data: any[],
+  isRtl: boolean,
+  fontLoaded: boolean,
+  fontName: string,
+  allBranches: string[]
+) => {
+  const tableColumnWidths = headers.map((_, index) => {
+    if (index === 0 && headers[index] !== (isRtl ? 'رقم' : 'No.')) return 25; // Code
+    if (index === 0 && headers[index] === (isRtl ? 'رقم' : 'No.')) return 15; // No.
+    if (index === 1) return 45; // Product
+    if (index === 2) return 25; // Unit
+    if (index >= 3 && index < headers.length - 2) return 20; // Daily Quantities or Branch Quantities
+    return 30; // Total Quantity, Total Price/Value
+  });
+  autoTable(doc, {
+    head: [isRtl ? headers.slice().reverse() : headers],
+    body: isRtl ? data.map(row => row.slice().reverse()) : data,
+    theme: 'grid',
+    startY: 30,
+    margin: { top: 10, bottom: 10, left: 10, right: 10 },
+    tableWidth: 'wrap',
+    columnStyles: Object.fromEntries(
+      headers.map((_, i) => [i, { cellWidth: tableColumnWidths[i], halign: 'center' }])
+    ),
+    headStyles: {
+      fillColor: [255, 193, 7],
+      textColor: [33, 33, 33],
+      fontSize: 10,
+      halign: 'center',
+      font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'bold',
+      cellPadding: 4,
+    },
+    bodyStyles: {
+      fontSize: 9,
+      halign: 'center',
+      font: fontLoaded ? fontName : 'helvetica',
+      textColor: [33, 33, 33],
+      lineColor: [200, 200, 200],
+      fillColor: [255, 255, 255],
+      cellPadding: 3,
+    },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 2)) {
+        data.cell.styles.fontStyle = 'bold';
+      }
+      if (isRtl) {
+        data.cell.text = data.cell.text.map(text => String(text).replace(/[0-9]/g, d => toArabicNumerals(d)));
+      }
+    },
+    didDrawPage: (data) => {
+      doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+    },
+  });
+};
+
+const exportToPDF = async (
+  data: any[],
+  title: string,
+  monthName: string,
+  headers: string[],
+  isRtl: boolean,
+  totalItems: number,
+  totalQuantity: number,
+  totalPrice: number,
+  allBranches: string[]
+) => {
+  try {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const fontName = 'Amiri';
+    const fontLoaded = await loadFont(doc);
+    generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
+    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, allBranches);
+    const fileName = generateFileName(title, monthName, isRtl);
+    doc.save(fileName);
+    toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
+  } catch (error) {
+    console.error('Error exporting PDF:', error);
+    toast.error(isRtl ? 'فشل في تصدير ملف PDF' : 'Failed to export PDF', {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
+  }
+};
+
+interface OrdersVsReturnsTableProps {
+  data: OrdersVsReturnsRow[];
+  title: string;
+  month: number;
+  isRtl: boolean;
+  loading: boolean;
+  allBranches: string[];
+  daysInMonth: string[];
+  monthName: string;
+}
+
+const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title, isRtl, loading, allBranches, daysInMonth, monthName }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('all');
+  const [selectedPeriod, setSelectedPeriod] = useState('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const daysInMonthCount = daysInMonth.length;
 
-  // اسم الشهر
-  const monthName = useMemo(() => {
-    return new Date(currentYear, selectedMonth).toLocaleString(language, {
-      month: 'long',
-      year: 'numeric',
-    });
-  }, [selectedMonth, language]);
-
-  // قائمة الشهور
-  const months = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => ({
-      value: i,
-      label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
-    }));
-  }, [currentYear, language]);
-
-  // جلب البيانات
-  const fetchData = useCallback(async () => {
-    if (!user || !['admin', 'production'].includes(user.role)) {
-      toast.error(isRtl ? 'غير مصرح لك' : 'Unauthorized');
-      setLoading(false);
-      return;
+  const { startDay, endDay } = useMemo(() => {
+    let s = 1, e = daysInMonthCount;
+    if (selectedPeriod === 'week1') { s = 1; e = Math.min(7, daysInMonthCount); }
+    else if (selectedPeriod === 'week2') { s = 8; e = Math.min(14, daysInMonthCount); }
+    else if (selectedPeriod === 'week3') { s = 15; e = Math.min(21, daysInMonthCount); }
+    else if (selectedPeriod === 'week4') { s = 22; e = daysInMonthCount; }
+    else if (selectedPeriod === 'custom' && customStart && customEnd) {
+      s = new Date(customStart).getDate();
+      e = new Date(customEnd).getDate();
+      if (s > e) [s, e] = [e, s];
     }
+    return { startDay: s, endDay: e };
+  }, [selectedPeriod, customStart, customEnd, daysInMonthCount]);
 
-    setLoading(true);
-    try {
-      const [ordersRes, returnsRes, inventoryRes, branchesRes] = await Promise.all([
-        ordersAPI.getAll({ limit: 10000 }).catch(() => []),
-        returnsAPI.getAll({ limit: 10000 }).catch(() => ({ returns: [] })),
-        inventoryAPI.getInventory().catch(() => []),
-        branchesAPI.getAll().catch(() => []),
-      ]);
+  const displayedDays = daysInMonth.slice(startDay - 1, endDay);
 
-      const branchMap = new Map(
-        (branchesRes || []).map((b: any) => [
-          b._id,
-          isRtl ? b.name : b.nameEn || b.name,
-        ])
-      );
-
-      const productMap = new Map(
-        (inventoryRes || []).map((i: any) => [
-          i.product._id,
-          {
-            code: i.product.code || '—',
-            name: isRtl ? i.product.name : i.product.nameEn || i.product.name,
-            unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit || 'وحدة',
-          },
-        ])
-      );
-
-      const monthStart = new Date(currentYear, selectedMonth, 1);
-      const monthEnd = new Date(currentYear, selectedMonth + 1, 0, 23, 59, 59);
-
-      const orderMap = new Map<string, { orders: number; returns: number }>();
-      const branchFilter = selectedBranch !== 'all' ? selectedBranch : null;
-
-      // طلبات
-      (ordersRes || []).forEach((order: any) => {
-        const date = new Date(order.createdAt || order.date);
-        if (isNaN(date.getTime()) || date < monthStart || date > monthEnd) return;
-
-        const branchName =
-          branchMap.get(order.branch?._id || order.branch) ||
-          (isRtl ? 'غير معروف' : 'Unknown');
-        if (branchFilter && branchName !== branchFilter) return;
-
-        (order.items || []).forEach((item: any) => {
-          const pid = item.product?._id || item.productId;
-          if (!pid) return;
-          const key = `${pid}-${branchName}`;
-          if (!orderMap.has(key)) orderMap.set(key, { orders: 0, returns: 0 });
-          orderMap.get(key)!.orders += Number(item.quantity) || 0;
-        });
-      });
-
-      // مرتجعات
-      ((returnsRes?.returns || returnsRes) || []).forEach((ret: any) => {
-        const date = new Date(ret.createdAt || ret.date);
-        if (isNaN(date.getTime()) || date < monthStart || date > monthEnd) return;
-
-        const branchName =
-          branchMap.get(ret.branch?._id || ret.branchId) ||
-          (isRtl ? 'غير معروف' : 'Unknown');
-        if (branchFilter && branchName !== branchFilter) return;
-
-        (ret.items || []).forEach((item: any) => {
-          const pid = item.product?._id || item.product;
-          if (!pid) return;
-          const key = `${pid}-${branchName}`;
-          if (!orderMap.has(key)) orderMap.set(key, { orders: 0, returns: 0 });
-          orderMap.get(key)!.returns += Number(item.quantity) || 0;
-        });
-      });
-
-      const rows: ProductRow[] = [];
-      for (const [key, vals] of orderMap) {
-        const [pid] = key.split('-');
-        const info = productMap.get(pid);
-        if (!info) continue;
-        const ratio = vals.orders > 0 ? (vals.returns / vals.orders) * 100 : 0;
-        rows.push({
-          id: pid,
-          code: info.code,
-          name: info.name,
-          unit: info.unit,
-          orders: vals.orders,
-          returns: vals.returns,
-          ratio,
-        });
-      }
-
-      setData(rows.sort((a, b) => b.ratio - a.ratio));
-      setBranches([
-        'all',
-        ...Array.from(new Set([...branchMap.values()])).filter(Boolean),
-      ]);
-    } catch (err) {
-      console.error('Fetch error:', err);
-      toast.error(isRtl ? 'فشل تحميل البيانات' : 'Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedMonth, selectedBranch, isRtl, user]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // فلترة البحث
   const filteredData = useMemo(() => {
-    return data.filter(
-      (row) =>
-        row.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row.code.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [data, searchTerm]);
-
-  // الإجماليات
-  const totals = useMemo(() => {
-    return filteredData.reduce(
-      (acc, row) => {
-        acc.orders += row.orders;
-        acc.returns += row.returns;
-        return acc;
-      },
-      { orders: 0, returns: 0 }
-    );
-  }, [filteredData]);
-
-  const overallRatio =
-    totals.orders > 0 ? (totals.returns / totals.orders) * 100 : 0;
-
-  // تصدير Excel
-  const exportExcel = () => {
-    const headers = isRtl
-      ? ['الكود', 'المنتج', 'الوحدة', 'الطلبات', 'المرتجعات', 'النسبة %']
-      : ['Code', 'Product', 'Unit', 'Orders', 'Returns', 'Ratio %'];
-
-    const rows = filteredData.map((r) => [
-      r.code,
-      r.name,
-      r.unit,
-      r.orders,
-      r.returns,
-      r.ratio.toFixed(1) + '%',
-    ]);
-
-    rows.push([
-      '',
-      isRtl ? 'الإجمالي' : 'Total',
-      '',
-      totals.orders,
-      totals.returns,
-      overallRatio.toFixed(1) + '%',
-    ]);
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    if (isRtl) ws['!views'] = [{ RTL: true }];
-    ws['!cols'] = Array(6).fill({ wch: 15 });
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Returns_vs_Orders');
-    XLSX.writeFile(wb, `Returns_vs_Orders_${monthName.replace(/ /g, '_')}.xlsx`);
-    toast.success(isRtl ? 'تم تصدير Excel' : 'Excel exported');
-  };
-
-  // تصدير PDF
-  const exportPDF = async () => {
-    const headers = isRtl
-      ? ['الكود', 'المنتج', 'الوحدة', 'الطلبات', 'المرتجعات', 'النسبة %']
-      : ['Code', 'Product', 'Unit', 'Orders', 'Returns', 'Ratio %'];
-
-    const rows = filteredData.map((r) => [
-      r.code,
-      r.name,
-      r.unit,
-      formatNumber(r.orders, isRtl),
-      formatNumber(r.returns, isRtl),
-      r.ratio.toFixed(1) + '%',
-    ]);
-
-    rows.push([
-      '',
-      isRtl ? 'الإجمالي' : 'Total',
-      '',
-      formatNumber(totals.orders, isRtl),
-      formatNumber(totals.returns, isRtl),
-      overallRatio.toFixed(1) + '%',
-    ]);
-
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    await loadFont(doc);
-
-    doc.setFontSize(18);
-    doc.text(
-      isRtl ? 'تقرير المرتجعات مقابل الطلبات' : 'Returns vs Orders Report',
-      isRtl ? 280 : 15,
-      15,
-      { align: isRtl ? 'right' : 'left' }
-    );
-
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    const stats = isRtl
-      ? `الشهر: ${monthName} | الطلبات: ${toArabicNumerals(
-          totals.orders
-        )} | المرتجعات: ${toArabicNumerals(
-          totals.returns
-        )} | النسبة: ${overallRatio.toFixed(1)}%`
-      : `${monthName} | Orders: ${totals.orders} | Returns: ${totals.returns} | Ratio: ${overallRatio.toFixed(
-          1
-        )}%`;
-    doc.text(stats, isRtl ? 280 : 15, 22, {
-      align: isRtl ? 'right' : 'left',
-    });
-
-    autoTable(doc, {
-      head: [isRtl ? headers.slice().reverse() : headers],
-      body: isRtl ? rows.map((r) => r.slice().reverse()) : rows,
-      startY: 30,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [59, 130, 246],
-        textColor: 255,
-        fontSize: 10,
-        halign: 'center',
-      },
-      bodyStyles: { fontSize: 9, halign: 'center' },
-      didParseCell: (data) => {
-        if (isRtl && typeof data.cell.text[0] === 'string') {
-          data.cell.text[0] = data.cell.text[0].replace(
-            /\d/g,
-            (d) => toArabicNumerals(d)
-          );
+    return data
+      .filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()))
+      .map(row => {
+        let displayedDailyOrders = row.dailyOrders.slice(startDay - 1, endDay);
+        let displayedDailyBranchDetailsOrders = row.dailyBranchDetailsOrders.slice(startDay - 1, endDay);
+        let displayedDailyReturns = row.dailyReturns.slice(startDay - 1, endDay);
+        let displayedDailyBranchDetailsReturns = row.dailyBranchDetailsReturns.slice(startDay - 1, endDay);
+        if (selectedBranch !== 'all') {
+          displayedDailyOrders = displayedDailyOrders.map((_, i) => displayedDailyBranchDetailsOrders[i][selectedBranch] || 0);
+          displayedDailyReturns = displayedDailyReturns.map((_, i) => displayedDailyBranchDetailsReturns[i][selectedBranch] || 0);
         }
+        const displayedTotalOrders = displayedDailyOrders.reduce((sum, q) => sum + q, 0);
+        const displayedTotalReturns = displayedDailyReturns.reduce((sum, q) => sum + q, 0);
+        const displayedTotalRatio = displayedTotalOrders > 0 ? (displayedTotalReturns / displayedTotalOrders * 100) : 0;
+        return {
+          ...row,
+          displayedDailyOrders,
+          displayedDailyReturns,
+          displayedDailyBranchDetailsOrders,
+          displayedDailyBranchDetailsReturns,
+          displayedTotalOrders,
+          displayedTotalReturns,
+          displayedTotalRatio,
+        };
+      }).sort((a, b) => b.displayedTotalRatio - a.displayedTotalRatio);
+  }, [data, searchTerm, selectedBranch, startDay, endDay]);
+
+  const grandTotalOrders = filteredData.reduce((sum, row) => sum + row.displayedTotalOrders, 0);
+  const grandTotalReturns = filteredData.reduce((sum, row) => sum + row.displayedTotalReturns, 0);
+  const grandTotalRatio = grandTotalOrders > 0 ? (grandTotalReturns / grandTotalOrders * 100).toFixed(2) : '0.00';
+
+  const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: string) => {
+    let header = type === 'orders' ? (isRtl ? 'طلبات' : 'Orders') : (isRtl ? 'مرتجعات' : 'Returns');
+    let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
+    if (Object.keys(branchDetails).length > 0) {
+      content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
+    }
+    return content;
+  };
+
+  const getRatioColor = (ratio: number) => {
+    if (ratio > 10) return 'text-red-600 bg-red-50';
+    if (ratio > 5) return 'text-yellow-600 bg-yellow-50';
+    return 'text-green-600 bg-green-50';
+  };
+
+  const exportTable = (format: 'excel' | 'pdf') => {
+    const baseHeaders = [
+      isRtl ? 'رقم' : 'No.',
+      isRtl ? 'الكود' : 'Code',
+      isRtl ? 'المنتج' : 'Product',
+      isRtl ? 'وحدة المنتج' : 'Product Unit',
+    ];
+    const dayHeaders = displayedDays.flatMap(day => [
+      isRtl ? `${day} - طلبات` : `${day} - Orders`,
+      isRtl ? `${day} - مرتجعات` : `${day} - Returns`,
+      isRtl ? `${day} - نسبة %` : `${day} - Ratio %`,
+    ]);
+    const totalHeaders = [
+      isRtl ? 'إجمالي الطلبات' : 'Total Orders',
+      isRtl ? 'إجمالي المرتجعات' : 'Total Returns',
+      isRtl ? 'نسبة إجمالية %' : 'Total Ratio %',
+    ];
+    const headers = [...baseHeaders, ...dayHeaders, ...totalHeaders];
+    const rows = [
+      ...filteredData.map((row, index) => ({
+        no: index + 1,
+        code: row.code,
+        product: row.product,
+        unit: row.unit,
+        ...Object.fromEntries(
+          displayedDays.flatMap((day, i) => [
+            [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, row.displayedDailyOrders[i]],
+            [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.displayedDailyReturns[i]],
+            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.displayedDailyOrders[i] > 0 ? ((row.displayedDailyReturns[i] / row.displayedDailyOrders[i]) * 100).toFixed(2) : '0.00'], 
+          ])
+        ),
+        totalOrders: row.displayedTotalOrders,
+        totalReturns: row.displayedTotalReturns,
+        totalRatio: row.displayedTotalRatio.toFixed(2),
+      })),
+      {
+        no: '',
+        code: '',
+        product: isRtl ? 'الإجمالي' : 'Total',
+        unit: '',
+        ...Object.fromEntries(
+          displayedDays.flatMap((day, i) => [
+            [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0)],
+            [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0)],
+            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, (filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0) > 0) ? ((filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0) / filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0)) * 100).toFixed(2) : '0.00'],
+          ])
+        ),
+        totalOrders: grandTotalOrders,
+        totalReturns: grandTotalReturns,
+        totalRatio: grandTotalRatio,
       },
-    });
-
-    doc.save(`Returns_vs_Orders_${monthName.replace(/ /g, '_')}.pdf`);
-    toast.success(isRtl ? 'تم تصدير PDF' : 'PDF exported');
+    ];
+    const dataRows = rows.map(row => [
+      row.no,
+      row.code,
+      row.product,
+      row.unit,
+      ...dayHeaders.map(header => row[header]),
+      row.totalOrders,
+      row.totalReturns,
+      `${row.totalRatio}%`,
+    ]);
+    if (format === 'excel') {
+      const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+      if (isRtl) ws['!views'] = [{ RTL: true }];
+      ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...dayHeaders.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 15 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+      XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+      toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
+    } else if (format === 'pdf') {
+      exportToPDF(dataRows, title, monthName, headers, isRtl, filteredData.length, grandTotalOrders, grandTotalReturns, []);
+    }
   };
 
-  // لون النسبة
-  const getRatioColor = (ratio: number): string => {
-    if (ratio >= 15) return 'text-red-700 bg-red-50';
-    if (ratio >= 8) return 'text-yellow-700 bg-yellow-50';
-    return 'text-green-700 bg-green-50';
-  };
-
-  // إذا ما كانش المستخدم مصرح
-  if (!user || !['admin', 'production'].includes(user.role)) {
+  if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+  if (data.length === 0) {
     return (
-      <div className="p-8 text-center text-gray-600">
-        {isRtl ? 'غير مصرح لك بالوصول' : 'You are not authorized'}
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
+      >
+        <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+      </motion.div>
     );
   }
 
   return (
-    <div
-      className={`min-h-screen bg-gray-50 p-4 md:p-6 ${
-        isRtl ? 'rtl font-amiri' : 'ltr font-inter'
-      }`}
-    >
+    <div className="mb-8">
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <h2 className="text-lg font-semibold text-gray-800">{title} - {monthName}</h2>
+        <div className="flex gap-2">
+          <Button
+            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+            onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
+            disabled={filteredData.length === 0}
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              filteredData.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+          </Button>
+          <Button
+            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+            onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
+            disabled={filteredData.length === 0}
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              filteredData.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            {isRtl ? 'تصدير PDF' : 'Export PDF'}
+          </Button>
+        </div>
+      </div>
+      <div className={`flex flex-wrap gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <input
+          type="text"
+          placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+        />
+        <select
+          value={selectedBranch}
+          onChange={(e) => setSelectedBranch(e.target.value)}
+          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+        >
+          <option value="all">{isRtl ? 'كل الفروع' : 'All Branches'}</option>
+          {allBranches.map(branch => (
+            <option key={branch} value={branch}>{branch}</option>
+          ))}
+        </select>
+        <select
+          value={selectedPeriod}
+          onChange={(e) => setSelectedPeriod(e.target.value)}
+          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+        >
+          <option value="all">{isRtl ? 'الشهر كامل' : 'Full Month'}</option>
+          <option value="week1">{isRtl ? 'الأسبوع الأول' : 'Week 1'}</option>
+          <option value="week2">{isRtl ? 'الأسبوع الثاني' : 'Week 2'}</option>
+          <option value="week3">{isRtl ? 'الأسبوع الثالث' : 'Week 3'}</option>
+          <option value="week4">{isRtl ? 'الأسبوع الرابع' : 'Week 4'}</option>
+          <option value="custom">{isRtl ? 'فترة مخصصة' : 'Custom Period'}</option>
+        </select>
+        {selectedPeriod === 'custom' && (
+          <>
+            <input
+              type="date"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+            />
+            <input
+              type="date"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+            />
+          </>
+        )}
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-7xl mx-auto"
+        transition={{ duration: 0.3 }}
+        className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
       >
-        {/* العنوان */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-blue-600" />
-                {isRtl ? 'المرتجعات مقابل الطلبات' : 'Returns vs Orders'}
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">{monthName}</p>
-            </div>
-            <div className="flex gap-2">
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                {months.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={exportExcel}
-                disabled={loading || filteredData.length === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                <Upload className="w-4 h-4" /> {isRtl ? 'إكسل' : 'Excel'}
-              </button>
-              <button
-                onClick={exportPDF}
-                disabled={loading || filteredData.length === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition disabled:opacity-50"
-              >
-                <Upload className="w-4 h-4" /> {isRtl ? 'PDF' : 'PDF'}
-              </button>
-            </div>
-          </div>
-
-          {/* الفلاتر */}
-          <div className="flex flex-col md:flex-row gap-3 mt-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder={
-                  isRtl ? 'بحث بالمنتج أو كود' : 'Search product or code'
-                }
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            <select
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="all">{isRtl ? 'كل الفروع' : 'All Branches'}</option>
-              {branches
-                .filter((b) => b !== 'all')
-                .map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
-
-        {/* تحميل أو بيانات */}
-        {loading ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <div className="animate-pulse space-y-3">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-10 bg-gray-200 rounded"></div>
+        <table className="min-w-full divide-y divide-gray-200 text-xs">
+          <thead className="bg-blue-50 sticky top-0 z-10">
+            <tr className={isRtl ? 'flex-row-reverse' : ''}>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+              {displayedDays.map((day, i) => (
+                <Fragment key={i}>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                    {isRtl ? `${day} - طلبات` : `${day} - Orders`}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                    {isRtl ? `${day} - مرتجعات` : `${day} - Returns`}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                    {isRtl ? `${day} - نسبة %` : `${day} - Ratio %`}
+                  </th>
+                </Fragment>
               ))}
-            </div>
-          </div>
-        ) : filteredData.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center text-gray-500">
-            {isRtl ? 'لا توجد بيانات' : 'No data available'}
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gradient-to-r from-blue-50 to-blue-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 min-w-[80px]">
-                      {isRtl ? 'الكود' : 'Code'}
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 min-w-[200px]">
-                      {isRtl ? 'المنتج' : 'Product'}
-                    </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
-                      {isRtl ? 'الوحدة' : 'Unit'}
-                    </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
-                      {isRtl ? 'الطلبات' : 'Orders'}
-                    </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
-                      {isRtl ? 'المرتجعات' : 'Returns'}
-                    </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
-                      {isRtl ? 'النسبة %' : 'Ratio %'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredData.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50 transition">
-                      <td className="px-4 py-3 font-mono text-gray-600">
-                        {row.code}
-                      </td>
-                      <td className="px-4 py-3 text-gray-800 font-medium">
-                        {row.name}
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-600">
-                        {row.unit}
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-700 font-medium">
-                        {formatNumber(row.orders, isRtl)}
-                      </td>
-                      <td className="px-4 py-3 text-center text-red-600 font-medium">
-                        {formatNumber(row.returns, isRtl)}
-                      </td>
-                      <td
-                        className={`px-4 py-3 text-center font-bold ${getRatioColor(
-                          row.ratio
-                        )}`}
-                      >
-                        {row.ratio.toFixed(1)}%
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-50 font-bold text-gray-800 text-sm">
-                    <td colSpan={3} className="px-4 py-3 text-left">
-                      {isRtl ? 'الإجمالي' : 'Total'}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {formatNumber(totals.orders, isRtl)}
-                    </td>
-                    <td className="px-4 py-3 text-center text-red-600">
-                      {formatNumber(totals.returns, isRtl)}
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-center ${getRatioColor(
-                        overallRatio
-                      )}`}
-                    >
-                      {overallRatio.toFixed(1)}%
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                {isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
+              </th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                {isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+              </th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                {isRtl ? 'نسبة إجمالية %' : 'Total Ratio %'}
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {filteredData.map((row, index) => {
+              const totalRatio = row.displayedTotalRatio;
+              return (
+                <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                  {displayedDays.map((day, i) => {
+                    const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
+                    return (
+                      <Fragment key={i}>
+                        <td
+                          className={`px-4 py-3 text-center font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
+                          data-tooltip-id="orders-tooltip"
+                          data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
+                        >
+                          {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl) : '0'}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-center font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'}`}
+                          data-tooltip-id="returns-tooltip"
+                          data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
+                        >
+                          {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl) : '0'}
+                        </td>
+                        <td className={`px-4 py-3 text-center font-medium ${getRatioColor(dailyRatio)}`}>
+                          {formatNumber(dailyRatio.toFixed(2), isRtl) + '%'}
+                        </td>
+                      </Fragment>
+                    );
+                  })}
+                  <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
+                  <td className={`px-4 py-3 text-center font-medium ${getRatioColor(totalRatio)}`}>
+                    {formatNumber(totalRatio.toFixed(2), isRtl) + '%'}
+                  </td>
+                </tr>
+              );
+            })}
+            <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+              {displayedDays.map((_, i) => (
+                <Fragment key={i}>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {(() => {
+                      const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0);
+                      const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0);
+                      const ratio = dailyOrdersTotal > 0 ? (dailyReturnsTotal / dailyOrdersTotal * 100).toFixed(2) : '0.00';
+                      return `${formatNumber(Number(ratio), isRtl)}%`;
+                    })()}
+                  </td>
+                </Fragment>
+              ))}
+              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
+              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
+              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio}%</td>
+            </tr>
+          </tbody>
+        </table>
+        <Tooltip id="orders-tooltip" place="top" className="custom-tooltip whitespace-pre-line" />
+        <Tooltip id="returns-tooltip" place="top" className="custom-tooltip whitespace-pre-line" />
       </motion.div>
     </div>
   );
 };
 
-export default ReturnsVsOrdersPage;
+export default OrdersVsReturnsTable;
