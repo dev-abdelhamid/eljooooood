@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { Plus, Minus } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 const QuantityInput = ({
   value,
@@ -20,15 +21,21 @@ const QuantityInput = ({
   const validateQuantity = (val: string) => {
     const num = parseFloat(val);
     if (val === '' || isNaN(num)) {
-      setError(isRtl ? 'الكمية مطلوبة' : 'Quantity is required');
+      const message = isRtl ? 'الكمية مطلوبة' : 'Quantity is required';
+      setError(message);
+      toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
       return false;
     }
     if (num <= 0) {
-      setError(isRtl ? 'الكمية يجب أن تكون أكبر من 0' : 'Quantity must be greater than 0');
+      const message = isRtl ? 'الكمية يجب أن تكون أكبر من 0' : 'Quantity must be greater than 0';
+      setError(message);
+      toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
       return false;
     }
     if (num % 0.5 !== 0) {
-      setError(isRtl ? 'الكمية يجب أن تكون مضاعفات 0.5' : 'Quantity must be in increments of 0.5');
+      const message = isRtl ? 'الكمية يجب أن تكون مضاعفات 0.5' : 'Quantity must be in increments of 0.5';
+      setError(message);
+      toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
       return false;
     }
     setError('');
@@ -37,6 +44,10 @@ const QuantityInput = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    if (val === '') {
+      setError('');
+      return; // Allow empty input temporarily
+    }
     if (validateQuantity(val)) {
       onChange(parseFloat(val));
     }

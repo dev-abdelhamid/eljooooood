@@ -21,7 +21,31 @@ interface OrderItem {
   price: number;
 }
 
-const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove, getDisplayName, getDisplayUnit }: {
+interface Translations {
+  ar: {
+    department: string;
+    price: string;
+    addToCart: string;
+    currency: string;
+  };
+  en: {
+    department: string;
+    price: string;
+    addToCart: string;
+    currency: string;
+  };
+}
+
+const ProductCard = ({
+  product,
+  cartItem,
+  onAdd,
+  onUpdate,
+  onRemove,
+  getDisplayName,
+  getDisplayUnit,
+  translations,
+}: {
   product: Product;
   cartItem?: OrderItem;
   onAdd: () => void;
@@ -29,6 +53,7 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove, getDisplayN
   onRemove: () => void;
   getDisplayName: (item: { name: string; nameEn?: string }) => string;
   getDisplayUnit: (item: { unit?: string; unitEn?: string }) => string;
+  translations: Translations;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
