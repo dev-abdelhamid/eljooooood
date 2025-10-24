@@ -7,10 +7,10 @@ import { AlertCircle, BarChart2, ChevronDown, Search, X, Download } from 'lucide
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import { debounce } from 'lodash';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Title } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Title);
 
 interface SalesAnalytics {
   branchSales: Array<{
@@ -340,7 +340,7 @@ const ProductSearchInput: React.FC<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -349,7 +349,7 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
+          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
@@ -391,7 +391,7 @@ const ProductDropdown: React.FC<{
     <div className={`relative group w-full ${className}`} ref={dropdownRef}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full py-2 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full py-1.5 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
@@ -402,7 +402,7 @@ const ProductDropdown: React.FC<{
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
-          className={`absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
+          className={`absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
         >
           {options.map((option) => (
             <button
@@ -445,10 +445,10 @@ const DataTable: React.FC<{
       )}
     </div>
     {data.length > 0 ? (
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100">
         <table className="w-full text-xs min-w-max">
-          <thead>
-            <tr className="bg-gray-50">
+          <thead className="sticky top-0 bg-gray-50">
+            <tr>
               {columns.map((col) => (
                 <th key={col.key} className={`p-2 ${isRtl ? 'text-right' : 'text-left'} ${col.width || 'w-auto'} font-alexandria font-medium text-gray-600`}>
                   {col.label}
@@ -504,10 +504,10 @@ const OrdersTable: React.FC<{
       )}
     </div>
     {orders.length > 0 ? (
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100">
         <table className="w-full text-xs min-w-max">
-          <thead>
-            <tr className="bg-gray-50">
+          <thead className="sticky top-0 bg-gray-50">
+            <tr>
               <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
               <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'التاريخ' : 'Date'}</th>
               <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
@@ -561,10 +561,10 @@ const ReturnsTable: React.FC<{
       )}
     </div>
     {returns.length > 0 ? (
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100">
         <table className="w-full text-xs min-w-max">
-          <thead>
-            <tr className="bg-gray-50">
+          <thead className="sticky top-0 bg-gray-50">
+            <tr>
               <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'رقم المرتجع' : 'Return Number'}</th>
               <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'التاريخ' : 'Date'}</th>
               <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
@@ -590,6 +590,63 @@ const ReturnsTable: React.FC<{
     )}
   </div>
 ));
+
+const calculateTrends = (items: any[], dateKey: string, valueKey: string, countKey: string, start: string, end: string, lang: string) => {
+  const days = [];
+  let current = new Date(start);
+  const endDate = new Date(end);
+  while (current <= endDate) {
+    const dayStr = formatDate(current, lang);
+    days.push(dayStr);
+    current.setDate(current.getDate() + 1);
+  }
+  const trendMap = new Map(days.map(d => [d, { period: d, [countKey]: 0, [valueKey]: 0 }]));
+  items.forEach(item => {
+    const dateStr = formatDate(new Date(item[dateKey]), lang);
+    if (trendMap.has(dateStr)) {
+      const t = trendMap.get(dateStr);
+      t[countKey] += 1;
+      t[valueKey] += safeNumber(item.totalAmount || item.totalValue || 0);
+    }
+  });
+  return Array.from(trendMap.values());
+};
+
+const calculateBranchAnalytics = (items: any[], isRtl: boolean, sortKey: string) => {
+  const branchMap = new Map();
+  items.forEach(item => {
+    const branch = item.branch || {};
+    const branchId = safeString(branch._id);
+    const displayName = isRtl ? safeString(branch.name, 'فرع غير معروف') : safeString(branch.nameEn || branch.name, 'Unknown Branch');
+    if (!branchMap.has(branchId)) {
+      branchMap.set(branchId, { branchId, displayName, total: 0, count: 0 });
+    }
+    const b = branchMap.get(branchId);
+    b.count += 1;
+    b.total += safeNumber(item.totalAmount || item.totalValue || 0);
+  });
+  const branchList = Array.from(branchMap.values());
+  branchList.forEach(b => b.average = b.total / b.count || 0);
+  return branchList.sort((a, b) => b[sortKey] - a[sortKey]).slice(0, 6);
+};
+
+const calculateLeastBranchAnalytics = (items: any[], isRtl: boolean, sortKey: string) => {
+  const branchMap = new Map();
+  items.forEach(item => {
+    const branch = item.branch || {};
+    const branchId = safeString(branch._id);
+    const displayName = isRtl ? safeString(branch.name, 'فرع غير معروف') : safeString(branch.nameEn || branch.name, 'Unknown Branch');
+    if (!branchMap.has(branchId)) {
+      branchMap.set(branchId, { branchId, displayName, total: 0, count: 0 });
+    }
+    const b = branchMap.get(branchId);
+    b.count += 1;
+    b.total += safeNumber(item.totalAmount || item.totalValue || 0);
+  });
+  const branchList = Array.from(branchMap.values());
+  branchList.forEach(b => b.average = b.total / b.count || 0);
+  return branchList.sort((a, b) => a[sortKey] - b[sortKey]).slice(0, 6);
+};
 
 const ReportsAnalytics: React.FC = () => {
   const { language } = useLanguage();
@@ -772,94 +829,62 @@ const ReportsAnalytics: React.FC = () => {
         });
       } else if (type === 'orders') {
         response = await ordersAPI.getAll(params);
-        if (!response || typeof response !== 'object') {
+        if (!response || !Array.isArray(response)) {
           throw new Error(t.errors.invalid_data);
         }
-        setOrderAnalytics({
-          branchOrders: (response.branchOrders || []).map((bo: any) => ({
-            branchId: safeString(bo.branchId),
-            branchName: safeString(bo.branchName),
-            branchNameEn: safeString(bo.branchNameEn),
-            displayName: isRtl ? safeString(bo.branchName, 'فرع غير معروف') : safeString(bo.branchNameEn || bo.branchName, 'Unknown Branch'),
-            totalOrders: safeNumber(bo.totalOrders),
-            totalValue: safeNumber(bo.totalValue),
-            averageOrderValue: safeNumber(bo.averageOrderValue),
-          })).sort((a, b) => b.totalOrders - a.totalOrders).slice(0, 6),
-          leastBranchOrders: (response.leastBranchOrders || []).map((bo: any) => ({
-            branchId: safeString(bo.branchId),
-            branchName: safeString(bo.branchName),
-            branchNameEn: safeString(bo.branchNameEn),
-            displayName: isRtl ? safeString(bo.branchName, 'فرع غير معروف') : safeString(bo.branchNameEn || bo.branchName, 'Unknown Branch'),
-            totalOrders: safeNumber(bo.totalOrders),
-            totalValue: safeNumber(bo.totalValue),
-            averageOrderValue: safeNumber(bo.averageOrderValue),
-          })).sort((a, b) => a.totalOrders - b.totalOrders).slice(0, 6),
-          orderTrends: (response.orderTrends || []).map((trend: any) => ({
-            period: formatDate(new Date(safeString(trend.period)), language),
-            totalOrders: safeNumber(trend.totalOrders),
-            totalValue: safeNumber(trend.totalValue),
-          })).slice(0, 12),
-          totalOrders: safeNumber(response.totalOrders),
-          totalValue: safeNumber(response.totalValue),
-          averageOrderValue: safeNumber(response.averageOrderValue),
-        });
-        const orderResponse = response;
-        if (!orderResponse || !Array.isArray(orderResponse)) {
-          throw new Error(t.errors.invalid_data);
-        }
-        setOrders(orderResponse.map((order: any) => ({
+        const orderList = response.map((order: any) => ({
           _id: safeString(order._id),
           orderNumber: safeString(order.orderNumber, 'N/A'),
           date: safeString(order.createdAt || order.date),
           total: safeNumber(order.totalAmount || order.total),
           status: safeString(order.status, 'Unknown'),
-          branchName: safeString(order.branch?.name || order.branchName, t.noData),
-        })));
+          branchName: isRtl ? safeString(order.branch?.name, 'Unknown') : safeString(order.branch?.nameEn || order.branch?.name, 'Unknown'),
+          branch: order.branch || {}
+        }));
+        setOrders(orderList);
+        const totalOrders = orderList.length;
+        const totalValue = orderList.reduce((sum, o) => sum + o.total, 0);
+        const averageOrderValue = totalOrders > 0 ? totalValue / totalOrders : 0;
+        const branchOrders = calculateBranchAnalytics(orderList, isRtl, 'totalOrders');
+        const leastBranchOrders = calculateLeastBranchAnalytics(orderList, isRtl, 'totalOrders');
+        const orderTrends = calculateTrends(orderList, 'date', 'totalValue', 'totalOrders', startDate, endDate, language);
+        setOrderAnalytics({
+          branchOrders,
+          leastBranchOrders,
+          orderTrends,
+          totalOrders,
+          totalValue,
+          averageOrderValue,
+        });
       } else if (type === 'returns') {
         response = await returnsAPI.getAll(params);
-        if (!response || typeof response !== 'object') {
+        if (!response || !Array.isArray(response)) {
           throw new Error(t.errors.invalid_data);
         }
+        const returnList = response.map((ret: any) => ({
+          _id: safeString(ret._id),
+          returnNumber: safeString(ret.returnNumber, 'N/A'),
+          date: safeString(ret.createdAt || ret.date),
+          total: safeNumber(ret.totalAmount || ret.total),
+          status: safeString(ret.status, 'Unknown'),
+          branchName: isRtl ? safeString(ret.branch?.name, 'Unknown') : safeString(ret.branch?.nameEn || ret.branch?.name, 'Unknown'),
+          branch: ret.branch || {}
+        }));
+        setReturns(returnList);
+        const totalReturns = returnList.length;
+        const totalValue = returnList.reduce((sum, r) => sum + r.total, 0);
+        const averageReturnValue = totalReturns > 0 ? totalValue / totalReturns : 0;
+        const branchReturns = calculateBranchAnalytics(returnList, isRtl, 'totalReturns');
+        const leastBranchReturns = calculateLeastBranchAnalytics(returnList, isRtl, 'totalReturns');
+        const returnTrends = calculateTrends(returnList, 'date', 'totalValue', 'totalReturns', startDate, endDate, language);
         setReturnAnalytics({
-          branchReturns: (response.branchReturns || []).map((br: any) => ({
-            branchId: safeString(br.branchId),
-            branchName: safeString(br.branchName),
-            branchNameEn: safeString(br.branchNameEn),
-            displayName: isRtl ? safeString(br.branchName, 'فرع غير معروف') : safeString(br.branchNameEn || br.branchName, 'Unknown Branch'),
-            totalReturns: safeNumber(br.totalReturns),
-            totalValue: safeNumber(br.totalValue),
-            averageReturnValue: safeNumber(br.averageReturnValue),
-          })).sort((a, b) => b.totalReturns - a.totalReturns).slice(0, 6),
-          leastBranchReturns: (response.leastBranchReturns || []).map((br: any) => ({
-            branchId: safeString(br.branchId),
-            branchName: safeString(br.branchName),
-            branchNameEn: safeString(br.branchNameEn),
-            displayName: isRtl ? safeString(br.branchName, 'فرع غير معروف') : safeString(br.branchNameEn || br.branchName, 'Unknown Branch'),
-            totalReturns: safeNumber(br.totalReturns),
-            totalValue: safeNumber(br.totalValue),
-            averageReturnValue: safeNumber(br.averageReturnValue),
-          })).sort((a, b) => a.totalReturns - b.totalReturns).slice(0, 6),
-          returnTrends: (response.returnTrends || []).map((trend: any) => ({
-            period: formatDate(new Date(safeString(trend.period)), language),
-            totalReturns: safeNumber(trend.totalReturns),
-            totalValue: safeNumber(trend.totalValue),
-          })).slice(0, 12),
-          totalReturns: safeNumber(response.totalReturns),
-          totalValue: safeNumber(response.totalValue),
-          averageReturnValue: safeNumber(response.averageReturnValue),
+          branchReturns,
+          leastBranchReturns,
+          returnTrends,
+          totalReturns,
+          totalValue,
+          averageReturnValue,
         });
-        const returnResponse = response;
-        if (!returnResponse || !Array.isArray(returnResponse)) {
-          throw new Error(t.errors.invalid_data);
-        }
-        setReturns(returnResponse.map((returnItem: any) => ({
-          _id: safeString(returnItem._id),
-          returnNumber: safeString(returnItem.returnNumber, 'N/A'),
-          date: safeString(returnItem.createdAt || returnItem.date),
-          total: safeNumber(returnItem.totalAmount || returnItem.total),
-          status: safeString(returnItem.status, 'Unknown'),
-          branchName: safeString(returnItem.branch?.name || returnItem.branchName, t.noData),
-        })));
       }
       setError('');
     } catch (err: any) {
@@ -1002,10 +1027,10 @@ const ReportsAnalytics: React.FC = () => {
   }), [isRtl, language]);
 
   const chartData = useMemo(() => {
-    const createGradient = (ctx: CanvasRenderingContext2D, chartArea: any, startColor: string, endColor: string) => {
+    const createGradient = (ctx: CanvasRenderingContext2D, chartArea: any, start: string, end: string) => {
       const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-      gradient.addColorStop(0, startColor);
-      gradient.addColorStop(1, endColor);
+      gradient.addColorStop(0, start);
+      gradient.addColorStop(1, end);
       return gradient;
     };
 
@@ -1326,14 +1351,14 @@ const ReportsAnalytics: React.FC = () => {
             onChange={(e) => debouncedSearch(e.target.value)}
             placeholder={t.searchPlaceholder}
             ariaLabel={t.searchPlaceholder}
-            className="w-full sm:w-56"
+            className="w-full sm:w-48"
           />
           <ProductDropdown
             value={selectedBranch}
             onChange={setSelectedBranch}
             options={branchOptions}
             ariaLabel={t.branchFilterPlaceholder}
-            className="w-full sm:w-44"
+            className="w-full sm:w-40"
           />
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <div>
@@ -1342,7 +1367,7 @@ const ReportsAnalytics: React.FC = () => {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="mt-1 w-full py-2 py-2 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                className="mt-1 w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
                 aria-label={t.startDate}
               />
             </div>
@@ -1352,7 +1377,7 @@ const ReportsAnalytics: React.FC = () => {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="mt-1 w-full py-2 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                className="mt-1 w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
                 aria-label={t.endDate}
               />
             </div>
