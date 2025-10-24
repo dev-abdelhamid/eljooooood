@@ -89,29 +89,6 @@ api.interceptors.response.use(
   }
 );
 
-const createErrorMessage = (errorType, isRtl) => {
-  const messages = {
-    invalidBranchId: { ar: 'معرف الفرع غير صالح', en: 'Invalid branch ID' },
-    invalidOrderId: { ar: 'معرف الطلب غير صالح', en: 'Invalid order ID' },
-    invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
-    invalidProductId: { ar: 'معرف المنتج غير صالح', en: 'Invalid product ID' },
-    invalidOrderOrTaskId: { ar: 'معرف الطلب أو المهمة غير صالح', en: 'Invalid order or task ID' },
-    invalidOrderOrItemOrChefId: { ar: 'معرف الطلب، العنصر، أو الشيف غير صالح', en: 'Invalid order, item, or chef ID' },
-    invalidStockQuantity: { ar: 'كمية المخزون يجب أن تكون غير سالبة', en: 'Stock quantity must be non-negative' },
-    invalidMinStockLevel: { ar: 'الحد الأدنى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Minimum stock level must be a non-negative integer' },
-    invalidMaxStockLevel: { ar: 'الحد الأقصى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Maximum stock level must be a non-negative integer' },
-    maxLessThanMin: { ar: 'الحد الأقصى يجب أن يكون أكبر من الحد الأدنى', en: 'Maximum stock level must be greater than minimum' },
- 
-    invalidUserId: { ar: 'معرف المستخدم غير صالح', en: 'Invalid user ID' },
-    invalidInventoryId: { ar: 'معرف المخزون غير صالح', en: 'Invalid inventory ID' },
-    invalidStatus: { ar: 'الحالة غير صالحة', en: 'Invalid status' },
-    invalidFactoryOrderId: { ar: 'معرف طلب المصنع غير صالح', en: 'Invalid factory order ID' },
-    invalidId: { ar: 'معرف غير صالح', en: 'Invalid ID' },
-    invalidItems: { ar: 'العناصر غير صالحة', en: 'Invalid items' },
-    invalidData: { ar: 'البيانات غير صالحة', en: 'Invalid data' },
-  };
-  return messages[errorType] ? (isRtl ? messages[errorType].ar : messages[errorType].en) : (isRtl ? 'خطأ غير معروف' : 'Unknown error');
-};
 export const authAPI = {
   login: async (credentials) => {
     const response = await api.post('/auth/login', {
@@ -395,7 +372,30 @@ export const usersAPI = {
   },
 };
 
-
+const createErrorMessage = (errorType, isRtl) => {
+  const messages = {
+    invalidBranchId: { ar: 'معرف الفرع غير صالح', en: 'Invalid branch ID' },
+    invalidOrderId: { ar: 'معرف الطلب غير صالح', en: 'Invalid order ID' },
+    invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
+    invalidProductId: { ar: 'معرف المنتج غير صالح', en: 'Invalid product ID' },
+    invalidOrderOrTaskId: { ar: 'معرف الطلب أو المهمة غير صالح', en: 'Invalid order or task ID' },
+    invalidOrderOrItemOrChefId: { ar: 'معرف الطلب، العنصر، أو الشيف غير صالح', en: 'Invalid order, item, or chef ID' },
+    invalidStockQuantity: { ar: 'كمية المخزون يجب أن تكون غير سالبة', en: 'Stock quantity must be non-negative' },
+    invalidMinStockLevel: { ar: 'الحد الأدنى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Minimum stock level must be a non-negative integer' },
+    invalidMaxStockLevel: { ar: 'الحد الأقصى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Maximum stock level must be a non-negative integer' },
+    maxLessThanMin: { ar: 'الحد الأقصى يجب أن يكون أكبر من الحد الأدنى', en: 'Maximum stock level must be greater than minimum' },
+ 
+    invalidUserId: { ar: 'معرف المستخدم غير صالح', en: 'Invalid user ID' },
+    invalidInventoryId: { ar: 'معرف المخزون غير صالح', en: 'Invalid inventory ID' },
+    invalidStatus: { ar: 'الحالة غير صالحة', en: 'Invalid status' },
+    invalidFactoryOrderId: { ar: 'معرف طلب المصنع غير صالح', en: 'Invalid factory order ID' },
+    invalidId: { ar: 'معرف غير صالح', en: 'Invalid ID' },
+    invalidItems: { ar: 'العناصر غير صالحة', en: 'Invalid items' },
+    invalidData: { ar: 'البيانات غير صالحة', en: 'Invalid data' },
+  };
+  return messages[errorType] ? (isRtl ? messages[errorType].ar : messages[errorType].en) : (isRtl ? 'خطأ غير معروف' : 'Unknown error');
+};
+ 
 
 export const ordersAPI = {
   create: async (orderData, isRtl = false) => {
@@ -403,25 +403,16 @@ export const ordersAPI = {
       console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid branchId:`, orderData.branchId);
       throw new Error(createErrorMessage('invalidBranchId', isRtl));
     }
-    const invalidItems = orderData.items.filter((item) => item.quantity < 0.5 || item.quantity % 0.5 !== 0);
-    if (invalidItems.length > 0) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid quantities:`, invalidItems);
-      throw new Error(createErrorMessage('invalidQuantity', isRtl));
-    }
     try {
       const response = await api.post('/orders', {
         orderNumber: orderData.orderNumber.trim(),
         branchId: orderData.branchId,
-        items: orderData.items.map((item) => ({
+        items: orderData.items.map(item => ({
           product: item.product,
-          quantity: Number(item.quantity.toFixed(1)),
+          quantity: item.quantity,
           price: item.price,
         })),
         status: orderData.status.trim(),
-        priority: orderData.priority?.trim() || 'medium',
-        createdBy: orderData.createdBy,
-        eventId: orderData.eventId,
-        isRtl,
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
       return response;
