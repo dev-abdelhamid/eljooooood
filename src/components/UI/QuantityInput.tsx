@@ -80,9 +80,7 @@ const QuantityInput = ({
           <Plus className="w-4 h-4 text-white" />
         </button>
       </div>
-      {error && (
-        <p className="text-red-600 text-xs mt-1">{error}</p>
-      )}
+      {error && <p className="text-red-600 text-xs mt-1">{error}</p>}
     </div>
   );
 };

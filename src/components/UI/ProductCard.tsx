@@ -11,7 +11,9 @@ interface Product {
   price: number;
   unit?: string;
   unitEn?: string;
-  department: { _id: string; name: string; nameEn?: string };
+  department: { _id: string; name: string; nameEn?: string; displayName: string };
+  displayName: string;
+  displayUnit: string;
 }
 
 interface OrderItem {
@@ -41,18 +43,12 @@ const ProductCard = ({
   cartItem,
   onAdd,
   onUpdate,
-  onRemove,
-  getDisplayName,
-  getDisplayUnit,
   translations,
 }: {
   product: Product;
   cartItem?: OrderItem;
   onAdd: () => void;
   onUpdate: (quantity: number) => void;
-  onRemove: () => void;
-  getDisplayName: (item: { name: string; nameEn?: string }) => string;
-  getDisplayUnit: (item: { unit?: string; unitEn?: string }) => string;
   translations: Translations;
 }) => {
   const { language } = useLanguage();
@@ -64,12 +60,14 @@ const ProductCard = ({
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-            {getDisplayName(product)}
+            {product.displayName}
           </h3>
           <p className="text-sm text-gray-500">{product.code}</p>
         </div>
-        <p className="text-sm text-amber-600">{t.department}: {getDisplayName(product.department)}</p>
-        <p className="font-semibold text-gray-900 text-sm">{t.price}: {product.price} {t.currency} / {getDisplayUnit(product)}</p>
+        <p className="text-sm text-amber-600">{t.department}: {product.department.displayName}</p>
+        <p className="font-semibold text-gray-900 text-sm">
+          {t.price}: {product.price} {t.currency} / {product.displayUnit}
+        </p>
       </div>
       <div className="mt-4 flex justify-end">
         {cartItem ? (
