@@ -298,24 +298,24 @@ const exportToCSV = (data: any[], filename: string, columns: { key: string; labe
 };
 
 const AnalyticsSkeleton: React.FC = () => (
-  <div className="space-y-6 animate-pulse">
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <div className="space-y-4 animate-pulse">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
       {[...Array(4)].map((_, index) => (
-        <div key={index} className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-          <div className="h-4 bg-gray-200 rounded w-3/4 mb-3" />
-          <div className="h-8 bg-gray-200 rounded w-1/2" />
+        <div key={index} className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+          <div className="h-6 bg-gray-200 rounded w-1/2" />
         </div>
       ))}
     </div>
-    <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-      <div className="h-4 bg-gray-200 rounded w-1/2 mb-3" />
-      <div className="h-64 bg-gray-200 rounded" />
+    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
+      <div className="h-56 bg-gray-200 rounded" />
     </div>
   </div>
 );
 
 const NoDataMessage: React.FC<{ message: string }> = ({ message }) => (
-  <p className="text-center text-gray-500 py-4 text-sm font-alexandria">{message}</p>
+  <p className="text-center text-gray-500 py-3 text-xs font-alexandria">{message}</p>
 );
 
 const ProductSearchInput: React.FC<{
@@ -335,19 +335,19 @@ const ProductSearchInput: React.FC<{
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-600`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
-        <Search className="w-5 h-5" />
+        <Search className="w-4 h-4" />
       </motion.div>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -356,10 +356,10 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
+          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </motion.button>
       )}
     </div>
@@ -398,18 +398,18 @@ const ProductDropdown: React.FC<{
     <div className={`relative group w-full ${className}`} ref={dropdownRef}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full py-2.5 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm hover:shadow-md text-sm font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full py-1.5 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
-        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && !disabled && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
-          className={`absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-500 scrollbar-track-gray-100 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
+          className={`absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
         >
           {options.map((option) => (
             <button
@@ -419,7 +419,7 @@ const ProductDropdown: React.FC<{
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-500 transition-colors"
+              className="w-full px-3 py-2 text-xs text-gray-700 hover:bg-amber-100 hover:text-amber-600 transition-colors"
             >
               {option.label}
             </button>
@@ -438,26 +438,26 @@ const DataTable: React.FC<{
   currency?: string;
   className?: string;
 }> = React.memo(({ title, data, columns, isRtl, currency, className }) => (
-  <div className={`p-4 bg-white rounded-xl shadow-md border border-gray-100 mt-4 ${className}`}>
-    <div className="flex justify-between items-center mb-3">
-      <h3 className="text-sm font-semibold text-gray-800 font-alexandria">{title}</h3>
+  <div className={`p-3 bg-white rounded-lg shadow-sm border border-gray-100 mt-3 ${className}`}>
+    <div className="flex justify-between items-center mb-2">
+      <h3 className="text-xs font-medium text-gray-700 font-alexandria">{title}</h3>
       {data.length > 0 && (
         <button
           onClick={() => exportToCSV(data, title, columns, isRtl, currency || '')}
-          className="flex items-center gap-2 text-sm text-amber-500 hover:text-amber-600 transition-colors"
+          className="flex items-center gap-2 text-xs text-amber-600 hover:text-amber-700 transition-colors"
         >
-          <Download className="w-5 h-5" />
+          <Download className="w-4 h-4" />
           {translations[isRtl ? 'ar' : 'en'].export}
         </button>
       )}
     </div>
     {data.length > 0 ? (
-      <div className="overflow-x-auto overflow-y-auto max-h-[400px] scrollbar-thin scrollbar-thumb-amber-500 scrollbar-track-gray-100">
-        <table className="w-full text-sm min-w-max table-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100">
+        <table className="w-full text-xs min-w-max">
           <thead className="sticky top-0 bg-gray-50">
             <tr>
               {columns.map((col) => (
-                <th key={col.key} className={`p-3 ${isRtl ? 'text-right' : 'text-left'} ${col.width || 'w-auto'} font-alexandria font-semibold text-gray-600`}>
+                <th key={col.key} className={`p-2 ${isRtl ? 'text-right' : 'text-left'} ${col.width || 'w-auto'} font-alexandria font-medium text-gray-600`}>
                   {col.label}
                 </th>
               ))}
@@ -465,9 +465,9 @@ const DataTable: React.FC<{
           </thead>
           <tbody>
             {data.map((item, index) => (
-              <tr key={index} className="border-t hover:bg-amber-50 transition-colors">
+              <tr key={index} className="border-t hover:bg-gray-50 transition-colors">
                 {columns.map((col) => (
-                  <td key={col.key} className={`p-3 ${col.width || 'w-auto'} font-alexandria text-gray-700 truncate`}>
+                  <td key={col.key} className={`p-2 ${col.width || 'w-auto'} font-alexandria text-gray-700`}>
                     {col.key.includes('total') || col.key === 'averageOrderValue' || col.key === 'averageReturnValue' || col.key === 'totalRevenue' || col.key === 'totalSpent' || col.key === 'totalQuantity' || col.key === 'saleCount' || col.key === 'totalOrders' || col.key === 'totalReturns' || col.key === 'totalValue'
                       ? `${safeNumber(item[col.key]).toFixed(2)} ${currency || ''}`
                       : safeString(item[col.key], '-') || '-'}
@@ -491,9 +491,9 @@ const OrdersTable: React.FC<{
   language: string;
   className?: string;
 }> = React.memo(({ orders, isRtl, currency, language, className }) => (
-  <div className={`p-4 bg-white rounded-xl shadow-md border border-gray-100 ${className}`}>
-    <div className="flex justify-between items-center mb-3">
-      <h3 className="text-sm font-semibold text-gray-800 font-alexandria">{translations[isRtl ? 'ar' : 'en'].ordersTab}</h3>
+  <div className={`p-3 bg-white rounded-lg shadow-sm border border-gray-100 ${className}`}>
+    <div className="flex justify-between items-center mb-2">
+      <h3 className="text-xs font-medium text-gray-700 font-alexandria">{translations[isRtl ? 'ar' : 'en'].ordersTab}</h3>
       {orders.length > 0 && (
         <button
           onClick={() => exportToCSV(orders, 'orders', [
@@ -503,33 +503,33 @@ const OrdersTable: React.FC<{
             { key: 'status', label: isRtl ? 'الحالة' : 'Status' },
             { key: 'branchName', label: isRtl ? 'الفرع' : 'Branch' },
           ], isRtl, currency)}
-          className="flex items-center gap-2 text-sm text-amber-500 hover:text-amber-600 transition-colors"
+          className="flex items-center gap-2 text-xs text-amber-600 hover:text-amber-700 transition-colors"
         >
-          <Download className="w-5 h-5" />
+          <Download className="w-4 h-4" />
           {translations[isRtl ? 'ar' : 'en'].export}
         </button>
       )}
     </div>
     {orders.length > 0 ? (
-      <div className="overflow-x-auto overflow-y-auto max-h-[400px] scrollbar-thin scrollbar-thumb-amber-500 scrollbar-track-gray-100">
-        <table className="w-full text-sm min-w-max table-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100">
+        <table className="w-full text-xs min-w-max">
           <thead className="sticky top-0 bg-gray-50">
             <tr>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'التاريخ' : 'Date'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'الحالة' : 'Status'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'الفرع' : 'Branch'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'التاريخ' : 'Date'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الحالة' : 'Status'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الفرع' : 'Branch'}</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((order) => (
-              <tr key={order._id} className="border-t hover:bg-amber-50 transition-colors">
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeString(order.orderNumber, 'N/A')}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{formatDate(new Date(order.date), language)}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeNumber(order.total).toFixed(2)} {currency}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeString(order.status, 'Unknown')}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeString(order.branchName, 'Unknown')}</td>
+              <tr key={order._id} className="border-t hover:bg-gray-50 transition-colors">
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeString(order.orderNumber, 'N/A')}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{formatDate(new Date(order.date), language)}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeNumber(order.total).toFixed(2)} {currency}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeString(order.status, 'Unknown')}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeString(order.branchName, 'Unknown')}</td>
               </tr>
             ))}
           </tbody>
@@ -548,9 +548,9 @@ const ReturnsTable: React.FC<{
   language: string;
   className?: string;
 }> = React.memo(({ returns, isRtl, currency, language, className }) => (
-  <div className={`p-4 bg-white rounded-xl shadow-md border border-gray-100 ${className}`}>
-    <div className="flex justify-between items-center mb-3">
-      <h3 className="text-sm font-semibold text-gray-800 font-alexandria">{translations[isRtl ? 'ar' : 'en'].returnsTab}</h3>
+  <div className={`p-3 bg-white rounded-lg shadow-sm border border-gray-100 ${className}`}>
+    <div className="flex justify-between items-center mb-2">
+      <h3 className="text-xs font-medium text-gray-700 font-alexandria">{translations[isRtl ? 'ar' : 'en'].returnsTab}</h3>
       {returns.length > 0 && (
         <button
           onClick={() => exportToCSV(returns, 'returns', [
@@ -560,33 +560,33 @@ const ReturnsTable: React.FC<{
             { key: 'status', label: isRtl ? 'الحالة' : 'Status' },
             { key: 'branchName', label: isRtl ? 'الفرع' : 'Branch' },
           ], isRtl, currency)}
-          className="flex items-center gap-2 text-sm text-amber-500 hover:text-amber-600 transition-colors"
+          className="flex items-center gap-2 text-xs text-amber-600 hover:text-amber-700 transition-colors"
         >
-          <Download className="w-5 h-5" />
+          <Download className="w-4 h-4" />
           {translations[isRtl ? 'ar' : 'en'].export}
         </button>
       )}
     </div>
     {returns.length > 0 ? (
-      <div className="overflow-x-auto overflow-y-auto max-h-[400px] scrollbar-thin scrollbar-thumb-amber-500 scrollbar-track-gray-100">
-        <table className="w-full text-sm min-w-max table-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100">
+        <table className="w-full text-xs min-w-max">
           <thead className="sticky top-0 bg-gray-50">
             <tr>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'رقم المرتجع' : 'Return Number'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'التاريخ' : 'Date'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'الحالة' : 'Status'}</th>
-              <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-alexandria font-semibold text-gray-600`}>{isRtl ? 'الفرع' : 'Branch'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'رقم المرتجع' : 'Return Number'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'التاريخ' : 'Date'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الإجمالي' : 'Total'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الحالة' : 'Status'}</th>
+              <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'} w-1/5 font-alexandria font-medium text-gray-600`}>{isRtl ? 'الفرع' : 'Branch'}</th>
             </tr>
           </thead>
           <tbody>
             {returns.map((returnItem) => (
-              <tr key={returnItem._id} className="border-t hover:bg-amber-50 transition-colors">
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeString(returnItem.returnNumber, 'N/A')}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{formatDate(new Date(returnItem.date), language)}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeNumber(returnItem.total).toFixed(2)} {currency}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeString(returnItem.status, 'Unknown')}</td>
-                <td className="p-3 font-alexandria text-gray-700 truncate">{safeString(returnItem.branchName, 'Unknown')}</td>
+              <tr key={returnItem._id} className="border-t hover:bg-gray-50 transition-colors">
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeString(returnItem.returnNumber, 'N/A')}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{formatDate(new Date(returnItem.date), language)}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeNumber(returnItem.total).toFixed(2)} {currency}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeString(returnItem.status, 'Unknown')}</td>
+                <td className="p-2 w-1/5 font-alexandria text-gray-700">{safeString(returnItem.branchName, 'Unknown')}</td>
               </tr>
             ))}
           </tbody>
@@ -695,7 +695,7 @@ const ReportsAnalytics: React.FC = () => {
       })));
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch branches error:`, err);
-      toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
     }
   }, [isRtl, t]);
 
@@ -706,14 +706,14 @@ const ReportsAnalytics: React.FC = () => {
   const fetchData = useCallback(async (type: 'sales' | 'orders' | 'returns') => {
     if (user?.role !== 'admin') {
       setError(t.errors.unauthorized_access);
-      toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       setLoading(false);
       return;
     }
 
     if (!isValidDate(startDate) || !isValidDate(endDate) || new Date(startDate) > new Date(endDate)) {
       setError(t.errors.invalid_dates);
-      toast.error(t.errors.invalid_dates, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      toast.error(t.errors.invalid_dates, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       setLoading(false);
       return;
     }
@@ -726,6 +726,7 @@ const ReportsAnalytics: React.FC = () => {
         endDate: new Date(endDate).toISOString().split('T')[0],
         lang: language,
       };
+      console.log(`[${new Date().toISOString()}] Fetching ${type} with params:`, params);
       let response;
       if (type === 'sales') {
         response = await salesAPI.getAnalytics(params);
@@ -886,7 +887,7 @@ const ReportsAnalytics: React.FC = () => {
         err.status === 0 ? t.errors.network_error :
         t.errors.fetch_analytics;
       setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       if (type === 'sales') {
         setAnalytics({
           branchSales: [],
@@ -970,59 +971,50 @@ const ReportsAnalytics: React.FC = () => {
       legend: { 
         position: 'bottom' as const, 
         labels: { 
-          font: { size: 12, family: 'Alexandria' }, 
-          color: '#374151',
-          padding: 16,
+          font: { size: 10, family: 'Alexandria' }, 
+          color: '#4B5563',
+          padding: 12,
           usePointStyle: true,
-          pointStyle: 'circle',
         } 
       },
       tooltip: { 
-        bodyFont: { size: 12, family: 'Alexandria' }, 
-        padding: 12, 
-        backgroundColor: 'rgba(31, 41, 55, 0.95)',
-        titleFont: { size: 14, family: 'Alexandria' },
-        cornerRadius: 8,
-        boxPadding: 6,
+        bodyFont: { size: 10, family: 'Alexandria' }, 
+        padding: 8, 
+        backgroundColor: 'rgba(31, 41, 55, 0.9)',
+        titleFont: { size: 12, family: 'Alexandria' },
+        cornerRadius: 6,
       },
       title: { 
         display: true, 
-        font: { size: 14, family: 'Alexandria', weight: '600' }, 
+        font: { size: 12, family: 'Alexandria' }, 
         color: '#1F2937', 
-        padding: { top: 16, bottom: 16 } 
+        padding: { top: 10, bottom: 10 } 
       },
     },
     scales: {
       x: { 
         ticks: { 
-          font: { size: 12, family: 'Alexandria' }, 
+          font: { size: 10, family: 'Alexandria' }, 
           color: '#4B5563', 
           maxRotation: isRtl ? -45 : 45, 
-          autoSkip: true,
-          padding: 8,
+          autoSkip: true 
         }, 
         reverse: isRtl,
-        grid: { display: false, drawBorder: false },
+        grid: { display: false },
       },
       y: { 
         ticks: { 
-          font: { size: 12, family: 'Alexandria' }, 
+          font: { size: 10, family: 'Alexandria' }, 
           color: '#4B5563',
           callback: (value: number) => value.toLocaleString(language),
-          padding: 8,
         }, 
         beginAtZero: true,
-        grid: { color: 'rgba(209, 213, 219, 0.5)', drawBorder: false },
+        grid: { color: 'rgba(0, 0, 0, 0.05)' },
       },
     },
     elements: {
-      bar: { borderRadius: 6, borderWidth: 0 },
-      line: { tension: 0.4, borderWidth: 3 },
-      point: { radius: 4, hoverRadius: 6, hitRadius: 4 },
-    },
-    interaction: {
-      mode: 'index' as const,
-      intersect: false,
+      bar: { borderRadius: 4 },
+      line: { tension: 0.4 },
     },
   }), [isRtl, language]);
 
@@ -1043,7 +1035,8 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.productSales.map((p) => safeNumber(p.totalRevenue)),
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
-            barThickness: 'flex',
+            borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1055,7 +1048,8 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastProductSales.map((p) => safeNumber(p.totalRevenue)),
             backgroundColor: '#3B82F6',
             hoverBackgroundColor: '#2563EB',
-            barThickness: 'flex',
+            borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1067,7 +1061,8 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.departmentSales.map((d) => safeNumber(d.totalRevenue)),
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
-            barThickness: 'flex',
+            borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1079,7 +1074,8 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastDepartmentSales.map((d) => safeNumber(d.totalRevenue)),
             backgroundColor: '#4BC0C0',
             hoverBackgroundColor: '#2D9CDB',
-            barThickness: 'flex',
+            borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1091,21 +1087,21 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.branchSales.map((b) => safeNumber(b.totalSales)),
             backgroundColor: '#9966FF',
             hoverBackgroundColor: '#7C3AED',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalOrders}`,
             data: filteredData.branchSales.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalReturns}`,
             data: filteredData.branchSales.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
-            barThickness: 'flex',
+            barThickness: 20,
           },
         ],
       },
@@ -1117,21 +1113,21 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastBranchSales.map((b) => safeNumber(b.totalSales)),
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalOrders}`,
             data: filteredData.leastBranchSales.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalReturns}`,
             data: filteredData.leastBranchSales.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
-            barThickness: 'flex',
+            barThickness: 20,
           },
         ],
       },
@@ -1143,14 +1139,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.branchOrders.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.branchOrders.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#9966FF',
             hoverBackgroundColor: '#7C3AED',
-            barThickness: 'flex',
+            barThickness: 20,
           },
         ],
       },
@@ -1162,14 +1158,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastBranchOrders.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.leastBranchOrders.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 'flex',
+            barThickness: 20,
           },
         ],
       },
@@ -1181,14 +1177,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.branchReturns.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.branchReturns.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#4BC0C0',
             hoverBackgroundColor: '#2D9CDB',
-            barThickness: 'flex',
+            barThickness: 20,
           },
         ],
       },
@@ -1200,14 +1196,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastBranchReturns.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
-            barThickness: 'flex',
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.leastBranchReturns.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 'flex',
+            barThickness: 20,
           },
         ],
       },
@@ -1222,9 +1218,12 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return '#3B82F6';
-              return createGradient(ctx, chartArea, 'rgba(59, 130, 246, 0.1)', 'rgba(59, 130, 246, 0.6)');
+              return createGradient(ctx, chartArea, 'rgba(59, 130, 246, 0.2)', 'rgba(59, 130, 246, 0.8)');
             },
             fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
           },
           {
             label: `${t.totalCount}`,
@@ -1234,9 +1233,12 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(255, 99, 132, 0.1)';
-              return createGradient(ctx, chartArea, 'rgba(255, 99, 132, 0.1)', 'rgba(255, 99, 132, 0.6)');
+              return createGradient(ctx, chartArea, 'rgba(255, 99, 132, 0.2)', 'rgba(255, 99, 132, 0.8)');
             },
             fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
           },
         ],
       },
@@ -1251,9 +1253,12 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(54, 162, 235, 0.1)';
-              return createGradient(ctx, chartArea, 'rgba(54, 162, 235, 0.1)', 'rgba(54, 162, 235, 0.6)');
+              return createGradient(ctx, chartArea, 'rgba(54, 162, 235, 0.2)', 'rgba(54, 162, 235, 0.8)');
             },
             fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
@@ -1263,9 +1268,12 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(153, 102, 255, 0.1)';
-              return createGradient(ctx, chartArea, 'rgba(153, 102, 255, 0.1)', 'rgba(153, 102, 255, 0.6)');
+              return createGradient(ctx, chartArea, 'rgba(153, 102, 255, 0.2)', 'rgba(153, 102, 255, 0.8)');
             },
             fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
           },
         ],
       },
@@ -1280,9 +1288,12 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(255, 99, 132, 0.1)';
-              return createGradient(ctx, chartArea, 'rgba(255, 99, 132, 0.1)', 'rgba(255, 99, 132, 0.6)');
+              return createGradient(ctx, chartArea, 'rgba(255, 99, 132, 0.2)', 'rgba(255, 99, 132, 0.8)');
             },
             fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
@@ -1292,9 +1303,12 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(75, 192, 192, 0.1)';
-              return createGradient(ctx, chartArea, 'rgba(75, 192, 192, 0.1)', 'rgba(75, 192, 192, 0.6)');
+              return createGradient(ctx, chartArea, 'rgba(75, 192, 192, 0.2)', 'rgba(75, 192, 192, 0.8)');
             },
             fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
           },
         ],
       },
@@ -1303,28 +1317,28 @@ const ReportsAnalytics: React.FC = () => {
 
   if (user?.role !== 'admin') {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 shadow-md">
-          <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-sm text-red-600 font-alexandria">{t.errors.unauthorized_access}</span>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-xs text-red-600 font-alexandria">{t.errors.unauthorized_access}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-6 bg-gray-50 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
-      <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-      <header className="mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <BarChart2 className="w-6 h-6 text-amber-500" />
+    <div className="min-h-screen p-4  font-alexandria" >
+      <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600&display=swap" rel="stylesheet" />
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-5 h-5 text-amber-600" />
           <div>
-            <h1 className="text-xl font-bold text-gray-800">{t.title}</h1>
-            <p className="text-sm text-gray-500">{t.subtitle}</p>
+            <h1 className="text-lg font-semibold text-gray-800">{t.title}</h1>
+            <p className="text-xs text-gray-500">{t.subtitle}</p>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-          <div className="flex-1 min-w-[200px]">
+        <div className="flex flex-wrap gap-3 items-end w-full md:w-auto">
+          <div className="flex-grow min-w-[200px]">
             <ProductSearchInput
               value={searchTerm}
               onChange={(e) => debouncedSearch(e.target.value)}
@@ -1332,7 +1346,7 @@ const ReportsAnalytics: React.FC = () => {
               ariaLabel={t.searchPlaceholder}
             />
           </div>
-          <div className="flex-1 min-w-[160px]">
+          <div className="flex-grow min-w-[150px]">
             <ProductDropdown
               value={selectedBranch}
               onChange={setSelectedBranch}
@@ -1340,24 +1354,24 @@ const ReportsAnalytics: React.FC = () => {
               ariaLabel={t.branchFilterPlaceholder}
             />
           </div>
-          <div className="flex flex-row gap-4 flex-1 min-w-[320px]">
-            <div className="flex-1">
-              <label className="block text-sm text-gray-700 font-alexandria mb-1">{t.startDate}</label>
+          <div className="flex flex-wrap gap-3 flex-grow min-w-[300px]">
+            <div className="flex-grow min-w-[140px]">
+              <label className="block text-xs text-gray-700 font-alexandria">{t.startDate}</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full py-2.5 px-4 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                className="mt-1 w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
                 aria-label={t.startDate}
               />
             </div>
-            <div className="flex-1">
-              <label className="block text-sm text-gray-700 font-alexandria mb-1">{t.endDate}</label>
+            <div className="flex-grow min-w-[140px]">
+              <label className="block text-xs text-gray-700 font-alexandria">{t.endDate}</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full py-2.5 px-4 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                className="mt-1 w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
                 aria-label={t.endDate}
               />
             </div>
@@ -1368,18 +1382,18 @@ const ReportsAnalytics: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 shadow-md"
+          className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
         >
-          <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-sm text-red-600 font-alexandria">{error}</span>
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-xs text-red-600 font-alexandria">{error}</span>
         </motion.div>
       )}
-      <div className="flex mb-6 border-b border-gray-200">
+      <div className="flex mb-4 border-b border-gray-200">
         {['sales', 'orders', 'returns'].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab as 'sales' | 'orders' | 'returns')}
-            className={`py-3 px-5 text-sm font-medium ${activeTab === tab ? 'border-b-2 border-amber-500 text-amber-500' : 'text-gray-600 hover:text-amber-500'} transition-colors duration-200 font-alexandria`}
+            className={`py-2 px-3 text-xs font-medium ${activeTab === tab ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors duration-200 font-alexandria`}
           >
             {t[`${tab}Tab`]}
           </button>
@@ -1392,343 +1406,311 @@ const ReportsAnalytics: React.FC = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="space-y-6"
+          className="space-y-4"
         >
           {activeTab === 'sales' && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.totalSales}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{analytics.totalSales.toFixed(2)} {t.currency}</p>
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.totalCount}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{analytics.totalCount}</p>
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.averageOrderValue}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.topProduct}</h4>
-                  <p className="text-lg font-bold text-amber-500 truncate">{analytics.topProduct.displayName || t.noData}</p>
-                  <p className="text-sm text-gray-500">{t.totalSales}: {analytics.topProduct.totalRevenue.toFixed(2)} {t.currency}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.salesTrends}</h3>
+                {analytics.salesTrends.length > 0 ? (
+                  <div className="h-56">
+                    <Line data={chartData.salesTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.salesTrends } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.productSales}</h3>
+                {filteredData.productSales.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.productSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.productSales } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.productSales}
+                  data={filteredData.productSales}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'المنتج' : 'Product', width: 'w-2/5' },
+                    { key: 'totalRevenue', label: t.totalSales, width: 'w-1/5' },
+                    { key: 'totalQuantity', label: t.totalCount, width: 'w-1/5' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.leastProductSales}</h3>
+                {filteredData.leastProductSales.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.leastProductSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastProductSales } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.leastProductSales}
+                  data={filteredData.leastProductSales}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'المنتج' : 'Product', width: 'w-2/5' },
+                    { key: 'totalRevenue', label: t.totalSales, width: 'w-1/5' },
+                    { key: 'totalQuantity', label: t.totalCount, width: 'w-1/5' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.departmentSales}</h3>
+                {filteredData.departmentSales.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.departmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.departmentSales } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.departmentSales}
+                  data={filteredData.departmentSales}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'القسم' : 'Department', width: 'w-2/5' },
+                    { key: 'totalRevenue', label: t.totalSales, width: 'w-1/5' },
+                    { key: 'totalQuantity', label: t.totalCount, width: 'w-1/5' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.leastDepartmentSales}</h3>
+                {filteredData.leastDepartmentSales.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.leastDepartmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastDepartmentSales } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.leastDepartmentSales}
+                  data={filteredData.leastDepartmentSales}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'القسم' : 'Department', width: 'w-2/5' },
+                    { key: 'totalRevenue', label: t.totalSales, width: 'w-1/5' },
+                    { key: 'totalQuantity', label: t.totalCount, width: 'w-1/5' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.branchSales}</h3>
+                {filteredData.branchSales.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.branchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchSales } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.branchSales}
+                  data={filteredData.branchSales}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/6' },
+                    { key: 'totalSales', label: t.totalSales, width: 'w-1/6' },
+                    { key: 'saleCount', label: t.totalCount, width: 'w-1/6' },
+                    { key: 'totalOrders', label: t.totalOrders, width: 'w-1/6' },
+                    { key: 'totalReturns', label: t.totalReturns, width: 'w-1/6' },
+                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/6' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.leastBranchSales}</h3>
+                {filteredData.leastBranchSales.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.leastBranchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchSales } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.leastBranchSales}
+                  data={filteredData.leastBranchSales}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/6' },
+                    { key: 'totalSales', label: t.totalSales, width: 'w-1/6' },
+                    { key: 'saleCount', label: t.totalCount, width: 'w-1/6' },
+                    { key: 'totalOrders', label: t.totalOrders, width: 'w-1/6' },
+                    { key: 'totalReturns', label: t.totalReturns, width: 'w-1/6' },
+                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/6' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.topCustomers}</h3>
+                <DataTable
+                  title={t.topCustomers}
+                  data={analytics.topCustomers}
+                  columns={[
+                    { key: 'customerName', label: isRtl ? 'اسم العميل' : 'Customer Name', width: 'w-2/5' },
+                    { key: 'customerPhone', label: isRtl ? 'رقم الهاتف' : 'Phone', width: 'w-1/5' },
+                    { key: 'totalSpent', label: t.totalSales, width: 'w-1/5' },
+                    { key: 'purchaseCount', label: isRtl ? 'عدد المشتريات' : 'Purchases', width: 'w-1/5' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.topProduct}</h3>
+                <div className="text-xs">
+                  <p className="font-alexandria text-gray-700">{analytics.topProduct.displayName || t.noData}</p>
+                  <p className="font-alexandria text-gray-500">
+                    {t.totalSales}: {safeNumber(analytics.topProduct.totalRevenue).toFixed(2)} {t.currency}
+                  </p>
+                  <p className="font-alexandria text-gray-500">{t.totalCount}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.salesTrends}</h3>
-                  {analytics.salesTrends.length > 0 ? (
-                    <div className="relative h-64">
-                      <Line data={chartData.salesTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.salesTrends } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.productSales}</h3>
-                  {filteredData.productSales.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.productSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.productSales } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.productSales}
-                    data={filteredData.productSales}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'المنتج' : 'Product' },
-                      { key: 'totalRevenue', label: t.totalSales },
-                      { key: 'totalQuantity', label: t.totalCount },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastProductSales}</h3>
-                  {filteredData.leastProductSales.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.leastProductSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastProductSales } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.leastProductSales}
-                    data={filteredData.leastProductSales}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'المنتج' : 'Product' },
-                      { key: 'totalRevenue', label: t.totalSales },
-                      { key: 'totalQuantity', label: t.totalCount },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.departmentSales}</h3>
-                  {filteredData.departmentSales.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.departmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.departmentSales } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.departmentSales}
-                    data={filteredData.departmentSales}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'القسم' : 'Department' },
-                      { key: 'totalRevenue', label: t.totalSales },
-                      { key: 'totalQuantity', label: t.totalCount },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastDepartmentSales}</h3>
-                  {filteredData.leastDepartmentSales.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.leastDepartmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastDepartmentSales } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.leastDepartmentSales}
-                    data={filteredData.leastDepartmentSales}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'القسم' : 'Department' },
-                      { key: 'totalRevenue', label: t.totalSales },
-                      { key: 'totalQuantity', label: t.totalCount },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.branchSales}</h3>
-                  {filteredData.branchSales.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.branchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchSales } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.branchSales}
-                    data={filteredData.branchSales}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
-                      { key: 'totalSales', label: t.totalSales },
-                      { key: 'saleCount', label: t.totalCount },
-                      { key: 'totalOrders', label: t.totalOrders },
-                      { key: 'totalReturns', label: t.totalReturns },
-                      { key: 'averageOrderValue', label: t.averageOrderValue },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastBranchSales}</h3>
-                  {filteredData.leastBranchSales.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.leastBranchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchSales } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.leastBranchSales}
-                    data={filteredData.leastBranchSales}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
-                      { key: 'totalSales', label: t.totalSales },
-                      { key: 'saleCount', label: t.totalCount },
-                      { key: 'totalOrders', label: t.totalOrders },
-                      { key: 'totalReturns', label: t.totalReturns },
-                      { key: 'averageOrderValue', label: t.averageOrderValue },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.topCustomers}</h3>
-                  <DataTable
-                    title={t.topCustomers}
-                    data={analytics.topCustomers}
-                    columns={[
-                      { key: 'customerName', label: isRtl ? 'اسم العميل' : 'Customer Name' },
-                      { key: 'customerPhone', label: isRtl ? 'رقم الهاتف' : 'Phone' },
-                      { key: 'totalSpent', label: t.totalSales },
-                      { key: 'purchaseCount', label: isRtl ? 'عدد المشتريات' : 'Purchases' },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-              </div>
-            </>
+            </div>
           )}
           {activeTab === 'orders' && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.totalOrders}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{orderAnalytics.totalOrders}</p>
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.totalValue}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{orderAnalytics.totalValue.toFixed(2)} {t.currency}</p>
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.averageOrderValue}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{orderAnalytics.averageOrderValue.toFixed(2)} {t.currency}</p>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.orderTrends}</h3>
+                {orderAnalytics.orderTrends.length > 0 ? (
+                  <div className="h-56">
+                    <Line data={chartData.orderTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.orderTrends } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.orderTrends}</h3>
-                  {orderAnalytics.orderTrends.length > 0 ? (
-                    <div className="relative h-64">
-                      <Line data={chartData.orderTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.orderTrends } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.branchOrders}</h3>
-                  {filteredData.branchOrders.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.branchOrders} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchOrders } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.branchOrders}
-                    data={filteredData.branchOrders}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
-                      { key: 'totalOrders', label: t.totalOrders },
-                      { key: 'totalValue', label: t.totalValue },
-                      { key: 'averageOrderValue', label: t.averageOrderValue },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastBranchOrders}</h3>
-                  {filteredData.leastBranchOrders.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.leastBranchOrders} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchOrders } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.leastBranchOrders}
-                    data={filteredData.leastBranchOrders}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
-                      { key: 'totalOrders', label: t.totalOrders },
-                      { key: 'totalValue', label: t.totalValue },
-                      { key: 'averageOrderValue', label: t.averageOrderValue },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="col-span-1 lg:col-span-2">
-                  <OrdersTable orders={filteredData.orders} isRtl={isRtl} currency={t.currency} language={language} />
-                </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.branchOrders}</h3>
+                {filteredData.branchOrders.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.branchOrders} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchOrders } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.branchOrders}
+                  data={filteredData.branchOrders}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
+                    { key: 'totalOrders', label: t.totalOrders, width: 'w-1/4' },
+                    { key: 'totalValue', label: t.totalValue, width: 'w-1/4' },
+                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
               </div>
-            </>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.leastBranchOrders}</h3>
+                {filteredData.leastBranchOrders.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.leastBranchOrders} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchOrders } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.leastBranchOrders}
+                  data={filteredData.leastBranchOrders}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
+                    { key: 'totalOrders', label: t.totalOrders, width: 'w-1/4' },
+                    { key: 'totalValue', label: t.totalValue, width: 'w-1/4' },
+                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="col-span-2">
+                <OrdersTable orders={filteredData.orders} isRtl={isRtl} currency={t.currency} language={language} className="text-xs" />
+              </div>
+            </div>
           )}
           {activeTab === 'returns' && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.totalReturns}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{returnAnalytics.totalReturns}</p>
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.totalValue}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{returnAnalytics.totalValue.toFixed(2)} {t.currency}</p>
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100 flex flex-col">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-2">{t.averageReturnValue}</h4>
-                  <p className="text-2xl font-bold text-amber-500">{returnAnalytics.averageReturnValue.toFixed(2)} {t.currency}</p>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-2 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.returnTrends}</h3>
+                {returnAnalytics.returnTrends.length > 0 ? (
+                  <div className="h-56">
+                    <Line data={chartData.returnTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.returnTrends } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.returnTrends}</h3>
-                  {returnAnalytics.returnTrends.length > 0 ? (
-                    <div className="relative h-64">
-                      <Line data={chartData.returnTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.returnTrends } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.branchReturns}</h3>
-                  {filteredData.branchReturns.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.branchReturns} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchReturns } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.branchReturns}
-                    data={filteredData.branchReturns}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
-                      { key: 'totalReturns', label: t.totalReturns },
-                      { key: 'totalValue', label: t.totalValue },
-                      { key: 'averageReturnValue', label: t.averageReturnValue },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="p-4 bg-white rounded-xl shadow-md border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastBranchReturns}</h3>
-                  {filteredData.leastBranchReturns.length > 0 ? (
-                    <div className="relative h-64">
-                      <Bar data={chartData.leastBranchReturns} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchReturns } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                  <DataTable
-                    title={t.leastBranchReturns}
-                    data={filteredData.leastBranchReturns}
-                    columns={[
-                      { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch' },
-                      { key: 'totalReturns', label: t.totalReturns },
-                      { key: 'totalValue', label: t.totalValue },
-                      { key: 'averageReturnValue', label: t.averageReturnValue },
-                    ]}
-                    isRtl={isRtl}
-                    currency={t.currency}
-                  />
-                </div>
-                <div className="col-span-1 lg:col-span-2">
-                  <ReturnsTable returns={filteredData.returns} isRtl={isRtl} currency={t.currency} language={language} />
-                </div>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.branchReturns}</h3>
+                {filteredData.branchReturns.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.branchReturns} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchReturns } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.branchReturns}
+                  data={filteredData.branchReturns}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
+                    { key: 'totalReturns', label: t.totalReturns, width: 'w-1/4' },
+                    { key: 'totalValue', label: t.totalValue, width: 'w-1/4' },
+                    { key: 'averageReturnValue', label: t.averageReturnValue, width: 'w-1/4' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
               </div>
-            </>
+              <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-xs font-medium text-gray-700 mb-2 font-alexandria">{t.leastBranchReturns}</h3>
+                {filteredData.leastBranchReturns.length > 0 ? (
+                  <div className="h-56">
+                    <Bar data={chartData.leastBranchReturns} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchReturns } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+                <DataTable
+                  title={t.leastBranchReturns}
+                  data={filteredData.leastBranchReturns}
+                  columns={[
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
+                    { key: 'totalReturns', label: t.totalReturns, width: 'w-1/4' },
+                    { key: 'totalValue', label: t.totalValue, width: 'w-1/4' },
+                    { key: 'averageReturnValue', label: t.averageReturnValue, width: 'w-1/4' },
+                  ]}
+                  isRtl={isRtl}
+                  currency={t.currency}
+                  className="text-xs"
+                />
+              </div>
+              <div className="col-span-2">
+                <ReturnsTable returns={filteredData.returns} isRtl={isRtl} currency={t.currency} language={language} className="text-xs" />
+              </div>
+            </div>
           )}
         </motion.div>
       )}
