@@ -349,7 +349,7 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
+          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
@@ -490,11 +490,11 @@ const OrdersTable: React.FC<{
       {orders.length > 0 && (
         <button
           onClick={() => exportToCSV(orders, 'orders', [
-            { key: 'orderNumber', label: isRtl ? 'رقم الطلب' : 'Order Number', width: 'w-1/5' },
-            { key: 'date', label: isRtl ? 'التاريخ' : 'Date', width: 'w-1/5' },
-            { key: 'total', label: isRtl ? 'الإجمالي' : 'Total', width: 'w-1/5' },
-            { key: 'status', label: isRtl ? 'الحالة' : 'Status', width: 'w-1/5' },
-            { key: 'branchName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/5' },
+            { key: 'orderNumber', label: isRtl ? 'رقم الطلب' : 'Order Number' },
+            { key: 'date', label: isRtl ? 'التاريخ' : 'Date' },
+            { key: 'total', label: isRtl ? 'الإجمالي' : 'Total' },
+            { key: 'status', label: isRtl ? 'الحالة' : 'Status' },
+            { key: 'branchName', label: isRtl ? 'الفرع' : 'Branch' },
           ], isRtl, currency)}
           className="flex items-center gap-2 text-xs text-amber-600 hover:text-amber-700 transition-colors"
         >
@@ -547,11 +547,11 @@ const ReturnsTable: React.FC<{
       {returns.length > 0 && (
         <button
           onClick={() => exportToCSV(returns, 'returns', [
-            { key: 'returnNumber', label: isRtl ? 'رقم المرتجع' : 'Return Number', width: 'w-1/5' },
-            { key: 'date', label: isRtl ? 'التاريخ' : 'Date', width: 'w-1/5' },
-            { key: 'total', label: isRtl ? 'الإجمالي' : 'Total', width: 'w-1/5' },
-            { key: 'status', label: isRtl ? 'الحالة' : 'Status', width: 'w-1/5' },
-            { key: 'branchName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/5' },
+            { key: 'returnNumber', label: isRtl ? 'رقم المرتجع' : 'Return Number' },
+            { key: 'date', label: isRtl ? 'التاريخ' : 'Date' },
+            { key: 'total', label: isRtl ? 'الإجمالي' : 'Total' },
+            { key: 'status', label: isRtl ? 'الحالة' : 'Status' },
+            { key: 'branchName', label: isRtl ? 'الفرع' : 'Branch' },
           ], isRtl, currency)}
           className="flex items-center gap-2 text-xs text-amber-600 hover:text-amber-700 transition-colors"
         >
@@ -771,7 +771,7 @@ const ReportsAnalytics: React.FC = () => {
           })).slice(0, 5),
         });
       } else if (type === 'orders') {
-        response = await ordersAPI.getAnalytics(params);
+        response = await ordersAPI.getAll(params);
         if (!response || typeof response !== 'object') {
           throw new Error(t.errors.invalid_data);
         }
@@ -803,20 +803,20 @@ const ReportsAnalytics: React.FC = () => {
           totalValue: safeNumber(response.totalValue),
           averageOrderValue: safeNumber(response.averageOrderValue),
         });
-        const orderResponse = await ordersAPI.getAll(params);
-        if (!orderResponse || !Array.isArray(orderResponse.orders)) {
+        const orderResponse = response;
+        if (!orderResponse || !Array.isArray(orderResponse)) {
           throw new Error(t.errors.invalid_data);
         }
-        setOrders(orderResponse.orders.map((order: any) => ({
+        setOrders(orderResponse.map((order: any) => ({
           _id: safeString(order._id),
           orderNumber: safeString(order.orderNumber, 'N/A'),
-          date: safeString(order.date),
-          total: safeNumber(order.total),
+          date: safeString(order.createdAt || order.date),
+          total: safeNumber(order.totalAmount || order.total),
           status: safeString(order.status, 'Unknown'),
-          branchName: safeString(order.branchName, t.noData),
+          branchName: safeString(order.branch?.name || order.branchName, t.noData),
         })));
       } else if (type === 'returns') {
-        response = await returnsAPI.getAnalytics(params);
+        response = await returnsAPI.getAll(params);
         if (!response || typeof response !== 'object') {
           throw new Error(t.errors.invalid_data);
         }
@@ -848,17 +848,17 @@ const ReportsAnalytics: React.FC = () => {
           totalValue: safeNumber(response.totalValue),
           averageReturnValue: safeNumber(response.averageReturnValue),
         });
-        const returnResponse = await returnsAPI.getAll(params);
-        if (!returnResponse || !Array.isArray(returnResponse.returns)) {
+        const returnResponse = response;
+        if (!returnResponse || !Array.isArray(returnResponse)) {
           throw new Error(t.errors.invalid_data);
         }
-        setReturns(returnResponse.returns.map((returnItem: any) => ({
+        setReturns(returnResponse.map((returnItem: any) => ({
           _id: safeString(returnItem._id),
           returnNumber: safeString(returnItem.returnNumber, 'N/A'),
-          date: safeString(returnItem.date),
-          total: safeNumber(returnItem.total),
+          date: safeString(returnItem.createdAt || returnItem.date),
+          total: safeNumber(returnItem.totalAmount || returnItem.total),
           status: safeString(returnItem.status, 'Unknown'),
-          branchName: safeString(returnItem.branchName, t.noData),
+          branchName: safeString(returnItem.branch?.name || returnItem.branchName, t.noData),
         })));
       }
       setError('');
@@ -1002,10 +1002,10 @@ const ReportsAnalytics: React.FC = () => {
   }), [isRtl, language]);
 
   const chartData = useMemo(() => {
-    const createGradient = (ctx: CanvasRenderingContext2D, chartArea: any) => {
+    const createGradient = (ctx: CanvasRenderingContext2D, chartArea: any, startColor: string, endColor: string) => {
       const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-      gradient.addColorStop(0, 'rgba(59, 130, 246, 0.2)');
-      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.8)');
+      gradient.addColorStop(0, startColor);
+      gradient.addColorStop(1, endColor);
       return gradient;
     };
 
@@ -1019,6 +1019,7 @@ const ReportsAnalytics: React.FC = () => {
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
             borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1031,6 +1032,7 @@ const ReportsAnalytics: React.FC = () => {
             backgroundColor: '#3B82F6',
             hoverBackgroundColor: '#2563EB',
             borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1043,6 +1045,7 @@ const ReportsAnalytics: React.FC = () => {
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
             borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1055,6 +1058,7 @@ const ReportsAnalytics: React.FC = () => {
             backgroundColor: '#4BC0C0',
             hoverBackgroundColor: '#2D9CDB',
             borderRadius: 4,
+            barThickness: 20,
           },
         ],
       },
@@ -1066,21 +1070,21 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.branchSales.map((b) => safeNumber(b.totalSales)),
             backgroundColor: '#9966FF',
             hoverBackgroundColor: '#7C3AED',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalOrders}`,
             data: filteredData.branchSales.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalReturns}`,
             data: filteredData.branchSales.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
-            barThickness: 10,
+            barThickness: 20,
           },
         ],
       },
@@ -1092,21 +1096,21 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastBranchSales.map((b) => safeNumber(b.totalSales)),
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalOrders}`,
             data: filteredData.leastBranchSales.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalReturns}`,
             data: filteredData.leastBranchSales.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
-            barThickness: 10,
+            barThickness: 20,
           },
         ],
       },
@@ -1118,14 +1122,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.branchOrders.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.branchOrders.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#9966FF',
             hoverBackgroundColor: '#7C3AED',
-            barThickness: 10,
+            barThickness: 20,
           },
         ],
       },
@@ -1137,14 +1141,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastBranchOrders.map((b) => safeNumber(b.totalOrders)),
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.leastBranchOrders.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 10,
+            barThickness: 20,
           },
         ],
       },
@@ -1156,14 +1160,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.branchReturns.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FF6384',
             hoverBackgroundColor: '#F43F5E',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.branchReturns.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#4BC0C0',
             hoverBackgroundColor: '#2D9CDB',
-            barThickness: 10,
+            barThickness: 20,
           },
         ],
       },
@@ -1175,14 +1179,14 @@ const ReportsAnalytics: React.FC = () => {
             data: filteredData.leastBranchReturns.map((b) => safeNumber(b.totalReturns)),
             backgroundColor: '#FBBF24',
             hoverBackgroundColor: '#F59E0B',
-            barThickness: 10,
+            barThickness: 20,
           },
           {
             label: `${t.totalValue} (${t.currency})`,
             data: filteredData.leastBranchReturns.map((b) => safeNumber(b.totalValue)),
             backgroundColor: '#36A2EB',
             hoverBackgroundColor: '#1D4ED8',
-            barThickness: 10,
+            barThickness: 20,
           },
         ],
       },
@@ -1197,7 +1201,7 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return '#3B82F6';
-              return createGradient(ctx, chartArea);
+              return createGradient(ctx, chartArea, 'rgba(59, 130, 246, 0.2)', 'rgba(59, 130, 246, 0.8)');
             },
             fill: true,
             tension: 0.4,
@@ -1212,10 +1216,7 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(255, 99, 132, 0.1)';
-              const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-              gradient.addColorStop(0, 'rgba(255, 99, 132, 0.2)');
-              gradient.addColorStop(1, 'rgba(255, 99, 132, 0.8)');
-              return gradient;
+              return createGradient(ctx, chartArea, 'rgba(255, 99, 132, 0.2)', 'rgba(255, 99, 132, 0.8)');
             },
             fill: true,
             tension: 0.4,
@@ -1235,10 +1236,7 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(54, 162, 235, 0.1)';
-              const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-              gradient.addColorStop(0, 'rgba(54, 162, 235, 0.2)');
-              gradient.addColorStop(1, 'rgba(54, 162, 235, 0.8)');
-              return gradient;
+              return createGradient(ctx, chartArea, 'rgba(54, 162, 235, 0.2)', 'rgba(54, 162, 235, 0.8)');
             },
             fill: true,
             tension: 0.4,
@@ -1253,10 +1251,7 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(153, 102, 255, 0.1)';
-              const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-              gradient.addColorStop(0, 'rgba(153, 102, 255, 0.2)');
-              gradient.addColorStop(1, 'rgba(153, 102, 255, 0.8)');
-              return gradient;
+              return createGradient(ctx, chartArea, 'rgba(153, 102, 255, 0.2)', 'rgba(153, 102, 255, 0.8)');
             },
             fill: true,
             tension: 0.4,
@@ -1276,10 +1271,7 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(255, 99, 132, 0.1)';
-              const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-              gradient.addColorStop(0, 'rgba(255, 99, 132, 0.2)');
-              gradient.addColorStop(1, 'rgba(255, 99, 132, 0.8)');
-              return gradient;
+              return createGradient(ctx, chartArea, 'rgba(255, 99, 132, 0.2)', 'rgba(255, 99, 132, 0.8)');
             },
             fill: true,
             tension: 0.4,
@@ -1294,10 +1286,7 @@ const ReportsAnalytics: React.FC = () => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
               if (!chartArea) return 'rgba(75, 192, 192, 0.1)';
-              const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-              gradient.addColorStop(0, 'rgba(75, 192, 192, 0.2)');
-              gradient.addColorStop(1, 'rgba(75, 192, 192, 0.8)');
-              return gradient;
+              return createGradient(ctx, chartArea, 'rgba(75, 192, 192, 0.2)', 'rgba(75, 192, 192, 0.8)');
             },
             fill: true,
             tension: 0.4,
@@ -1353,7 +1342,7 @@ const ReportsAnalytics: React.FC = () => {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="mt-1 w-full py-2 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                className="mt-1 w-full py-2 py-2 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
                 aria-label={t.startDate}
               />
             </div>
@@ -1514,10 +1503,12 @@ const ReportsAnalytics: React.FC = () => {
                   title={t.branchSales}
                   data={filteredData.branchSales}
                   columns={[
-                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
-                    { key: 'totalSales', label: t.totalSales, width: 'w-1/4' },
-                    { key: 'saleCount', label: t.totalCount, width: 'w-1/4' },
-                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/6' },
+                    { key: 'totalSales', label: t.totalSales, width: 'w-1/6' },
+                    { key: 'saleCount', label: t.totalCount, width: 'w-1/6' },
+                    { key: 'totalOrders', label: t.totalOrders, width: 'w-1/6' },
+                    { key: 'totalReturns', label: t.totalReturns, width: 'w-1/6' },
+                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/6' },
                   ]}
                   isRtl={isRtl}
                   currency={t.currency}
@@ -1537,10 +1528,12 @@ const ReportsAnalytics: React.FC = () => {
                   title={t.leastBranchSales}
                   data={filteredData.leastBranchSales}
                   columns={[
-                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
-                    { key: 'totalSales', label: t.totalSales, width: 'w-1/4' },
-                    { key: 'saleCount', label: t.totalCount, width: 'w-1/4' },
-                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
+                    { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/6' },
+                    { key: 'totalSales', label: t.totalSales, width: 'w-1/6' },
+                    { key: 'saleCount', label: t.totalCount, width: 'w-1/6' },
+                    { key: 'totalOrders', label: t.totalOrders, width: 'w-1/6' },
+                    { key: 'totalReturns', label: t.totalReturns, width: 'w-1/6' },
+                    { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/6' },
                   ]}
                   isRtl={isRtl}
                   currency={t.currency}
