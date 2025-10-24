@@ -9,6 +9,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useNavigate } from 'react-router-dom';
 
 // Enums for type safety
 enum InventoryStatus {
@@ -103,6 +104,7 @@ const translations = {
     normal: 'عادي',
     full: 'مخزون ممتلئ',
     create: 'إنشاء طلب إرجاع',
+    createOrder: 'إنشاء طلب جديد',
     viewDetails: 'عرض التفاصيل',
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
@@ -177,6 +179,7 @@ const translations = {
     normal: 'Normal',
     full: 'Full Stock',
     create: 'Create Return Request',
+    createOrder: 'Create New Order',
     viewDetails: 'View Details',
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
@@ -355,6 +358,7 @@ export const BranchInventory: React.FC = () => {
   const { socket } = useSocket();
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
@@ -736,7 +740,7 @@ export const BranchInventory: React.FC = () => {
       }
       const reasonMap = {
         [ReturnReason.DAMAGED_AR]: ReturnReason.DAMAGED_EN,
-        [ReturnReason.WRONG_ITEM_AR]: ReturnReason.WRONG_ITEM_EN,
+        [ReturnReason.WRONG_ITEM_AR]: ReturnReason.WRON_ITEM_EN,
         [ReturnReason.EXCESS_QUANTITY_AR]: ReturnReason.EXCESS_QUANTITY_EN,
         [ReturnReason.OTHER_AR]: ReturnReason.OTHER_EN,
       };
@@ -887,22 +891,47 @@ export const BranchInventory: React.FC = () => {
 
   return (
     <div className=" mx-auto px-4 py-4">
-      <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
-        <div className="flex items-center gap-3">
-          <Package className="w-7 h-7 text-amber-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-sm">{t.description}</p>
+      <div className="relative mb-8">
+        {/* Icon Row for Small Screens */}
+        <div className="sm:hidden flex justify-center items-center h-12">
+          <div className="relative z-10 bg-amber-100 rounded-full p-3">
+            <Package className="w-6 h-6 text-amber-600" />
           </div>
         </div>
-        <button
-          onClick={() => handleOpenReturnModal()}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-          aria-label={t.create}
-        >
-          <Plus className="w-4 h-4" />
-          {t.create}
-        </button>
+        {/* Header Row */}
+        <div className="relative flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center bg-white sm:bg-transparent rounded-lg sm:rounded-none p-4 sm:p-0 z-20">
+          <div className="flex flex-col items-center sm:items-start sm:flex-row sm:gap-3 text-center sm:text-left">
+            <div className="hidden sm:flex items-center justify-center">
+              <Package className="w-7 h-7 text-amber-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
+              <p className="text-gray-600 text-sm">{t.description}</p>
+            </div>
+          </div>
+          <div className="flex flex-row gap-3">
+            <button
+              onClick={() => navigate('/orders/new')}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+              aria-label={t.createOrder}
+            >
+              <Plus className="w-4 h-4" />
+              {t.createOrder}
+            </button>
+            {filteredInventory.length > 0 && (
+              <button
+                onClick={() => handleOpenReturnModal()}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                aria-label={t.create}
+              >
+                <Plus className="w-4 h-4" />
+                {t.create}
+              </button>
+            )}
+          </div>
+        </div>
+        {/* Background Layer for Small Screens */}
+        <div className="absolute inset-0 sm:hidden bg-white rounded-lg -z-10 h-[calc(100%-1.5rem)] top-6"></div>
       </div>
 
       {errorMessage && (
@@ -917,8 +946,8 @@ export const BranchInventory: React.FC = () => {
       )}
 
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
+        <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2 sm:gap-4">
+          <div className="sm:col-span-1">
             <ProductSearchInput
               value={searchInput}
               onChange={handleSearchChange}
@@ -927,29 +956,31 @@ export const BranchInventory: React.FC = () => {
               className="w-full"
             />
           </div>
-          <div>
-            <ProductDropdown
-              value={filterStatus}
-              onChange={(value) => {
-                setFilterStatus(value as InventoryStatus | '');
-                setCurrentPage(1);
-              }}
-              options={statusOptions}
-              ariaLabel={t.filterByStatus}
-              className="w-full"
-            />
-          </div>
-          <div>
-            <ProductDropdown
-              value={filterDepartment}
-              onChange={(value) => {
-                setFilterDepartment(value);
-                setCurrentPage(1);
-              }}
-              options={departmentOptions}
-              ariaLabel={t.filterByDepartment}
-              className="w-full"
-            />
+          <div className="flex flex-row gap-4 sm:col-span-1">
+            <div className="flex-1">
+              <ProductDropdown
+                value={filterStatus}
+                onChange={(value) => {
+                  setFilterStatus(value as InventoryStatus | '');
+                  setCurrentPage(1);
+                }}
+                options={statusOptions}
+                ariaLabel={t.filterByStatus}
+                className="w-full"
+              />
+            </div>
+            <div className="flex-1">
+              <ProductDropdown
+                value={filterDepartment}
+                onChange={(value) => {
+                  setFilterDepartment(value);
+                  setCurrentPage(1);
+                }}
+                options={departmentOptions}
+                ariaLabel={t.filterByDepartment}
+                className="w-full"
+              />
+            </div>
           </div>
         </div>
         <div className="mt-4 text-center text-sm text-gray-600 font-medium">
@@ -981,11 +1012,11 @@ export const BranchInventory: React.FC = () => {
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
           <button
-            onClick={() => handleOpenReturnModal()}
-            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.create}
+            onClick={() => navigate('/orders/new')}
+            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            aria-label={t.createOrder}
           >
-            {t.create}
+            {t.createOrder}
           </button>
         </div>
       ) : (
