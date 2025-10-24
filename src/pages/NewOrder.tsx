@@ -3,15 +3,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
-import { ShoppingCart, Package, AlertCircle, Search, X, ChevronDown, Trash2 } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
-import  ProductCard  from '../components/UI/ProductCard';
-import QuantityInput from '../components/UI/QuantityInput';
-
-
-
 
 interface Product {
   _id: string;
@@ -79,7 +74,6 @@ const translations = {
     orderCreated: 'تم إنشاء الطلب بنجاح',
     orderCleared: 'تم مسح الطلب',
     scrollToSummary: 'التمرير للملخص',
-    invalidQuantity: 'الكمية يجب أن تكون مضاعفة 0.5 كجم',
   },
   en: {
     createOrder: 'Create New Order',
@@ -112,13 +106,7 @@ const translations = {
     orderCreated: 'Order created successfully',
     orderCleared: 'Order cleared',
     scrollToSummary: 'Scroll to Summary',
-    invalidQuantity: 'Quantity must be a multiple of 0.5 kg',
   },
-};
-
-// دالة للتحقق من أن الكمية مضاعفة 0.5
-const isValidQuantity = (quantity: number): boolean => {
-  return quantity >= 0.5 && quantity % 0.5 === 0;
 };
 
 export const ProductSearchInput = ({
@@ -139,7 +127,7 @@ export const ProductSearchInput = ({
       <div
         className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
       >
-        <Search className="w-4 h-4" />
+        <Search className="w-4 h-4" /> 
       </div>
       <input
         type="text"
@@ -209,6 +197,90 @@ export const ProductDropdown = ({
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+const QuantityInput = ({
+  value,
+  onChange,
+  onIncrement,
+  onDecrement,
+}: {
+  value: number;
+  onChange: (val: string) => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onDecrement}
+        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
+        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+      >
+        <Minus className="w-4 h-4" />
+      </button>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
+        style={{ appearance: 'none' }}
+        aria-label={isRtl ? 'الكمية' : 'Quantity'}
+      />
+      <button
+        onClick={onIncrement}
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
+        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+      >
+        <Plus className="w-4 h-4 text-white" />
+      </button>
+    </div>
+  );
+};
+
+const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
+  product: Product;
+  cartItem?: OrderItem;
+  onAdd: () => void;
+  onUpdate: (quantity: number) => void;
+  onRemove: () => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  return (
+    <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>{product.displayName}</h3>
+          <p className="text-sm text-gray-500">{product.code}</p>
+        </div>
+        <p className="text-sm text-amber-600">{t.department}: {product.department.displayName}</p>
+        <p className="font-semibold text-gray-900 text-sm">{t.price}: {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}</p>
+      </div>
+      <div className="mt-4 flex justify-end">
+        {cartItem ? (
+          <QuantityInput
+            value={cartItem.quantity}
+            onChange={(val) => onUpdate(parseInt(val) || 0)}
+            onIncrement={() => onUpdate(cartItem.quantity + 1)}
+            onDecrement={() => onUpdate(cartItem.quantity - 1)}
+          />
+        ) : (
+          <button
+            onClick={onAdd}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+            aria-label={t.addToCart}
+          >
+            <Plus className="w-4 h-4" />
+            {t.addToCart}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -398,7 +470,9 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
+  // تحديث displayName و displayUnit للمنتجات و orderItems عند تغيير اللغة
   useEffect(() => {
+    // تحديث المنتجات
     setProducts((prev) =>
       prev.map((product) => ({
         ...product,
@@ -410,6 +484,7 @@ export function NewOrder() {
         },
       }))
     );
+    // تحديث orderItems
     setOrderItems((prev) =>
       prev.map((item) => ({
         ...item,
@@ -433,10 +508,10 @@ export function NewOrder() {
       console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
       if (user?.role === 'branch' && user?.branchId) {
         socket.emit('joinRoom', `branch-${user.branchId}`);
-      } else if (user?.role === 'admin') {
-        socket.emit('joinRoom', 'admin');
-      } else if (user?.role === 'production') {
-        socket.emit('joinRoom', 'production');
+      } else if (user?.role === 'admin' || user?.role === "production") {
+        socket.emit('joinRoom', 'admin' || 'production' );
+                
+
       }
     });
 
@@ -446,12 +521,13 @@ export function NewOrder() {
         return;
       }
       const eventId = orderData.eventId || crypto.randomUUID();
+      // تخصيص الرسالة بناءً على الدور
       let message = languageT('notifications.order_created', {
         orderNumber: orderData.orderNumber,
         branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
       });
       if (user.role === 'branch') {
-        message = t.orderCreated;
+        message = t.orderCreated; // "تم إنشاء الطلب بنجاح"
       }
       addNotification({
         _id: eventId,
@@ -463,6 +539,7 @@ export function NewOrder() {
         sound: '/sounds/notification.mp3',
         vibrate: [200, 100, 200],
       });
+      // هنا يمكن تحديث state صفحة المتابعة إذا كانت موجودة، عبر dispatch أو setState
     });
 
     return () => {
@@ -474,13 +551,8 @@ export function NewOrder() {
     setOrderItems((prev) => {
       const existingItem = prev.find((item) => item.productId === product._id);
       if (existingItem) {
-        const newQuantity = existingItem.quantity + 0.5;
-        if (!isValidQuantity(newQuantity)) {
-          toast.error(t.invalidQuantity, { position: isRtl ? 'top-right' : 'top-left' });
-          return prev;
-        }
         return prev.map((item) =>
-          item.productId === product._id ? { ...item, quantity: newQuantity } : item
+          item.productId === product._id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
       return [
@@ -496,32 +568,29 @@ export function NewOrder() {
               displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
             },
           },
-          quantity: 0.5,
+          quantity: 1,
           price: product.price,
         },
       ];
     });
-  }, [isRtl, t]);
+  }, [isRtl]);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
-    if (quantity < 0.5) {
+    if (quantity <= 0) {
       removeFromOrder(productId);
-      return;
-    }
-    if (!isValidQuantity(quantity)) {
-      toast.error(t.invalidQuantity, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
     setOrderItems((prev) =>
       prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
     );
-  }, [isRtl, t]);
+  }, []);
 
   const handleQuantityInput = useCallback(
     (productId: string, value: string) => {
-      const quantity = parseFloat(value) || 0;
-      if (value === '') {
-        return; // السماح بالإدخال الفارغ مؤقتًا
+      const quantity = parseInt(value) || 0;
+      if (value === '' || quantity <= 0) {
+        updateQuantity(productId, 0);
+        return;
       }
       updateQuantity(productId, quantity);
     },
@@ -597,6 +666,7 @@ export function NewOrder() {
         eventId,
         isRtl,
       });
+      // الإشعار المحلي للفرع
       addNotification({
         _id: eventId,
         type: 'success',
@@ -629,7 +699,7 @@ export function NewOrder() {
   };
 
   return (
-    <div className={`mx-auto px-4 py-8 min-h-screen`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 py-8 min-h-screen `} dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
@@ -710,6 +780,7 @@ export function NewOrder() {
                       cartItem={cartItem}
                       onAdd={() => addToOrder(product)}
                       onUpdate={(quantity) => updateQuantity(product._id, quantity)}
+                      onRemove={() => removeFromOrder(product._id)}
                     />
                   </div>
                 );
@@ -735,8 +806,8 @@ export function NewOrder() {
                       <QuantityInput
                         value={item.quantity}
                         onChange={(val) => handleQuantityInput(item.productId, val)}
-                        onIncrement={() => updateQuantity(item.productId, item.quantity + 0.5)}
-                        onDecrement={() => updateQuantity(item.productId, item.quantity - 0.5)}
+                        onIncrement={() => updateQuantity(item.productId, item.quantity + 1)}
+                        onDecrement={() => updateQuantity(item.productId, item.quantity - 1)}
                       />
                       <button
                         onClick={() => removeFromOrder(item.productId)}
