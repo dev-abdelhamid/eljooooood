@@ -103,8 +103,8 @@ const translations = {
     lowStock: 'مخزون منخفض',
     normal: 'عادي',
     full: 'مخزون ممتلئ',
-    create: 'إنشاء طلب إرجاع',
-    createOrder: 'إنشاء طلب جديد',
+    create: 'إنشاء  إرجاع',
+    createOrder: ' طلب جديد',
     viewDetails: 'عرض التفاصيل',
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
@@ -178,8 +178,8 @@ const translations = {
     lowStock: 'Low Stock',
     normal: 'Normal',
     full: 'Full Stock',
-    create: 'Create Return Request',
-    createOrder: 'Create New Order',
+    create: 'Create Return ',
+    createOrder: ' New Order',
     viewDetails: 'View Details',
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
@@ -901,7 +901,7 @@ export const BranchInventory: React.FC = () => {
         {/* Header Row */}
         <div className="relative flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center sm:bg-transparent rounded-lg sm:rounded-none p-4 sm:p-0 z-20">
           <div className="flex flex-col items-center sm:items-start sm:flex-row sm:gap-3 text-center sm:text-left">
-            <div className="hidden sm:flex items-center justify-center">
+            <div className="hidden sm:flex items-center md:items-start  justify-center md:justify-start ">
               <Package className="w-7 h-7 text-amber-600" />
             </div>
             <div>
