@@ -547,24 +547,23 @@ export const SalesReport: React.FC = () => {
   // التحقق من صلاحيات المستخدم
   if (user?.role !== 'admin') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="min-h-screen flex items-center justify-center">
         <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-red-600 text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
+          <span className="text-red-600 text-base font-medium ">{t.errors.unauthorized_access}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen px-4 sm:px-6 py-8 bg-gradient-to-br from-gray-50 to-gray-100 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
-      <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
+    <div className="min-h-screen px-4 sm:px-6 py-8 " >
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-7 h-7 text-amber-600" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 font-alexandria">{t.title}</h1>
-            <p className="text-gray-600 text-sm font-alexandria">{t.subtitle}</p>
+            <h1 className="text-2xl font-bold text-gray-900 ">{t.title}</h1>
+            <p className="text-gray-600 text-sm ">{t.subtitle}</p>
           </div>
         </div>
       </header>
