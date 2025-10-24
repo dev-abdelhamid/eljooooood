@@ -904,7 +904,7 @@ export const BranchInventory: React.FC = () => {
             <div className="hidden sm:flex items-center md:items-start  justify-center md:justify-start ">
               <Package className="w-7 h-7 text-amber-600" />
             </div>
-            <div>
+            <div className="flex  items-center md:items-start  justify-center md:justify-start ">
               <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
               <p className="text-gray-600 text-sm">{t.description}</p>
             </div>
