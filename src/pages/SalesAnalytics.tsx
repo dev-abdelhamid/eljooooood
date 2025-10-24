@@ -154,6 +154,7 @@ interface ReturnItem {
   branch: any;
   totalAmount: number;
   createdAt: string;
+  items?: Array<{ quantity: number; price: number }>;
 }
 
 interface Branch {
@@ -597,6 +598,42 @@ const ReturnsTable: React.FC<{
   </div>
 ));
 
+const calculateBranchAnalytics = (list: any[], isRtl: boolean, field: string) => {
+  const branchMap = new Map<string, { branchId: string; displayName: string; count: number; total: number; average: number }>();
+  list.forEach(item => {
+    const branchId = item.branch?._id || 'unknown';
+    const branchName = item.branchName;
+    let entry = branchMap.get(branchId);
+    if (!entry) {
+      entry = { branchId, displayName: branchName, count: 0, total: 0, average: 0 };
+      branchMap.set(branchId, entry);
+    }
+    entry.count += 1;
+    entry.total += item[field] || 0;
+  });
+  const branches = Array.from(branchMap.values());
+  branches.forEach(b => b.average = b.count > 0 ? b.total / b.count : 0);
+  return branches.sort((a, b) => b.total - a.total);
+};
+
+const calculateLeastBranchAnalytics = (list: any[], isRtl: boolean, field: string) => {
+  return calculateBranchAnalytics(list, isRtl, field).sort((a, b) => a.total - b.total);
+};
+
+const calculateTrends = (list: any[], dateField: string, valueField: string, countField: string, start: string, end: string, lang: string) => {
+  const trends = [];
+  const startD = new Date(start);
+  const endD = new Date(end);
+  for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+    const period = formatDate(d, lang);
+    const dayList = list.filter(item => new Date(item[dateField]).toDateString() === d.toDateString());
+    const totalValue = dayList.reduce((sum, item) => sum + (item.total || 0), 0);
+    const totalCount = dayList.length;
+    trends.push({ period, [valueField]: totalValue, [countField]: totalCount });
+  }
+  return trends;
+};
+
 const ReportsAnalytics: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -801,8 +838,8 @@ const ReportsAnalytics: React.FC = () => {
         const leastBranchOrders = calculateLeastBranchAnalytics(orderList, isRtl, 'total');
         const orderTrends = calculateTrends(orderList, 'createdAt', 'totalValue', 'totalOrders', startDate, endDate, language);
         setOrderAnalytics({
-          branchOrders: branchOrders.map(b => ({...b, averageOrderValue: b.average, totalOrders: b.count, totalValue: b.total })),
-          leastBranchOrders: leastBranchOrders.map(b => ({...b, averageOrderValue: b.average, totalOrders: b.count, totalValue: b.total })),
+          branchOrders: branchOrders.map(b => ({ branchId: b.branchId, branchName: '', displayName: b.displayName, totalOrders: b.count, totalValue: b.total, averageOrderValue: b.average })),
+          leastBranchOrders: leastBranchOrders.map(b => ({ branchId: b.branchId, branchName: '', displayName: b.displayName, totalOrders: b.count, totalValue: b.total, averageOrderValue: b.average })),
           orderTrends,
           totalOrders,
           totalValue,
@@ -833,8 +870,8 @@ const ReportsAnalytics: React.FC = () => {
         const leastBranchReturns = calculateLeastBranchAnalytics(returnList, isRtl, 'total');
         const returnTrends = calculateTrends(returnList, 'createdAt', 'totalValue', 'totalReturns', startDate, endDate, language);
         setReturnAnalytics({
-          branchReturns: branchReturns.map(b => ({...b, averageReturnValue: b.average, totalReturns: b.count, totalValue: b.total })),
-          leastBranchReturns: leastBranchReturns.map(b => ({...b, averageReturnValue: b.average, totalReturns: b.count, totalValue: b.total })),
+          branchReturns: branchReturns.map(b => ({ branchId: b.branchId, branchName: '', displayName: b.displayName, totalReturns: b.count, totalValue: b.total, averageReturnValue: b.average })),
+          leastBranchReturns: leastBranchReturns.map(b => ({ branchId: b.branchId, branchName: '', displayName: b.displayName, totalReturns: b.count, totalValue: b.total, averageReturnValue: b.average })),
           returnTrends,
           totalReturns,
           totalValue,
