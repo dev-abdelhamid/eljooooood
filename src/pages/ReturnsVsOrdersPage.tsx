@@ -1,5 +1,5 @@
-import React, { useState, useMemo, Fragment } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../components/UI/Button';
 import { Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -7,7 +7,31 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Tooltip } from 'react-tooltip';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { ordersAPI, branchesAPI, returnsAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
+
+interface OrdersVsReturnsRow {
+  id: string;
+  code: string;
+  product: string;
+  unit: string;
+  dailyOrders: number[];
+  dailyReturns: number[];
+  dailyBranchDetailsOrders: { [branch: string]: number }[];
+  dailyBranchDetailsReturns: { [branch: string]: number }[];
+  totalOrders: number;
+  totalReturns: number;
+  totalRatio: number;
+}
+
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn: string;
+  displayName: string;
+}
 
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -77,8 +101,8 @@ const generatePDFHeader = (
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
-    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${toArabicNumerals(totalPrice)} ر.س`
-    : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${totalPrice} SAR`;
+    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المرتجعات: ${toArabicNumerals(totalPrice)}`
+    : `Total Products: ${totalItems} | Total Orders: ${totalQuantity} units | Total Returns: ${totalPrice}`;
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
   doc.setDrawColor(255, 193, 7);
@@ -107,8 +131,7 @@ const generatePDFTable = (
   data: any[],
   isRtl: boolean,
   fontLoaded: boolean,
-  fontName: string,
-  allBranches: string[]
+  fontName: string
 ) => {
   const tableColumnWidths = headers.map((_, index) => {
     if (index === 0 && headers[index] !== (isRtl ? 'رقم' : 'No.')) return 25; // Code
@@ -116,7 +139,7 @@ const generatePDFTable = (
     if (index === 1) return 45; // Product
     if (index === 2) return 25; // Unit
     if (index >= 3 && index < headers.length - 2) return 20; // Daily Quantities or Branch Quantities
-    return 30; // Total Quantity, Total Price/Value
+    return 30; // Total Orders, Returns, Ratio
   });
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
@@ -148,7 +171,7 @@ const generatePDFTable = (
     },
     alternateRowStyles: { fillColor: [245, 245, 245] },
     didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 2)) {
+      if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 3)) {
         data.cell.styles.fontStyle = 'bold';
       }
       if (isRtl) {
@@ -168,16 +191,15 @@ const exportToPDF = async (
   headers: string[],
   isRtl: boolean,
   totalItems: number,
-  totalQuantity: number,
-  totalPrice: number,
-  allBranches: string[]
+  totalOrders: number,
+  totalReturns: number
 ) => {
   try {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const fontName = 'Amiri';
     const fontLoaded = await loadFont(doc);
-    generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
-    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, allBranches);
+    generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalOrders, totalReturns, fontName, fontLoaded);
+    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName);
     const fileName = generateFileName(title, monthName, isRtl);
     doc.save(fileName);
     toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
@@ -193,44 +215,228 @@ const exportToPDF = async (
   }
 };
 
-interface OrdersVsReturnsTableProps {
-  data: OrdersVsReturnsRow[];
-  title: string;
-  month: number;
-  isRtl: boolean;
-  loading: boolean;
-  allBranches: string[];
-  daysInMonth: string[];
-  monthName: string;
-}
-
-const ReturnsVsOrdersPage: React.FC<OrdersVsReturnsTableProps> = ({ data, title, isRtl, loading, allBranches, daysInMonth, monthName }) => {
+const ReturnsVsOrdersPage: React.FC = () => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [ordersVsReturnsData, setOrdersVsReturnsData] = useState<{ [month: number]: OrdersVsReturnsRow[] }>({});
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('all');
   const [selectedPeriod, setSelectedPeriod] = useState('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-  const daysInMonthCount = daysInMonth.length;
+
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    value: i,
+    label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
+  }));
+
+  const getDaysInMonth = useCallback((month: number) => {
+    const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
+    return Array.from({ length: daysInMonthCount }, (_, i) => {
+      const date = new Date(currentYear, month, i + 1);
+      return date.toLocaleString(language, { day: 'numeric', month: 'short' });
+    });
+  }, [currentYear, language]);
+
+  const daysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth, getDaysInMonth]);
+  const allBranches = useMemo(() => branches.map(b => b.displayName).sort(), [branches]);
 
   const { startDay, endDay } = useMemo(() => {
-    let s = 1, e = daysInMonthCount;
-    if (selectedPeriod === 'week1') { s = 1; e = Math.min(7, daysInMonthCount); }
-    else if (selectedPeriod === 'week2') { s = 8; e = Math.min(14, daysInMonthCount); }
-    else if (selectedPeriod === 'week3') { s = 15; e = Math.min(21, daysInMonthCount); }
-    else if (selectedPeriod === 'week4') { s = 22; e = daysInMonthCount; }
+    let s = 1, e = daysInMonth.length;
+    if (selectedPeriod === 'week1') { s = 1; e = Math.min(7, daysInMonth.length); }
+    else if (selectedPeriod === 'week2') { s = 8; e = Math.min(14, daysInMonth.length); }
+    else if (selectedPeriod === 'week3') { s = 15; e = Math.min(21, daysInMonth.length); }
+    else if (selectedPeriod === 'week4') { s = 22; e = daysInMonth.length; }
     else if (selectedPeriod === 'custom' && customStart && customEnd) {
       s = new Date(customStart).getDate();
       e = new Date(customEnd).getDate();
       if (s > e) [s, e] = [e, s];
     }
     return { startDay: s, endDay: e };
-  }, [selectedPeriod, customStart, customEnd, daysInMonthCount]);
+  }, [selectedPeriod, customStart, customEnd, daysInMonth.length]);
 
   const displayedDays = daysInMonth.slice(startDay - 1, endDay);
 
+  useEffect(() => {
+    if (!user || (user.role !== 'admin' && user.role !== 'production')) {
+      return;
+    }
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [ordersResponse, branchesResponse, returnsResponse] = await Promise.all([
+          ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl),
+          branchesAPI.getAll(),
+          returnsAPI.getAll({ page: 1, limit: 10000 }),
+        ]);
+
+        const monthlyOrdersVsReturnsData: { [month: number]: OrdersVsReturnsRow[] } = {};
+        const fetchedBranches = branchesResponse
+          .filter((branch: any) => branch && branch._id)
+          .map((branch: any) => ({
+            _id: branch._id,
+            name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            nameEn: branch.nameEn || branch.name,
+            displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+          }))
+          .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
+        setBranches(fetchedBranches);
+        const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
+
+        const productDetails = new Map<string, { code: string; product: string; unit: string }>();
+        let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
+        let returnsList = returnsResponse.returns || [];
+
+        orders.forEach((order: any) => {
+          (order.items || []).forEach((item: any) => {
+            const productId = item.product?._id || item.productId;
+            if (productId && !productDetails.has(productId)) {
+              productDetails.set(productId, {
+                code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
+                unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
+              });
+            }
+          });
+        });
+
+        for (let month = 0; month < 12; month++) {
+          const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
+          const orderMap = new Map<string, { dailyQuantities: number[], dailyBranchDetails: { [branch: string]: number }[], totalQuantity: number, code: string, product: string, unit: string }>();
+          const returnMap = new Map<string, { dailyReturns: number[], dailyBranchDetails: { [branch: string]: number }[], totalReturns: number }>();
+
+          orders.forEach((order: any) => {
+            const date = new Date(order.createdAt || order.date);
+            if (isNaN(date.getTime())) return;
+            const orderMonth = date.getMonth();
+            const year = date.getFullYear();
+            if (year === currentYear && orderMonth === month) {
+              const day = date.getDate() - 1;
+              const branchId = order.branch?._id || order.branch || order.branchId;
+              const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+              (order.items || []).forEach((item: any) => {
+                const productId = item.product?._id || item.productId;
+                if (!productId) return;
+                const details = productDetails.get(productId) || {
+                  code: `code-${Math.random().toString(36).substring(2)}`,
+                  product: isRtl ? 'منتج غير معروف' : 'Unknown Product',
+                  unit: isRtl ? 'غير محدد' : 'N/A',
+                };
+                const key = `${productId}-${month}`;
+                if (!orderMap.has(key)) {
+                  orderMap.set(key, {
+                    dailyQuantities: Array(daysInMonthCount).fill(0),
+                    dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                    totalQuantity: 0,
+                    code: details.code,
+                    product: details.product,
+                    unit: details.unit,
+                  });
+                }
+                const row = orderMap.get(key)!;
+                const quantity = Number(item.quantity) || 0;
+                row.dailyQuantities[day] += quantity;
+                row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
+                row.totalQuantity += quantity;
+              });
+            }
+          });
+
+          returnsList.forEach((returnItem: any) => {
+            if (returnItem.status !== 'approved') return;
+            const date = new Date(returnItem.createdAt);
+            if (isNaN(date.getTime())) return;
+            const retMonth = date.getMonth();
+            const year = date.getFullYear();
+            if (year === currentYear && retMonth === month) {
+              const day = date.getDate() - 1;
+              const branchId = returnItem.branch?._id || returnItem.branchId;
+              const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+              (returnItem.items || []).forEach((item: any) => {
+                const productId = item.product?._id || item.product;
+                if (!productId) return;
+                const details = productDetails.get(productId) || {
+                  code: `code-${Math.random().toString(36).substring(2)}`,
+                  product: isRtl ? 'منتج غير معروف' : 'Unknown Product',
+                  unit: isRtl ? 'غير محدد' : 'N/A',
+                };
+                const key = `${productId}-${month}`;
+                if (!returnMap.has(key)) {
+                  returnMap.set(key, {
+                    dailyReturns: Array(daysInMonthCount).fill(0),
+                    dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                    totalReturns: 0,
+                  });
+                }
+                const row = returnMap.get(key)!;
+                const quantity = Number(item.quantity) || 0;
+                row.dailyReturns[day] += quantity;
+                row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
+                row.totalReturns += quantity;
+              });
+            }
+          });
+
+          const productKeys = new Set<string>();
+          orderMap.forEach((_, key) => productKeys.add(key));
+          returnMap.forEach((_, key) => productKeys.add(key));
+
+          const ordersVsReturnsMap = new Map<string, OrdersVsReturnsRow>();
+          productKeys.forEach((key) => {
+            const ordersRow = orderMap.get(key) || {
+              dailyQuantities: Array(daysInMonthCount).fill(0),
+              dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+              totalQuantity: 0,
+              code: '',
+              product: '',
+              unit: '',
+            };
+            const returnsRow = returnMap.get(key) || {
+              dailyReturns: Array(daysInMonthCount).fill(0),
+              dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+              totalReturns: 0,
+            };
+            const totalRatio = ordersRow.totalQuantity > 0 ? (returnsRow.totalReturns / ordersRow.totalQuantity) * 100 : 0;
+            ordersVsReturnsMap.set(key, {
+              id: key,
+              code: ordersRow.code,
+              product: ordersRow.product,
+              unit: ordersRow.unit,
+              dailyOrders: ordersRow.dailyQuantities,
+              dailyReturns: returnsRow.dailyReturns,
+              dailyBranchDetailsOrders: ordersRow.dailyBranchDetails,
+              dailyBranchDetailsReturns: returnsRow.dailyBranchDetails,
+              totalOrders: ordersRow.totalQuantity,
+              totalReturns: returnsRow.totalReturns,
+              totalRatio,
+            });
+          });
+
+          monthlyOrdersVsReturnsData[month] = Array.from(ordersVsReturnsMap.values()).sort((a, b) => b.totalRatio - a.totalRatio);
+        }
+
+        setOrdersVsReturnsData(monthlyOrdersVsReturnsData);
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+        toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [isRtl, currentYear, selectedMonth, language, user]);
+
   const filteredData = useMemo(() => {
-    return data
-      .filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()))
+    return ordersVsReturnsData[selectedMonth]?.filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()))
       .map(row => {
         let displayedDailyOrders = row.dailyOrders.slice(startDay - 1, endDay);
         let displayedDailyBranchDetailsOrders = row.dailyBranchDetailsOrders.slice(startDay - 1, endDay);
@@ -253,8 +459,8 @@ const ReturnsVsOrdersPage: React.FC<OrdersVsReturnsTableProps> = ({ data, title,
           displayedTotalReturns,
           displayedTotalRatio,
         };
-      }).sort((a, b) => b.displayedTotalRatio - a.displayedTotalRatio);
-  }, [data, searchTerm, selectedBranch, startDay, endDay]);
+      }).sort((a, b) => b.displayedTotalRatio - a.displayedTotalRatio) || [];
+  }, [ordersVsReturnsData, selectedMonth, searchTerm, selectedBranch, startDay, endDay]);
 
   const grandTotalOrders = filteredData.reduce((sum, row) => sum + row.displayedTotalOrders, 0);
   const grandTotalReturns = filteredData.reduce((sum, row) => sum + row.displayedTotalReturns, 0);
@@ -303,7 +509,7 @@ const ReturnsVsOrdersPage: React.FC<OrdersVsReturnsTableProps> = ({ data, title,
           displayedDays.flatMap((day, i) => [
             [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, row.displayedDailyOrders[i]],
             [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.displayedDailyReturns[i]],
-            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.displayedDailyOrders[i] > 0 ? ((row.displayedDailyReturns[i] / row.displayedDailyOrders[i]) * 100).toFixed(2) : '0.00'], 
+            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.displayedDailyOrders[i] > 0 ? ((row.displayedDailyReturns[i] / row.displayedDailyOrders[i]) * 100).toFixed(2) : '0.00'],
           ])
         ),
         totalOrders: row.displayedTotalOrders,
@@ -342,214 +548,243 @@ const ReturnsVsOrdersPage: React.FC<OrdersVsReturnsTableProps> = ({ data, title,
       if (isRtl) ws['!views'] = [{ RTL: true }];
       ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...dayHeaders.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 15 }];
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
-      XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, `Orders_vs_Returns_${months[selectedMonth].label}`);
+      XLSX.writeFile(wb, `Orders_vs_Returns_${months[selectedMonth].label}.xlsx`);
       toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     } else if (format === 'pdf') {
-      exportToPDF(dataRows, title, monthName, headers, isRtl, filteredData.length, grandTotalOrders, grandTotalReturns, []);
+      exportToPDF(dataRows, isRtl ? 'تقرير حركة الطلبات مقابل المرتجعات' : 'Orders vs Returns Report', months[selectedMonth].label, headers, isRtl, filteredData.length, grandTotalOrders, grandTotalReturns);
     }
   };
 
-  if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
-  if (data.length === 0) {
+  if (!user || (user.role !== 'admin' && user.role !== 'production')) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-        className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
-      >
-        <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
-      </motion.div>
+      <div className="text-center py-12">
+        {isRtl ? 'لا يوجد صلاحية' : 'No access'}
+      </div>
     );
   }
 
   return (
-    <div className="mb-8">
-      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <h2 className="text-lg font-semibold text-gray-800">{title} - {monthName}</h2>
-        <div className="flex gap-2">
-          <Button
-            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-            onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
-            disabled={filteredData.length === 0}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-              filteredData.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <Upload className="w-4 h-4" />
-            {isRtl ? 'تصدير إكسل' : 'Export Excel'}
-          </Button>
-          <Button
-            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-            onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
-            disabled={filteredData.length === 0}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-              filteredData.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <Upload className="w-4 h-4" />
-            {isRtl ? 'تصدير PDF' : 'Export PDF'}
-          </Button>
+    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
+      <div className="mb-8 bg-white shadow-md rounded-xl p-4">
+        <div className="flex flex-wrap gap-2 mb-4 justify-center">
+          {months.map(month => (
+            <Button
+              key={month.value}
+              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
+              onClick={() => setSelectedMonth(month.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                selectedMonth === month.value ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {month.label}
+            </Button>
+          ))}
         </div>
       </div>
-      <div className={`flex flex-wrap gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <input
-          type="text"
-          placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
-        />
-        <select
-          value={selectedBranch}
-          onChange={(e) => setSelectedBranch(e.target.value)}
-          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
-        >
-          <option value="all">{isRtl ? 'كل الفروع' : 'All Branches'}</option>
-          {allBranches.map(branch => (
-            <option key={branch} value={branch}>{branch}</option>
-          ))}
-        </select>
-        <select
-          value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
-        >
-          <option value="all">{isRtl ? 'الشهر كامل' : 'Full Month'}</option>
-          <option value="week1">{isRtl ? 'الأسبوع الأول' : 'Week 1'}</option>
-          <option value="week2">{isRtl ? 'الأسبوع الثاني' : 'Week 2'}</option>
-          <option value="week3">{isRtl ? 'الأسبوع الثالث' : 'Week 3'}</option>
-          <option value="week4">{isRtl ? 'الأسبوع الرابع' : 'Week 4'}</option>
-          <option value="custom">{isRtl ? 'فترة مخصصة' : 'Custom Period'}</option>
-        </select>
-        {selectedPeriod === 'custom' && (
-          <>
-            <input
-              type="date"
-              value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
-            />
-            <input
-              type="date"
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
-            />
-          </>
-        )}
-      </div>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
-      >
-        <table className="min-w-full divide-y divide-gray-200 text-xs">
-          <thead className="bg-blue-50 sticky top-0 z-10">
-            <tr className={isRtl ? 'flex-row-reverse' : ''}>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-              {displayedDays.map((day, i) => (
-                <Fragment key={i}>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
-                    {isRtl ? `${day} - طلبات` : `${day} - Orders`}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
-                    {isRtl ? `${day} - مرتجعات` : `${day} - Returns`}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
-                    {isRtl ? `${day} - نسبة %` : `${day} - Ratio %`}
-                  </th>
-                </Fragment>
-              ))}
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
-              </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-              </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'نسبة إجمالية %' : 'Total Ratio %'}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {filteredData.map((row, index) => {
-              const totalRatio = row.displayedTotalRatio;
-              return (
-                <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
-                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
-                  <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                  {displayedDays.map((day, i) => {
-                    const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
-                    return (
+      <AnimatePresence>
+        {loading ? (
+          <OrderTableSkeleton isRtl={isRtl} />
+        ) : filteredData.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
+          >
+            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+          </motion.div>
+        ) : (
+          <div className="mb-8">
+            <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <h2 className="text-lg font-semibold text-gray-800">
+                {isRtl ? 'تقرير حركة الطلبات مقابل المرتجعات' : 'Orders vs Returns Report'} - {months[selectedMonth].label}
+              </h2>
+              <div className="flex gap-2">
+                <Button
+                  variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+                  onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
+                  disabled={filteredData.length === 0}
+                  className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                    filteredData.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Upload className="w-4 h-4" />
+                  {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+                </Button>
+                <Button
+                  variant={filteredData.length > 0 ? 'primary' : 'secondary'}
+                  onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
+                  disabled={filteredData.length === 0}
+                  className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                    filteredData.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Upload className="w-4 h-4" />
+                  {isRtl ? 'تصدير PDF' : 'Export PDF'}
+                </Button>
+              </div>
+            </div>
+            <div className={`flex flex-wrap gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <input
+                type="text"
+                placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+              />
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+              >
+                <option value="all">{isRtl ? 'كل الفروع' : 'All Branches'}</option>
+                {allBranches.map(branch => (
+                  <option key={branch} value={branch}>{branch}</option>
+                ))}
+              </select>
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+              >
+                <option value="all">{isRtl ? 'الشهر كامل' : 'Full Month'}</option>
+                <option value="week1">{isRtl ? 'الأسبوع الأول' : 'Week 1'}</option>
+                <option value="week2">{isRtl ? 'الأسبوع الثاني' : 'Week 2'}</option>
+                <option value="week3">{isRtl ? 'الأسبوع الثالث' : 'Week 3'}</option>
+                <option value="week4">{isRtl ? 'الأسبوع الرابع' : 'Week 4'}</option>
+                <option value="custom">{isRtl ? 'فترة مخصصة' : 'Custom Period'}</option>
+              </select>
+              {selectedPeriod === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                    className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+                  />
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                    className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+                  />
+                </>
+              )}
+            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+            >
+              <table className="min-w-full divide-y divide-gray-200 text-xs">
+                <thead className="bg-blue-50 sticky top-0 z-10">
+                  <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                    {displayedDays.map((day, i) => (
                       <Fragment key={i}>
-                        <td
-                          className={`px-4 py-3 text-center font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
-                          data-tooltip-id="orders-tooltip"
-                          data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
-                        >
-                          {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl) : '0'}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-center font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'}`}
-                          data-tooltip-id="returns-tooltip"
-                          data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
-                        >
-                          {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl) : '0'}
-                        </td>
-                        <td className={`px-4 py-3 text-center font-medium ${getRatioColor(dailyRatio)}`}>
-                          {formatNumber(dailyRatio.toFixed(2), isRtl) + '%'}
-                        </td>
+                        <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                          {isRtl ? `${day} - طلبات` : `${day} - Orders`}
+                        </th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                          {isRtl ? `${day} - مرتجعات` : `${day} - Returns`}
+                        </th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                          {isRtl ? `${day} - نسبة %` : `${day} - Ratio %`}
+                        </th>
                       </Fragment>
+                    ))}
+                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                      {isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                      {isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                      {isRtl ? 'نسبة إجمالية %' : 'Total Ratio %'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredData.map((row, index) => {
+                    const totalRatio = row.displayedTotalRatio;
+                    return (
+                      <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                        <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                        <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                        <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                        {displayedDays.map((day, i) => {
+                          const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
+                          return (
+                            <Fragment key={i}>
+                              <td
+                                className={`px-4 py-3 text-center font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
+                                data-tooltip-id="orders-tooltip"
+                                data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
+                              >
+                                {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl) : '0'}
+                              </td>
+                              <td
+                                className={`px-4 py-3 text-center font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'}`}
+                                data-tooltip-id="returns-tooltip"
+                                data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
+                              >
+                                {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl) : '0'}
+                              </td>
+                              <td className={`px-4 py-3 text-center font-medium ${getRatioColor(dailyRatio)}`}>
+                                {formatNumber(dailyRatio.toFixed(2), isRtl) + '%'}
+                              </td>
+                            </Fragment>
+                          );
+                        })}
+                        <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
+                        <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
+                        <td className={`px-4 py-3 text-center font-medium ${getRatioColor(totalRatio)}`}>
+                          {formatNumber(totalRatio.toFixed(2), isRtl) + '%'}
+                        </td>
+                      </tr>
                     );
                   })}
-                  <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
-                  <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
-                  <td className={`px-4 py-3 text-center font-medium ${getRatioColor(totalRatio)}`}>
-                    {formatNumber(totalRatio.toFixed(2), isRtl) + '%'}
-                  </td>
-                </tr>
-              );
-            })}
-            <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-              {displayedDays.map((_, i) => (
-                <Fragment key={i}>
-                  <td className="px-4 py-3 text-gray-800 text-center">
-                    {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl)}
-                  </td>
-                  <td className="px-4 py-3 text-gray-800 text-center">
-                    {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl)}
-                  </td>
-                  <td className="px-4 py-3 text-gray-800 text-center">
-                    {(() => {
-                      const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0);
-                      const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0);
-                      const ratio = dailyOrdersTotal > 0 ? (dailyReturnsTotal / dailyOrdersTotal * 100).toFixed(2) : '0.00';
-                      return `${formatNumber(Number(ratio), isRtl)}%`;
-                    })()}
-                  </td>
-                </Fragment>
-              ))}
-              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio}%</td>
-            </tr>
-          </tbody>
-        </table>
-        <Tooltip id="orders-tooltip" place="top" className="custom-tooltip whitespace-pre-line" />
-        <Tooltip id="returns-tooltip" place="top" className="custom-tooltip whitespace-pre-line" />
-      </motion.div>
+                  <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                    {displayedDays.map((_, i) => (
+                      <Fragment key={i}>
+                        <td className="px-4 py-3 text-gray-800 text-center">
+                          {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-800 text-center">
+                          {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-800 text-center">
+                          {(() => {
+                            const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0);
+                            const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0);
+                            const ratio = dailyOrdersTotal > 0 ? (dailyReturnsTotal / dailyOrdersTotal * 100).toFixed(2) : '0.00';
+                            return `${formatNumber(Number(ratio), isRtl)}%`;
+                          })()}
+                        </td>
+                      </Fragment>
+                    ))}
+                    <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio}%</td>
+                  </tr>
+                </tbody>
+              </table>
+              <Tooltip id="orders-tooltip" place="top" className="custom-tooltip whitespace-pre-line" />
+              <Tooltip id="returns-tooltip" place="top" className="custom-tooltip whitespace-pre-line" />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
