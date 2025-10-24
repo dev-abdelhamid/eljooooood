@@ -899,7 +899,7 @@ export const BranchInventory: React.FC = () => {
           </div>
         </div>
         {/* Header Row */}
-        <div className="relative flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center bg-white sm:bg-transparent rounded-lg sm:rounded-none p-4 sm:p-0 z-20">
+        <div className="relative flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center sm:bg-transparent rounded-lg sm:rounded-none p-4 sm:p-0 z-20">
           <div className="flex flex-col items-center sm:items-start sm:flex-row sm:gap-3 text-center sm:text-left">
             <div className="hidden sm:flex items-center justify-center">
               <Package className="w-7 h-7 text-amber-600" />
@@ -912,7 +912,7 @@ export const BranchInventory: React.FC = () => {
           <div className="flex flex-row gap-3">
             <button
               onClick={() => navigate('/orders/new')}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
               aria-label={t.createOrder}
             >
               <Plus className="w-4 h-4" />
