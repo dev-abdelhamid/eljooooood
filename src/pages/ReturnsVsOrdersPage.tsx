@@ -19,6 +19,7 @@ interface ProductRow {
   ratio: number;
 }
 
+// تحويل الأرقام إلى عربية
 const toArabicNumerals = (num: number | string): string => {
   return String(num).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]);
 };
@@ -27,22 +28,20 @@ const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
-const getRatioColor = (ratio: number): string => {
-  if (ratio >= 15) return 'text-red-700 bg-red-50';
-  if (ratio >= 8) return 'text-yellow-700 bg-yellow-50';
-  return 'text-green-700 bg-green-50';
-};
-
+// تحميل خط Amiri للـ PDF
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontUrl = 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf';
   try {
-    const fontBytes = await fetch(fontUrl).then(res => res.arrayBuffer());
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(fontBytes)));
+    const res = await fetch(fontUrl);
+    if (!res.ok) throw new Error('Font fetch failed');
+    const buffer = await res.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
     doc.addFileToVFS('Amiri.ttf', base64);
     doc.addFont('Amiri.ttf', 'Amiri', 'normal');
     doc.setFont('Amiri');
     return true;
-  } catch {
+  } catch (err) {
+    console.warn('Font load failed, using Helvetica', err);
     doc.setFont('helvetica');
     return false;
   }
@@ -52,6 +51,7 @@ const ReturnsVsOrdersPage: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
+
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -63,10 +63,15 @@ const ReturnsVsOrdersPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('all');
 
+  // اسم الشهر
   const monthName = useMemo(() => {
-    return new Date(currentYear, selectedMonth).toLocaleString(language, { month: 'long', year: 'numeric' });
+    return new Date(currentYear, selectedMonth).toLocaleString(language, {
+      month: 'long',
+      year: 'numeric',
+    });
   }, [selectedMonth, language]);
 
+  // قائمة الشهور
   const months = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => ({
       value: i,
@@ -74,9 +79,10 @@ const ReturnsVsOrdersPage: React.FC = () => {
     }));
   }, [currentYear, language]);
 
+  // جلب البيانات
   const fetchData = useCallback(async () => {
     if (!user || !['admin', 'production'].includes(user.role)) {
-      toast.error(isRtl ? 'غير مصرح' : 'Unauthorized');
+      toast.error(isRtl ? 'غير مصرح لك' : 'Unauthorized');
       setLoading(false);
       return;
     }
@@ -84,21 +90,29 @@ const ReturnsVsOrdersPage: React.FC = () => {
     setLoading(true);
     try {
       const [ordersRes, returnsRes, inventoryRes, branchesRes] = await Promise.all([
-        ordersAPI.getAll({ limit: 10000 }),
-        returnsAPI.getAll({ limit: 10000 }),
-        inventoryAPI.getInventory(),
-        branchesAPI.getAll(),
+        ordersAPI.getAll({ limit: 10000 }).catch(() => []),
+        returnsAPI.getAll({ limit: 10000 }).catch(() => ({ returns: [] })),
+        inventoryAPI.getInventory().catch(() => []),
+        branchesAPI.getAll().catch(() => []),
       ]);
 
-      const branchMap = new Map(branchesRes.map((b: any) => [b._id, isRtl ? b.name : b.nameEn || b.name]));
-      const productMap = new Map(inventoryRes.map((i: any) => [
-        i.product._id,
-        {
-          code: i.product.code || '—',
-          name: isRtl ? i.product.name : i.product.nameEn || i.product.name,
-          unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit || 'وحدة',
-        }
-      ]));
+      const branchMap = new Map(
+        (branchesRes || []).map((b: any) => [
+          b._id,
+          isRtl ? b.name : b.nameEn || b.name,
+        ])
+      );
+
+      const productMap = new Map(
+        (inventoryRes || []).map((i: any) => [
+          i.product._id,
+          {
+            code: i.product.code || '—',
+            name: isRtl ? i.product.name : i.product.nameEn || i.product.name,
+            unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit || 'وحدة',
+          },
+        ])
+      );
 
       const monthStart = new Date(currentYear, selectedMonth, 1);
       const monthEnd = new Date(currentYear, selectedMonth + 1, 0, 23, 59, 59);
@@ -106,11 +120,14 @@ const ReturnsVsOrdersPage: React.FC = () => {
       const orderMap = new Map<string, { orders: number; returns: number }>();
       const branchFilter = selectedBranch !== 'all' ? selectedBranch : null;
 
-      // Process Orders
+      // طلبات
       (ordersRes || []).forEach((order: any) => {
         const date = new Date(order.createdAt || order.date);
         if (isNaN(date.getTime()) || date < monthStart || date > monthEnd) return;
-        const branchName = branchMap.get(order.branch?._id || order.branch) || (isRtl ? 'غير معروف' : 'Unknown');
+
+        const branchName =
+          branchMap.get(order.branch?._id || order.branch) ||
+          (isRtl ? 'غير معروف' : 'Unknown');
         if (branchFilter && branchName !== branchFilter) return;
 
         (order.items || []).forEach((item: any) => {
@@ -122,11 +139,14 @@ const ReturnsVsOrdersPage: React.FC = () => {
         });
       });
 
-      // Process Returns
-      (returnsRes?.returns || returnsRes || []).forEach((ret: any) => {
-        const date = new Date(ret.createdAt);
+      // مرتجعات
+      ((returnsRes?.returns || returnsRes) || []).forEach((ret: any) => {
+        const date = new Date(ret.createdAt || ret.date);
         if (isNaN(date.getTime()) || date < monthStart || date > monthEnd) return;
-        const branchName = branchMap.get(ret.branch?._id || ret.branchId) || (isRtl ? 'غير معروف' : 'Unknown');
+
+        const branchName =
+          branchMap.get(ret.branch?._id || ret.branchId) ||
+          (isRtl ? 'غير معروف' : 'Unknown');
         if (branchFilter && branchName !== branchFilter) return;
 
         (ret.items || []).forEach((item: any) => {
@@ -156,9 +176,12 @@ const ReturnsVsOrdersPage: React.FC = () => {
       }
 
       setData(rows.sort((a, b) => b.ratio - a.ratio));
-      setBranches(['all', ...Array.from(new Set([...branchMap.values()]))].filter(Boolean));
+      setBranches([
+        'all',
+        ...Array.from(new Set([...branchMap.values()])).filter(Boolean),
+      ]);
     } catch (err) {
-      console.error(err);
+      console.error('Fetch error:', err);
       toast.error(isRtl ? 'فشل تحميل البيانات' : 'Failed to load data');
     } finally {
       setLoading(false);
@@ -169,30 +192,37 @@ const ReturnsVsOrdersPage: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  // فلترة البحث
   const filteredData = useMemo(() => {
-    return data.filter(row =>
-      row.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.code.toLowerCase().includes(searchTerm.toLowerCase())
+    return data.filter(
+      (row) =>
+        row.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        row.code.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [data, searchTerm]);
 
+  // الإجماليات
   const totals = useMemo(() => {
-    return filteredData.reduce((acc, row) => {
-      acc.orders += row.orders;
-      acc.returns += row.returns;
-      return acc;
-    }, { orders: 0, returns: 0 });
+    return filteredData.reduce(
+      (acc, row) => {
+        acc.orders += row.orders;
+        acc.returns += row.returns;
+        return acc;
+      },
+      { orders: 0, returns: 0 }
+    );
   }, [filteredData]);
 
-  const overallRatio = totals.orders > 0 ? (totals.returns / totals.orders) * 100 : 0;
+  const overallRatio =
+    totals.orders > 0 ? (totals.returns / totals.orders) * 100 : 0;
 
-  // Export Excel
+  // تصدير Excel
   const exportExcel = () => {
     const headers = isRtl
       ? ['الكود', 'المنتج', 'الوحدة', 'الطلبات', 'المرتجعات', 'النسبة %']
       : ['Code', 'Product', 'Unit', 'Orders', 'Returns', 'Ratio %'];
 
-    const rows = filteredData.map(r => [
+    const rows = filteredData.map((r) => [
       r.code,
       r.name,
       r.unit,
@@ -201,11 +231,18 @@ const ReturnsVsOrdersPage: React.FC = () => {
       r.ratio.toFixed(1) + '%',
     ]);
 
-    rows.push(['', isRtl ? 'الإجمالي' : 'Total', '', totals.orders, totals.returns, overallRatio.toFixed(1) + '%']);
+    rows.push([
+      '',
+      isRtl ? 'الإجمالي' : 'Total',
+      '',
+      totals.orders,
+      totals.returns,
+      overallRatio.toFixed(1) + '%',
+    ]);
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     if (isRtl) ws['!views'] = [{ RTL: true }];
-    ws['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    ws['!cols'] = Array(6).fill({ wch: 15 });
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Returns_vs_Orders');
@@ -213,13 +250,13 @@ const ReturnsVsOrdersPage: React.FC = () => {
     toast.success(isRtl ? 'تم تصدير Excel' : 'Excel exported');
   };
 
-  // Export PDF
+  // تصدير PDF
   const exportPDF = async () => {
     const headers = isRtl
       ? ['الكود', 'المنتج', 'الوحدة', 'الطلبات', 'المرتجعات', 'النسبة %']
       : ['Code', 'Product', 'Unit', 'Orders', 'Returns', 'Ratio %'];
 
-    const rows = filteredData.map(r => [
+    const rows = filteredData.map((r) => [
       r.code,
       r.name,
       r.unit,
@@ -228,33 +265,44 @@ const ReturnsVsOrdersPage: React.FC = () => {
       r.ratio.toFixed(1) + '%',
     ]);
 
-    rows.push(['', isRtl ? 'الإجمالي' : 'Total', '', formatNumber(totals.orders, isRtl), formatNumber(totals.returns, isRtl), overallRatio.toFixed(1) + '%']);
+    rows.push([
+      '',
+      isRtl ? 'الإجمالي' : 'Total',
+      '',
+      formatNumber(totals.orders, isRtl),
+      formatNumber(totals.returns, isRtl),
+      overallRatio.toFixed(1) + '%',
+    ]);
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const fontLoaded = await loadFont(doc);
+    await loadFont(doc);
 
-    // Title
     doc.setFontSize(18);
-    doc.setTextColor(33, 33, 33);
-    doc.text(isRtl ? 'تقرير المرتجعات مقابل الطلبات' : 'Returns vs Orders Report', isRtl ? 280 : 15, 15, { align: isRtl ? 'right' : 'left' });
+    doc.text(
+      isRtl ? 'تقرير المرتجعات مقابل الطلبات' : 'Returns vs Orders Report',
+      isRtl ? 280 : 15,
+      15,
+      { align: isRtl ? 'right' : 'left' }
+    );
 
-    // Subtitle
     doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
+    doc.setTextColor(100);
     const stats = isRtl
-      ? `الشهر: ${monthName} | إجمالي الطلبات: ${toArabicNumerals(totals.orders)} | المرتجعات: ${toArabicNumerals(totals.returns)} | النسبة: ${overallRatio.toFixed(1)}%`
-      : `${monthName} | Orders: ${totals.orders} | Returns: ${totals.returns} | Ratio: ${overallRatio.toFixed(1)}%`;
-    doc.text(stats, isRtl ? 280 : 15, 22, { align: isRtl ? 'right' : 'left' });
+      ? `الشهر: ${monthName} | الطلبات: ${toArabicNumerals(
+          totals.orders
+        )} | المرتجعات: ${toArabicNumerals(
+          totals.returns
+        )} | النسبة: ${overallRatio.toFixed(1)}%`
+      : `${monthName} | Orders: ${totals.orders} | Returns: ${totals.returns} | Ratio: ${overallRatio.toFixed(
+          1
+        )}%`;
+    doc.text(stats, isRtl ? 280 : 15, 22, {
+      align: isRtl ? 'right' : 'left',
+    });
 
-    // Line
-    doc.setDrawColor(59, 130, 246);
-    doc.setLineWidth(0.5);
-    doc.line(15, 25, 282, 25);
-
-    // Table
     autoTable(doc, {
       head: [isRtl ? headers.slice().reverse() : headers],
-      body: isRtl ? rows.map(r => r.slice().reverse()) : rows,
+      body: isRtl ? rows.map((r) => r.slice().reverse()) : rows,
       startY: 30,
       theme: 'grid',
       headStyles: {
@@ -262,25 +310,14 @@ const ReturnsVsOrdersPage: React.FC = () => {
         textColor: 255,
         fontSize: 10,
         halign: 'center',
-        font: fontLoaded ? 'Amiri' : 'helvetica',
       },
-      bodyStyles: {
-        fontSize: 9,
-        halign: 'center',
-        font: fontLoaded ? 'Amiri' : 'helvetica',
-      },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: {
-        0: { cellWidth: 25 },
-        1: { cellWidth: 60 },
-        2: { cellWidth: 25 },
-        3: { cellWidth: 30 },
-        4: { cellWidth: 30 },
-        5: { cellWidth: 30 },
-      },
+      bodyStyles: { fontSize: 9, halign: 'center' },
       didParseCell: (data) => {
         if (isRtl && typeof data.cell.text[0] === 'string') {
-          data.cell.text[0] = data.cell.text[0].replace(/\d/g, d => toArabicNumerals(d));
+          data.cell.text[0] = data.cell.text[0].replace(
+            /\d/g,
+            (d) => toArabicNumerals(d)
+          );
         }
       },
     });
@@ -289,6 +326,14 @@ const ReturnsVsOrdersPage: React.FC = () => {
     toast.success(isRtl ? 'تم تصدير PDF' : 'PDF exported');
   };
 
+  // لون النسبة
+  const getRatioColor = (ratio: number): string => {
+    if (ratio >= 15) return 'text-red-700 bg-red-50';
+    if (ratio >= 8) return 'text-yellow-700 bg-yellow-50';
+    return 'text-green-700 bg-green-50';
+  };
+
+  // إذا ما كانش المستخدم مصرح
   if (!user || !['admin', 'production'].includes(user.role)) {
     return (
       <div className="p-8 text-center text-gray-600">
@@ -298,9 +343,17 @@ const ReturnsVsOrdersPage: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 md:p-6 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'}`}>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto">
-        {/* Header */}
+    <div
+      className={`min-h-screen bg-gray-50 p-4 md:p-6 ${
+        isRtl ? 'rtl font-amiri' : 'ltr font-inter'
+      }`}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-7xl mx-auto"
+      >
+        {/* العنوان */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -313,40 +366,44 @@ const ReturnsVsOrdersPage: React.FC = () => {
             <div className="flex gap-2">
               <select
                 value={selectedMonth}
-                onChange={e => setSelectedMonth(parseInt(e.target.value))}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
                 className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                {months.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
+                {months.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
                 ))}
               </select>
               <button
                 onClick={exportExcel}
                 disabled={loading || filteredData.length === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition disabled:opacity-50"
               >
                 <Upload className="w-4 h-4" /> {isRtl ? 'إكسل' : 'Excel'}
               </button>
               <button
                 onClick={exportPDF}
                 disabled={loading || filteredData.length === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition disabled:opacity-50"
               >
                 <Upload className="w-4 h-4" /> {isRtl ? 'PDF' : 'PDF'}
               </button>
             </div>
           </div>
 
-          {/* Filters */}
+          {/* الفلاتر */}
           <div className="flex flex-col md:flex-row gap-3 mt-4">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder={isRtl ? 'بحث بالمنتج أو الكود' : 'Search product or code'}
+                placeholder={
+                  isRtl ? 'بحث بالمنتج أو كود' : 'Search product or code'
+                }
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               />
               {searchTerm && (
                 <button
@@ -359,18 +416,22 @@ const ReturnsVsOrdersPage: React.FC = () => {
             </div>
             <select
               value={selectedBranch}
-              onChange={e => setSelectedBranch(e.target.value)}
+              onChange={(e) => setSelectedBranch(e.target.value)}
               className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
             >
               <option value="all">{isRtl ? 'كل الفروع' : 'All Branches'}</option>
-              {branches.filter(b => b !== 'all').map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
+              {branches
+                .filter((b) => b !== 'all')
+                .map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
             </select>
           </div>
         </div>
 
-        {/* Loading */}
+        {/* تحميل أو بيانات */}
         {loading ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
             <div className="animate-pulse space-y-3">
@@ -381,7 +442,7 @@ const ReturnsVsOrdersPage: React.FC = () => {
           </div>
         ) : filteredData.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center text-gray-500">
-            {isRtl ? 'لا توجد بيانات لهذا الشهر' : 'No data available for this month'}
+            {isRtl ? 'لا توجد بيانات' : 'No data available'}
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -389,32 +450,68 @@ const ReturnsVsOrdersPage: React.FC = () => {
               <table className="w-full text-xs">
                 <thead className="bg-gradient-to-r from-blue-50 to-blue-100">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 min-w-[200px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">{isRtl ? 'الوحدة' : 'Unit'}</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">{isRtl ? 'الطلبات' : 'Orders'}</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">{isRtl ? 'المرتجعات' : 'Returns'}</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">{isRtl ? 'النسبة %' : 'Ratio %'}</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 min-w-[80px]">
+                      {isRtl ? 'الكود' : 'Code'}
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 min-w-[200px]">
+                      {isRtl ? 'المنتج' : 'Product'}
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
+                      {isRtl ? 'الوحدة' : 'Unit'}
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
+                      {isRtl ? 'الطلبات' : 'Orders'}
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
+                      {isRtl ? 'المرتجعات' : 'Returns'}
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700 min-w-[100px]">
+                      {isRtl ? 'النسبة %' : 'Ratio %'}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredData.map((row) => (
                     <tr key={row.id} className="hover:bg-gray-50 transition">
-                      <td className="px-4 py-3 font-mono text-gray-600">{row.code}</td>
-                      <td className="px-4 py-3 text-gray-800 font-medium">{row.name}</td>
-                      <td className="px-4 py-3 text-center text-gray-600">{row.unit}</td>
-                      <td className="px-4 py-3 text-center text-gray-700 font-medium">{formatNumber(row.orders, isRtl)}</td>
-                      <td className="px-4 py-3 text-center text-red-600 font-medium">{formatNumber(row.returns, isRtl)}</td>
-                      <td className={`px-4 py-3 text-center font-bold ${getRatioColor(row.ratio)}`}>
+                      <td className="px-4 py-3 font-mono text-gray-600">
+                        {row.code}
+                      </td>
+                      <td className="px-4 py-3 text-gray-800 font-medium">
+                        {row.name}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-600">
+                        {row.unit}
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-700 font-medium">
+                        {formatNumber(row.orders, isRtl)}
+                      </td>
+                      <td className="px-4 py-3 text-center text-red-600 font-medium">
+                        {formatNumber(row.returns, isRtl)}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-center font-bold ${getRatioColor(
+                          row.ratio
+                        )}`}
+                      >
                         {row.ratio.toFixed(1)}%
                       </td>
                     </tr>
                   ))}
                   <tr className="bg-gray-50 font-bold text-gray-800 text-sm">
-                    <td colSpan={3} className="px-4 py-3 text-left">{isRtl ? 'الإجمالي' : 'Total'}</td>
-                    <td className="px-4 py-3 text-center">{formatNumber(totals.orders, isRtl)}</td>
-                    <td className="px-4 py-3 text-center text-red-600">{formatNumber(totals.returns, isRtl)}</td>
-                    <td className={`px-4 py-3 text-center ${getRatioColor(overallRatio)}`}>
+                    <td colSpan={3} className="px-4 py-3 text-left">
+                      {isRtl ? 'الإجمالي' : 'Total'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {formatNumber(totals.orders, isRtl)}
+                    </td>
+                    <td className="px-4 py-3 text-center text-red-600">
+                      {formatNumber(totals.returns, isRtl)}
+                    </td>
+                    <td
+                      className={`px-4 py-3 text-center ${getRatioColor(
+                        overallRatio
+                      )}`}
+                    >
                       {overallRatio.toFixed(1)}%
                     </td>
                   </tr>
