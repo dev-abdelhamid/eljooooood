@@ -1315,7 +1315,7 @@ const ReportsAnalytics: React.FC = () => {
     };
   }, [filteredData, t, analytics, orderAnalytics, returnAnalytics]);
 
-  if (user?.role !== 'admin') {
+  if (user?.role !== 'admin' && user?.role !== 'production') {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
