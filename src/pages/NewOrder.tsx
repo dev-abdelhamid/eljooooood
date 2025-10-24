@@ -13,8 +13,6 @@ import QuantityInput from '../components/UI/QuantityInput';
 
 
 
-
-
 interface Product {
   _id: string;
   name: string;
