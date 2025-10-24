@@ -1013,7 +1013,7 @@ export const BranchInventory: React.FC = () => {
           <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
           <button
             onClick={() => navigate('/orders/new')}
-            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
             aria-label={t.createOrder}
           >
             {t.createOrder}
