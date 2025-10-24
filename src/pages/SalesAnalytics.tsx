@@ -139,15 +139,21 @@ interface Order {
   total: number;
   status: string;
   branchName: string;
+  branch: any;
+  totalAmount: number;
+  createdAt: string;
 }
 
-interface Return {
+interface ReturnItem {
   _id: string;
   returnNumber: string;
   date: string;
   total: number;
   status: string;
   branchName: string;
+  branch: any;
+  totalAmount: number;
+  createdAt: string;
 }
 
 interface Branch {
@@ -535,7 +541,7 @@ const OrdersTable: React.FC<{
 ));
 
 const ReturnsTable: React.FC<{
-  returns: Return[];
+  returns: ReturnItem[];
   isRtl: boolean;
   currency: string;
   language: string;
@@ -591,63 +597,6 @@ const ReturnsTable: React.FC<{
   </div>
 ));
 
-const calculateTrends = (items: any[], dateKey: string, valueKey: string, countKey: string, start: string, end: string, lang: string) => {
-  const days = [];
-  let current = new Date(start);
-  const endDate = new Date(end);
-  while (current <= endDate) {
-    const dayStr = formatDate(current, lang);
-    days.push(dayStr);
-    current.setDate(current.getDate() + 1);
-  }
-  const trendMap = new Map(days.map(d => [d, { period: d, [countKey]: 0, [valueKey]: 0 }]));
-  items.forEach(item => {
-    const dateStr = formatDate(new Date(item[dateKey]), lang);
-    if (trendMap.has(dateStr)) {
-      const t = trendMap.get(dateStr);
-      t[countKey] += 1;
-      t[valueKey] += safeNumber(item.totalAmount || item.totalValue || 0);
-    }
-  });
-  return Array.from(trendMap.values());
-};
-
-const calculateBranchAnalytics = (items: any[], isRtl: boolean, sortKey: string) => {
-  const branchMap = new Map();
-  items.forEach(item => {
-    const branch = item.branch || {};
-    const branchId = safeString(branch._id);
-    const displayName = isRtl ? safeString(branch.name, 'فرع غير معروف') : safeString(branch.nameEn || branch.name, 'Unknown Branch');
-    if (!branchMap.has(branchId)) {
-      branchMap.set(branchId, { branchId, displayName, total: 0, count: 0 });
-    }
-    const b = branchMap.get(branchId);
-    b.count += 1;
-    b.total += safeNumber(item.totalAmount || item.totalValue || 0);
-  });
-  const branchList = Array.from(branchMap.values());
-  branchList.forEach(b => b.average = b.total / b.count || 0);
-  return branchList.sort((a, b) => b[sortKey] - a[sortKey]).slice(0, 6);
-};
-
-const calculateLeastBranchAnalytics = (items: any[], isRtl: boolean, sortKey: string) => {
-  const branchMap = new Map();
-  items.forEach(item => {
-    const branch = item.branch || {};
-    const branchId = safeString(branch._id);
-    const displayName = isRtl ? safeString(branch.name, 'فرع غير معروف') : safeString(branch.nameEn || branch.name, 'Unknown Branch');
-    if (!branchMap.has(branchId)) {
-      branchMap.set(branchId, { branchId, displayName, total: 0, count: 0 });
-    }
-    const b = branchMap.get(branchId);
-    b.count += 1;
-    b.total += safeNumber(item.totalAmount || item.totalValue || 0);
-  });
-  const branchList = Array.from(branchMap.values());
-  branchList.forEach(b => b.average = b.total / b.count || 0);
-  return branchList.sort((a, b) => a[sortKey] - b[sortKey]).slice(0, 6);
-};
-
 const ReportsAnalytics: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -684,7 +633,7 @@ const ReportsAnalytics: React.FC = () => {
     averageReturnValue: 0,
   });
   const [orders, setOrders] = useState<Order[]>([]);
-  const [returns, setReturns] = useState<Return[]>([]);
+  const [returns, setReturns] = useState<ReturnItem[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -835,22 +784,24 @@ const ReportsAnalytics: React.FC = () => {
         const orderList = response.map((order: any) => ({
           _id: safeString(order._id),
           orderNumber: safeString(order.orderNumber, 'N/A'),
-          date: safeString(order.createdAt || order.date),
-          total: safeNumber(order.totalAmount || order.total),
+          date: safeString(order.createdAt),
+          total: safeNumber(order.totalAmount),
           status: safeString(order.status, 'Unknown'),
           branchName: isRtl ? safeString(order.branch?.name, 'Unknown') : safeString(order.branch?.nameEn || order.branch?.name, 'Unknown'),
-          branch: order.branch || {}
+          branch: order.branch || {},
+          totalAmount: safeNumber(order.totalAmount),
+          createdAt: safeString(order.createdAt),
         }));
         setOrders(orderList);
         const totalOrders = orderList.length;
         const totalValue = orderList.reduce((sum, o) => sum + o.total, 0);
         const averageOrderValue = totalOrders > 0 ? totalValue / totalOrders : 0;
-        const branchOrders = calculateBranchAnalytics(orderList, isRtl, 'totalOrders');
-        const leastBranchOrders = calculateLeastBranchAnalytics(orderList, isRtl, 'totalOrders');
-        const orderTrends = calculateTrends(orderList, 'date', 'totalValue', 'totalOrders', startDate, endDate, language);
+        const branchOrders = calculateBranchAnalytics(orderList, isRtl, 'total');
+        const leastBranchOrders = calculateLeastBranchAnalytics(orderList, isRtl, 'total');
+        const orderTrends = calculateTrends(orderList, 'createdAt', 'totalValue', 'totalOrders', startDate, endDate, language);
         setOrderAnalytics({
-          branchOrders,
-          leastBranchOrders,
+          branchOrders: branchOrders.map(b => ({...b, averageOrderValue: b.average, totalOrders: b.count, totalValue: b.total })),
+          leastBranchOrders: leastBranchOrders.map(b => ({...b, averageOrderValue: b.average, totalOrders: b.count, totalValue: b.total })),
           orderTrends,
           totalOrders,
           totalValue,
@@ -858,28 +809,30 @@ const ReportsAnalytics: React.FC = () => {
         });
       } else if (type === 'returns') {
         response = await returnsAPI.getAll(params);
-        if (!response || !Array.isArray(response)) {
+        if (!response || typeof response !== 'object') {
           throw new Error(t.errors.invalid_data);
         }
         const returnList = response.map((ret: any) => ({
           _id: safeString(ret._id),
           returnNumber: safeString(ret.returnNumber, 'N/A'),
-          date: safeString(ret.createdAt || ret.date),
-          total: safeNumber(ret.totalAmount || ret.total),
+          date: safeString(ret.createdAt),
+          total: safeNumber(ret.totalAmount),
           status: safeString(ret.status, 'Unknown'),
           branchName: isRtl ? safeString(ret.branch?.name, 'Unknown') : safeString(ret.branch?.nameEn || ret.branch?.name, 'Unknown'),
-          branch: ret.branch || {}
+          branch: ret.branch || {},
+          totalAmount: safeNumber(ret.totalAmount),
+          createdAt: safeString(ret.createdAt),
         }));
         setReturns(returnList);
         const totalReturns = returnList.length;
         const totalValue = returnList.reduce((sum, r) => sum + r.total, 0);
         const averageReturnValue = totalReturns > 0 ? totalValue / totalReturns : 0;
-        const branchReturns = calculateBranchAnalytics(returnList, isRtl, 'totalReturns');
-        const leastBranchReturns = calculateLeastBranchAnalytics(returnList, isRtl, 'totalReturns');
-        const returnTrends = calculateTrends(returnList, 'date', 'totalValue', 'totalReturns', startDate, endDate, language);
+        const branchReturns = calculateBranchAnalytics(returnList, isRtl, 'total');
+        const leastBranchReturns = calculateLeastBranchAnalytics(returnList, isRtl, 'total');
+        const returnTrends = calculateTrends(returnList, 'createdAt', 'totalValue', 'totalReturns', startDate, endDate, language);
         setReturnAnalytics({
-          branchReturns,
-          leastBranchReturns,
+          branchReturns: branchReturns.map(b => ({...b, averageReturnValue: b.average, totalReturns: b.count, totalValue: b.total })),
+          leastBranchReturns: leastBranchReturns.map(b => ({...b, averageReturnValue: b.average, totalReturns: b.count, totalValue: b.total })),
           returnTrends,
           totalReturns,
           totalValue,
