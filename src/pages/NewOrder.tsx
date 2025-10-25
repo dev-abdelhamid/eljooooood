@@ -184,7 +184,7 @@ const translations: Translations = {
   },
 };
 
-// === التحقق من الكمية للكيلو (مضاعفات 0.25) ===
+// === دالة التحقق من الكمية (تسمح بـ 0.25، 1.25، 1.4، 1.7...) ===
 const isValidKgQuantity = (qty: number): boolean => {
   if (qty <= 0) return false;
   const multiplied = Math.round(qty * 100);
@@ -296,7 +296,6 @@ const QuantityInput = ({
   );
 };
 
-// === باقي المكونات ===
 export const ProductSearchInput = ({
   value,
   onChange,
@@ -320,7 +319,7 @@ export const ProductSearchInput = ({
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-sm ${ opzRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-sm ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -389,11 +388,13 @@ const ProductCard = ({
   cartItem,
   onAdd,
   onUpdate,
+  translations,
 }: {
   product: Product;
   cartItem?: OrderItem;
   onAdd: () => void;
   onUpdate: (quantity: number) => void;
+  translations: Translations;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -468,10 +469,7 @@ const OrderConfirmModal = ({
         <h3 className="text-xl font-bold mb-4">{t.confirmOrder}</h3>
         <p className="text-sm text-gray-600 mb-6">{t.confirmMessage}</p>
         <div className="flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm"
-          >
+          <button onClick={onClose} className="px-5 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm">
             {t.cancel}
           </button>
           <button
@@ -544,7 +542,6 @@ export function NewOrder() {
 
   const skeletonCount = filteredProducts.length > 0 ? filteredProducts.length : 6;
 
-  // جلب البيانات
   useEffect(() => {
     if (!user || !['admin', 'branch'].includes(user.role)) {
       setError(t.unauthorized);
@@ -567,7 +564,7 @@ export function NewOrder() {
           displayUnit: isRtl ? (p.unit || 'غير محدد') : (p.unitEn || p.unit || 'N/A'),
           department: {
             ...p.department,
-            displayName: isRtl ? p.department.name : (p.department.nameEn || p.department.name),
+            displayName: isRtl ? p.department.name : (p.nameEn || p.department.name),
           },
         }));
         setProducts(prods);
@@ -596,7 +593,6 @@ export function NewOrder() {
     load();
   }, [user, isRtl, filterDepartment, searchTerm, t]);
 
-  // تحديث اللغة
   useEffect(() => {
     setProducts(prev => prev.map(p => ({
       ...p,
@@ -615,7 +611,6 @@ export function NewOrder() {
     })));
   }, [isRtl]);
 
-  // السوكت
   useEffect(() => {
     if (!user || !socket) return;
 
@@ -749,7 +744,6 @@ export function NewOrder() {
 
   return (
     <div className="mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
-      {/* العنوان */}
       <div className="mb-8 text-center">
         <div className="flex items-center justify-center gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
@@ -765,7 +759,6 @@ export function NewOrder() {
         </div>
       )}
 
-      {/* زر التمرير */}
       {orderItems.length > 0 && (
         <button
           onClick={scrollToSummary}
@@ -776,7 +769,6 @@ export function NewOrder() {
       )}
 
       <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6' : ''}`}>
-        {/* المنتجات */}
         <div className={orderItems.length > 0 ? 'lg:col-span-2' : ''}>
           <div className="p-6 bg-white rounded-xl shadow-sm border">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -811,6 +803,7 @@ export function NewOrder() {
                     cartItem={item}
                     onAdd={() => addToOrder(p)}
                     onUpdate={qty => updateQuantity(p._id, qty)}
+                    translations={translations}
                   />
                 );
               })}
@@ -818,7 +811,6 @@ export function NewOrder() {
           )}
         </div>
 
-        {/* الملخص */}
         {orderItems.length > 0 && (
           <div className="lg:col-span-1 space-y-6" ref={summaryRef}>
             <div className="p-6 bg-white rounded-xl shadow-sm border">
@@ -837,7 +829,7 @@ export function NewOrder() {
                       onDecrement={() => updateQuantity(item.productId, Math.max(0, item.quantity - (['كيلو', 'Kilo', 'كجم', 'kg'].includes(item.product.displayUnit) ? 0.25 : 1)))}
                       unit={item.product.displayUnit}
                     />
-                    <button onClick={() => removeFromOrder(item.productId)} className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center">
+                    <button onClick={() => removeFromOrder(item.productId)} className="w-8 h-8 bg-red-600 text-white rounded-full-full flex items-center justify-center">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
