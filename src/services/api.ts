@@ -397,123 +397,272 @@ const createErrorMessage = (errorType, isRtl) => {
 };
  
 
+
+// دالة لإنشاء طلب
 export const ordersAPI = {
   create: async (orderData, isRtl = false) => {
-    if (!isValidObjectId(orderData.branchId)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid branchId:`, orderData.branchId);
-      throw new Error(createErrorMessage('invalidBranchId', isRtl));
-    }
     try {
+      // التحقق من صحة البيانات الأساسية
+      if (!orderData.orderNumber?.trim()) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.create - Missing order number`);
+        throw new Error(isRtl ? 'رقم الطلب مطلوب' : 'Order number is required');
+      }
+      if (!isValidObjectId(orderData.branchId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid branchId:`, orderData.branchId);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+      }
+      if (!orderData.items?.length) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.create - Items array is empty`);
+        throw new Error(isRtl ? 'يجب إدخال عناصر الطلب' : 'Order items are required');
+      }
+
+      // التحقق من صحة العناصر
+      for (const item of orderData.items) {
+        if (!isValidObjectId(item.product)) {
+          console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid product ID:`, item.product);
+          throw new Error(isRtl ? `معرف المنتج ${item.product} غير صالح` : `Invalid product ID ${item.product}`);
+        }
+        if (!item.quantity || item.quantity <= 0) {
+          console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid quantity:`, item.quantity);
+          throw new Error(isRtl ? `الكمية ${item.quantity} غير صالحة` : `Invalid quantity ${item.quantity}`);
+        }
+        if (item.price < 0) {
+          console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid price:`, item.price);
+          throw new Error(isRtl ? `السعر ${item.price} غير صالح` : `Invalid price ${item.price}`);
+        }
+      }
+
       const response = await api.post('/orders', {
         orderNumber: orderData.orderNumber.trim(),
         branchId: orderData.branchId,
         items: orderData.items.map(item => ({
           product: item.product,
-          quantity: item.quantity,
+          quantity: Number(item.quantity.toFixed(1)),
           price: item.price,
         })),
-        status: orderData.status.trim(),
+        status: orderData.status?.trim() || 'pending',
+        notes: orderData.notes?.trim() || '',
+        notesEn: orderData.notesEn?.trim() || '',
+        priority: orderData.priority?.trim() || 'medium',
+        requestedDeliveryDate: orderData.requestedDeliveryDate,
+      }, {
+        params: { isRtl }
       });
+
       console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
-      return response;
+      return response.data;
     } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.create - Error:`, error.message);
       throw new Error(isRtl ? `فشل في إنشاء الطلب: ${error.message}` : `Failed to create order: ${error.message}`);
     }
   },
-  getAll: async (params = {}) => {
-    if (params.branch && !isValidObjectId(params.branch)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid branch ID:`, params.branch);
-      throw new Error(createErrorMessage('invalidBranchId', params.lang === 'ar'));
-    }
-    if (params.department && !isValidObjectId(params.department)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid department ID:`, params.department);
-      throw new Error(createErrorMessage('invalidDepartmentId', params.lang === 'ar'));
-    }
+
+  // جلب جميع الطلبات
+  getAll: async (params = {}, isRtl = false) => {
     try {
-      const response = await api.get('/orders', { params });
+      // التحقق من المعلمات
+      if (params.branch && !isValidObjectId(params.branch)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid branch ID:`, params.branch);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+      }
+      if (params.department && !isValidObjectId(params.department)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid department ID:`, params.department);
+        throw new Error(isRtl ? 'معرف القسم غير صالح' : 'Invalid department ID');
+      }
+
+      const response = await api.get('/orders', { params: { ...params, isRtl } });
       console.log(`[${new Date().toISOString()}] ordersAPI.getAll - Response:`, response);
-      return response;
+      return response.data;
     } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Error:`, error.message);
-      throw new Error(params.lang === 'ar' ? `فشل في جلب الطلبات: ${error.message}` : `Failed to fetch orders: ${error.message}`);
+      throw new Error(isRtl ? `فشل في جلب الطلبات: ${error.message}` : `Failed to fetch orders: ${error.message}`);
     }
   },
-  getById: async (orderId) => {
-    if (!isValidObjectId(orderId)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.getById - Invalid order ID:`, orderId);
-      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
-    }
+
+  // جلب طلب بناءً على المعرف
+  getById: async (orderId, isRtl = false) => {
     try {
-      const response = await api.get(`/orders/${orderId}`);
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.getById - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+
+      const response = await api.get(`/orders/${orderId}`, { params: { isRtl } });
       console.log(`[${new Date().toISOString()}] ordersAPI.getById - Response:`, response);
-      return response;
+      return response.data;
     } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getById - Error:`, error.message);
-      throw new Error(`Failed to fetch order: ${error.message}`);
+      throw new Error(isRtl ? `فشل في جلب الطلب: ${error.message}` : `Failed to fetch order: ${error.message}`);
     }
   },
-  updateStatus: async (orderId, data) => {
-    if (!isValidObjectId(orderId)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Invalid order ID:`, orderId);
-      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
-    }
+
+  // تحديث حالة الطلب
+  updateStatus: async (orderId, data, isRtl = false) => {
     try {
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+      if (!data.status?.trim()) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Missing status`);
+        throw new Error(isRtl ? 'الحالة مطلوبة' : 'Status is required');
+      }
+
       const response = await api.patch(`/orders/${orderId}/status`, {
         status: data.status.trim(),
+        notes: data.notes?.trim() || '',
+        notesEn: data.notesEn?.trim() || '',
+      }, {
+        params: { isRtl }
       });
+
       console.log(`[${new Date().toISOString()}] ordersAPI.updateStatus - Response:`, response);
-      return response;
+      return response.data;
     } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Error:`, error.message);
-      throw new Error(`Failed to update order status: ${error.message}`);
+      throw new Error(isRtl ? `فشل في تحديث حالة الطلب: ${error.message}` : `Failed to update order status: ${error.message}`);
     }
   },
-  updateChefItem: async (orderId, data) => {
-    if (!isValidObjectId(orderId) || !isValidObjectId(data.taskId)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Invalid order ID or task ID:`, { orderId, taskId: data.taskId });
-      throw new Error(createErrorMessage('invalidOrderOrTaskId', localStorage.getItem('language') === 'ar'));
-    }
+
+  // تحديث حالة عنصر الشيف
+  updateChefItem: async (orderId, data, isRtl = false) => {
     try {
+      if (!isValidObjectId(orderId) || !isValidObjectId(data.taskId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Invalid order ID or task ID:`, { orderId, taskId: data.taskId });
+        throw new Error(isRtl ? 'معرف الطلب أو المهمة غير صالح' : 'Invalid order ID or task ID');
+      }
+      if (!data.status?.trim()) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Missing status`);
+        throw new Error(isRtl ? 'حالة المهمة مطلوبة' : 'Task status is required');
+      }
+
       const response = await api.patch(`/orders/${orderId}/tasks/${data.taskId}/status`, {
         status: data.status.trim(),
+      }, {
+        params: { isRtl }
       });
+
       console.log(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Response:`, response);
-      return response;
+      return response.data;
     } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Error:`, error.message);
-      throw new Error(`Failed to update item status: ${error.message}`);
+      throw new Error(isRtl ? `فشل في تحديث حالة المهمة: ${error.message}` : `Failed to update item status: ${error.message}`);
     }
   },
-  assignChef: async (orderId, data) => {
-    if (!isValidObjectId(orderId) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid data:`, { orderId, data });
-      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
-    }
+
+  // تعيين الشيفات
+  assignChef: async (orderId, data, isRtl = false) => {
     try {
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+      if (!data.items?.length || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid items data:`, data.items);
+        throw new Error(isRtl ? 'بيانات العناصر أو معرفات الشيفات غير صالحة' : 'Invalid items or chef IDs');
+      }
+
       const response = await api.patch(`/orders/${orderId}/assign`, {
-        items: data.items,
-        timestamp: new Date().toISOString(),
+        items: data.items.map(item => ({
+          itemId: item.itemId,
+          assignedTo: item.assignedTo,
+        })),
+        notes: data.notes?.trim() || '',
+        notesEn: data.notesEn?.trim() || '',
+      }, {
+        params: { isRtl }
       });
+
       console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response);
-      return response;
+      return response.data;
     } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Error:`, error.message);
-      throw new Error(`Failed to assign chefs: ${error.message}`);
+      throw new Error(isRtl ? `فشل في تعيين الشيفات: ${error.message}` : `Failed to assign chefs: ${error.message}`);
     }
   },
-  confirmDelivery: async (orderId) => {
-    if (!isValidObjectId(orderId)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Invalid order ID:`, orderId);
-      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
-    }
+
+  // تأكيد التوصيل
+  confirmDelivery: async (orderId, isRtl = false) => {
     try {
-      const response = await api.patch(`/orders/${orderId}/confirm-delivery`, {});
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+
+      const response = await api.patch(`/orders/${orderId}/confirm-delivery`, {}, { params: { isRtl } });
       console.log(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Response:`, response);
-      return response;
+      return response.data;
     } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Error:`, error.message);
-      throw new Error(`Failed to confirm delivery: ${error.message}`);
+      throw new Error(isRtl ? `فشل في تأكيد التوصيل: ${error.message}` : `Failed to confirm delivery: ${error.message}`);
+    }
+  },
+
+  // بدء النقل
+  startTransit: async (orderId, isRtl = false) => {
+    try {
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.startTransit - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+
+      const response = await api.patch(`/orders/${orderId}/start-transit`, {}, { params: { isRtl } });
+      console.log(`[${new Date().toISOString()}] ordersAPI.startTransit - Response:`, response);
+      return response.data;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.startTransit - Error:`, error.message);
+      throw new Error(isRtl ? `فشل في بدء النقل: ${error.message}` : `Failed to start transit: ${error.message}`);
+    }
+  },
+
+  // تأكيد استلام الطلب
+  confirmOrderReceipt: async (orderId, isRtl = false) => {
+    try {
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.confirmOrderReceipt - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+
+      const response = await api.patch(`/orders/${orderId}/confirm-receipt`, {}, { params: { isRtl } });
+      console.log(`[${new Date().toISOString()}] ordersAPI.confirmOrderReceipt - Response:`, response);
+      return response.data;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.confirmOrderReceipt - Error:`, error.message);
+      throw new Error(isRtl ? `فشل في تأكيد استلام الطلب: ${error.message}` : `Failed to confirm order receipt: ${error.message}`);
+    }
+  },
+
+  // اعتماد الطلب
+  approveOrder: async (orderId, isRtl = false) => {
+    try {
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.approveOrder - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+
+      const response = await api.patch(`/orders/${orderId}/approve`, {}, { params: { isRtl } });
+      console.log(`[${new Date().toISOString()}] ordersAPI.approveOrder - Response:`, response);
+      return response.data;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.approveOrder - Error:`, error.message);
+      throw new Error(isRtl ? `فشل في اعتماد الطلب: ${error.message}` : `Failed to approve order: ${error.message}`);
+    }
+  },
+
+  // التحقق من وجود الطلب
+  checkOrderExists: async (orderId, isRtl = false) => {
+    try {
+      if (!isValidObjectId(orderId)) {
+        console.error(`[${new Date().toISOString()}] ordersAPI.checkOrderExists - Invalid order ID:`, orderId);
+        throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+      }
+
+      const response = await api.get(`/orders/${orderId}/check`, { params: { isRtl } });
+      console.log(`[${new Date().toISOString()}] ordersAPI.checkOrderExists - Response:`, response);
+      return response.data;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.checkOrderExists - Error:`, error.message);
+      throw new Error(isRtl ? `فشل في التحقق من الطلب: ${error.message}` : `Failed to check order existence: ${error.message}`);
     }
   },
 };
