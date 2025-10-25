@@ -735,7 +735,7 @@ export function NewOrder() {
 
   return (
     <div className="mx-auto px-4 py-8 min-h-screen" >
-      <div className="mb-8 text-center">
+      <div className="mb-8 flex items-center md:items-start justify-center md:justify-start text-center">
         <div className="flex items-center md:items-start justify-center md:justify-start gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
           <h1 className="text-2xl font-bold">{t.createOrder}</h1>
