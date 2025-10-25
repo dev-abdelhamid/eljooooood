@@ -293,7 +293,7 @@ const QuantityInput = ({
   const isRtl = language === 'ar';
   const [error, setError] = useState('');
 
-  const isKgUnit = unit === 'kg' || unit === 'كجم';
+  const isKgUnit = unit === 'kg' || unit === 'كجم' || unit === 'كيلو' || unit === 'Kilo';
 
   const validateQuantity = (val: string) => {
     const num = parseFloat(val);
@@ -405,8 +405,8 @@ const ProductCard = ({
           <QuantityInput
             value={cartItem.quantity}
             onChange={(val) => onUpdate(val)}
-            onIncrement={() => onUpdate(cartItem.quantity + (product.displayUnit === 'kg' || product.displayUnit === 'كجم' ? 0.5 : 1))}
-            onDecrement={() => onUpdate(cartItem.quantity - (product.displayUnit === 'kg' || product.displayUnit === 'كجم' ? 0.5 : 1))}
+            onIncrement={() => onUpdate(cartItem.quantity + (product.displayUnit === 'كيلو' || product.displayUnit === 'Kilo' ? 0.5 : 1))}
+            onDecrement={() => onUpdate(cartItem.quantity - (product.displayUnit === 'كيلو' || product.displayUnit === 'Kilo' ? 0.5 : 1))}
             unit={product.displayUnit}
           />
         ) : (
@@ -484,7 +484,7 @@ const OrderConfirmModal = ({
 };
 
 const isValidQuantity = (quantity: number, unit: string): boolean => {
-  if (unit === 'kg' || unit === 'كجم') {
+  if (unit === 'كيلو' || unit === 'Kilo') {
     return quantity >= 0.5 && quantity % 0.5 === 0;
   }
   return Number.isInteger(quantity) && quantity >= 1;
@@ -690,7 +690,7 @@ export function NewOrder() {
     (product: Product) => {
       setOrderItems((prev) => {
         const existingItem = prev.find((item) => item.productId === product._id);
-        const isKgUnit = product.displayUnit === 'kg' || product.displayUnit === 'كجم';
+        const isKgUnit = product.displayUnit === 'كيلو' || product.displayUnit === 'Kilo';
         const increment = isKgUnit ? 0.5 : 1;
         if (existingItem) {
           const newQuantity = existingItem.quantity + increment;
@@ -728,7 +728,7 @@ export function NewOrder() {
     (productId: string, quantity: number) => {
       const item = orderItems.find((item) => item.productId === productId);
       if (!item) return;
-      const isKgUnit = item.product.displayUnit === 'kg' || item.product.displayUnit === 'كجم';
+      const isKgUnit = item.product.displayUnit === 'كيلو' || item.product.displayUnit === 'Kilo';
       if (quantity < (isKgUnit ? 0.5 : 1)) {
         removeFromOrder(productId);
         return;
@@ -815,6 +815,7 @@ export function NewOrder() {
         isRtl,
         eventId,
       };
+      console.log('Sending order:', JSON.stringify(orderData, null, 2)); // Debug log
       const response = await ordersAPI.create(orderData, isRtl);
       const branchData = branches.find((b) => b._id === orderData.branchId);
       socket.emit('orderCreated', {
@@ -964,8 +965,8 @@ export function NewOrder() {
                       <QuantityInput
                         value={item.quantity}
                         onChange={(val) => handleQuantityInput(item.productId, val)}
-                        onIncrement={() => updateQuantity(item.productId, item.quantity + (item.product.displayUnit === 'kg' || item.product.displayUnit === 'كجم' ? 0.5 : 1))}
-                        onDecrement={() => updateQuantity(item.productId, item.quantity - (item.product.displayUnit === 'kg' || item.product.displayUnit === 'كجم' ? 0.5 : 1))}
+                        onIncrement={() => updateQuantity(item.productId, item.quantity + (item.product.displayUnit === 'كيلو' || item.product.displayUnit === 'Kilo' ? 0.5 : 1))}
+                        onDecrement={() => updateQuantity(item.productId, item.quantity - (item.product.displayUnit === 'كيلو' || item.product.displayUnit === 'Kilo' ? 0.5 : 1))}
                         unit={item.product.displayUnit}
                       />
                       <button
