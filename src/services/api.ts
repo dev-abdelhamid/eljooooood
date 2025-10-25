@@ -409,7 +409,7 @@ export const ordersAPI = {
         branchId: orderData.branchId,
         items: orderData.items.map(item => ({
           product: item.product,
-          quantity: item.quantity,
+          quantity: Number(item.quantity), // تحويل الكمية إلى عدد
           price: item.price,
         })),
         status: orderData.status.trim(),
