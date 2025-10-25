@@ -146,7 +146,7 @@ const translations: Translations = {
     orderCleared: 'تم مسح الطلب',
     scrollToSummary: 'التمرير للملخص',
     currency: 'ريال',
-    invalidQuantity: 'الكمية يجب أن تكون مضاعفات 0.5 كجم أو عدد صحيح حسب الوحدة',
+    invalidQuantity: 'الكمية يجب أن تكون مضاعفات 0.5 للكيلو أو عدد صحيح حسب الوحدة',
   },
   en: {
     createOrder: 'Create New Order',
@@ -180,7 +180,7 @@ const translations: Translations = {
     orderCleared: 'Order cleared',
     scrollToSummary: 'Scroll to Summary',
     currency: 'SAR',
-    invalidQuantity: 'Quantity must be in increments of 0.5 kg or an integer depending on the unit',
+    invalidQuantity: 'Quantity must be in increments of 0.5 for kg or an integer depending on the unit',
   },
 };
 
@@ -276,6 +276,14 @@ export const ProductDropdown = ({
   );
 };
 
+const isValidQuantity = (quantity: number, unit: string): boolean => {
+  const kgUnits = ['كيلو', 'Kilo', 'كجم', 'kg'];
+  if (kgUnits.includes(unit)) {
+    return quantity >= 0.5 && quantity % 0.5 === 0;
+  }
+  return Number.isInteger(quantity) && quantity >= 1;
+};
+
 const QuantityInput = ({
   value,
   onChange,
@@ -292,8 +300,7 @@ const QuantityInput = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [error, setError] = useState('');
-
-  const isKgUnit = unit === 'kg' || unit === 'كجم' || unit === 'كيلو' || unit === 'Kilo';
+  const kgUnits = ['كيلو', 'Kilo', 'كجم', 'kg'];
 
   const validateQuantity = (val: string) => {
     const num = parseFloat(val);
@@ -309,13 +316,13 @@ const QuantityInput = ({
       toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
       return false;
     }
-    if (isKgUnit && num % 0.5 !== 0) {
+    if (kgUnits.includes(unit) && num % 0.5 !== 0) {
       const message = isRtl ? 'الكمية يجب أن تكون مضاعفات 0.5 كجم' : 'Quantity must be in increments of 0.5 kg';
       setError(message);
       toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
       return false;
     }
-    if (!isKgUnit && !Number.isInteger(num)) {
+    if (!kgUnits.includes(unit) && !Number.isInteger(num)) {
       const message = isRtl ? 'الكمية يجب أن تكون عددًا صحيحًا' : 'Quantity must be an integer';
       setError(message);
       toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
@@ -329,7 +336,7 @@ const QuantityInput = ({
     const val = e.target.value;
     if (val === '') {
       setError('');
-      onChange(0); // Allow temporary empty input
+      onChange(0);
       return;
     }
     if (validateQuantity(val)) {
@@ -344,7 +351,7 @@ const QuantityInput = ({
           onClick={onDecrement}
           className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
           aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
-          disabled={value <= (isKgUnit ? 0.5 : 1)}
+          disabled={value <= (kgUnits.includes(unit) ? 0.5 : 1)}
         >
           <Minus className="w-4 h-4" />
         </button>
@@ -405,9 +412,9 @@ const ProductCard = ({
           <QuantityInput
             value={cartItem.quantity}
             onChange={(val) => onUpdate(val)}
-            onIncrement={() => onUpdate(cartItem.quantity + (product.displayUnit === 'كيلو' || product.displayUnit === 'Kilo' ? 0.5 : 1))}
-            onDecrement={() => onUpdate(cartItem.quantity - (product.displayUnit === 'كيلو' || product.displayUnit === 'Kilo' ? 0.5 : 1))}
-            unit={product.displayUnit}
+            onIncrement={() => onUpdate(cartItem.quantity + (['كيلو', 'Kilo', 'كجم', 'kg'].includes(cartItem.product.displayUnit) ? 0.5 : 1))}
+            onDecrement={() => onUpdate(cartItem.quantity - (['كيلو', 'Kilo', 'كجم', 'kg'].includes(cartItem.product.displayUnit) ? 0.5 : 1))}
+            unit={cartItem.product.displayUnit}
           />
         ) : (
           <button
@@ -481,13 +488,6 @@ const OrderConfirmModal = ({
       </div>
     </div>
   );
-};
-
-const isValidQuantity = (quantity: number, unit: string): boolean => {
-  if (unit === 'كيلو' || unit === 'Kilo') {
-    return quantity >= 0.5 && quantity % 0.5 === 0;
-  }
-  return Number.isInteger(quantity) && quantity >= 1;
 };
 
 export function NewOrder() {
@@ -690,7 +690,8 @@ export function NewOrder() {
     (product: Product) => {
       setOrderItems((prev) => {
         const existingItem = prev.find((item) => item.productId === product._id);
-        const isKgUnit = product.displayUnit === 'كيلو' || product.displayUnit === 'Kilo';
+        const kgUnits = ['كيلو', 'Kilo', 'كجم', 'kg'];
+        const isKgUnit = kgUnits.includes(product.displayUnit);
         const increment = isKgUnit ? 0.5 : 1;
         if (existingItem) {
           const newQuantity = existingItem.quantity + increment;
@@ -728,7 +729,8 @@ export function NewOrder() {
     (productId: string, quantity: number) => {
       const item = orderItems.find((item) => item.productId === productId);
       if (!item) return;
-      const isKgUnit = item.product.displayUnit === 'كيلو' || item.product.displayUnit === 'Kilo';
+      const kgUnits = ['كيلو', 'Kilo', 'كجم', 'kg'];
+      const isKgUnit = kgUnits.includes(item.product.displayUnit);
       if (quantity < (isKgUnit ? 0.5 : 1)) {
         removeFromOrder(productId);
         return;
@@ -805,8 +807,8 @@ export function NewOrder() {
           price: item.price,
           productName: item.product.name,
           productNameEn: item.product.nameEn,
-          unit: item.product.unit,
-          unitEn: item.product.unitEn,
+          unit: item.product.unit || 'غير محدد',
+          unitEn: item.product.unitEn || 'N/A',
           department: item.product.department,
         })),
         status: 'pending',
@@ -815,13 +817,13 @@ export function NewOrder() {
         isRtl,
         eventId,
       };
-      console.log('Sending order:', JSON.stringify(orderData, null, 2)); // Debug log
+      console.log('Sending order:', JSON.stringify(orderData, null, 2));
       const response = await ordersAPI.create(orderData, isRtl);
       const branchData = branches.find((b) => b._id === orderData.branchId);
       socket.emit('orderCreated', {
         _id: response.data.id,
         orderNumber: response.data.orderNumber,
-        branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'Unknown', nameEn: t.branches?.unknown || 'Unknown' },
+        branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'غير معروف', nameEn: t.branches?.unknown || 'Unknown' },
         items: response.data.items,
         eventId,
         isRtl,
@@ -845,7 +847,10 @@ export function NewOrder() {
       setError('');
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left', toastId: eventId });
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Create error:`, err);
+      console.error(`[${new Date().toISOString()}] Create error:`, {
+        message: err.message,
+        stack: err.stack,
+      });
       setError(err.message || t.createError);
       toast.error(err.message || t.createError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -965,8 +970,8 @@ export function NewOrder() {
                       <QuantityInput
                         value={item.quantity}
                         onChange={(val) => handleQuantityInput(item.productId, val)}
-                        onIncrement={() => updateQuantity(item.productId, item.quantity + (item.product.displayUnit === 'كيلو' || item.product.displayUnit === 'Kilo' ? 0.5 : 1))}
-                        onDecrement={() => updateQuantity(item.productId, item.quantity - (item.product.displayUnit === 'كيلو' || item.product.displayUnit === 'Kilo' ? 0.5 : 1))}
+                        onIncrement={() => updateQuantity(item.productId, item.quantity + (['كيلو', 'Kilo', 'كجم', 'kg'].includes(item.product.displayUnit) ? 0.5 : 1))}
+                        onDecrement={() => updateQuantity(item.productId, item.quantity - (['كيلو', 'Kilo', 'كجم', 'kg'].includes(item.product.displayUnit) ? 0.5 : 1))}
                         unit={item.product.displayUnit}
                       />
                       <button
