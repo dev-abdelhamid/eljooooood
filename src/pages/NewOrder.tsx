@@ -625,14 +625,7 @@ export function NewOrder() {
     socket.on('orderCreated', (data) => {
       if (!data?._id) return;
       const msg = user.role === 'branch' ? t.orderCreated : `طلب جديد: #${data.orderNumber}`;
-      addNotification({
-        _id: data.eventId || crypto.randomUUID(),
-        type: 'success',
-        message: msg,
-        data: { orderId: data._id },
-        read: false,
-        createdAt: new Date().toISOString(),
-      });
+    
     });
 
     return () => { socket.disconnect(); };
@@ -681,7 +674,6 @@ export function NewOrder() {
     setOrderItems([]);
     if (user?.role === 'admin') setBranch('');
     setSearchInput(''); setSearchTerm(''); setFilterDepartment('');
-    toast.success(t.orderCleared);
   }, [user, t]);
 
   const total = useMemo(() => orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0).toFixed(2), [orderItems]);
@@ -732,7 +724,6 @@ export function NewOrder() {
       addNotification({ _id: eventId, type: 'success', message: t.orderCreated, data: { orderId: res.data.id }, read: false, createdAt: new Date().toISOString() });
       clearOrder();
       setShowConfirmModal(false);
-      toast.success(t.orderCreated);
     } catch (err: any) {
       toast.error(err.message || t.createError);
     } finally {
