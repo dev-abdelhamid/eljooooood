@@ -743,9 +743,9 @@ export function NewOrder() {
   const scrollToSummary = () => summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   return (
-    <div className="mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto px-4 py-8 min-h-screen" >
       <div className="mb-8 text-center">
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex items-center md:items-start justify-center md:justify-start gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
           <h1 className="text-2xl font-bold">{t.createOrder}</h1>
         </div>
