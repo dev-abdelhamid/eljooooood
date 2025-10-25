@@ -409,8 +409,10 @@ export const ordersAPI = {
         branchId: orderData.branchId,
         items: orderData.items.map(item => ({
           product: item.product,
-          quantity: item.quantity,
+          quantity: Number(item.quantity), // تحويل الكمية إلى عدد
           price: item.price,
+          unit: item.unit, // إضافة الوحدة
+          unitEn: item.unitEn, // إضافة الوحدة الإنجليزية
         })),
         status: orderData.status.trim(),
       });
@@ -421,6 +423,7 @@ export const ordersAPI = {
       throw new Error(isRtl ? `فشل في إنشاء الطلب: ${error.message}` : `Failed to create order: ${error.message}`);
     }
   },
+  // بقية الدوال بدون تغيير
   getAll: async (params = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid branch ID:`, params.branch);
