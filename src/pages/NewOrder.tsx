@@ -76,8 +76,6 @@ interface Translations {
     scrollToSummary: string;
     currency: string;
     invalidQuantity: string;
-    invalidProduct: string;
-    invalidPrice: string;
   };
   en: {
     createOrder: string;
@@ -112,8 +110,6 @@ interface Translations {
     scrollToSummary: string;
     currency: string;
     invalidQuantity: string;
-    invalidProduct: string;
-    invalidPrice: string;
   };
 }
 
@@ -150,9 +146,7 @@ const translations: Translations = {
     orderCleared: 'تم مسح الطلب',
     scrollToSummary: 'التمرير للملخص',
     currency: 'ريال',
-    invalidQuantity: 'الكمية يجب أن تكون مضاعفات 0.5 للكيلو أو عدد صحيح لغيرها',
-    invalidProduct: 'معرف المنتج غير صالح أو غير موجود',
-    invalidPrice: 'السعر غير متطابق مع المنتج',
+    invalidQuantity: 'الكمية يجب أن تكون مضاعفات 0.5 كجم أو عدد صحيح حسب الوحدة',
   },
   en: {
     createOrder: 'Create New Order',
@@ -186,9 +180,7 @@ const translations: Translations = {
     orderCleared: 'Order cleared',
     scrollToSummary: 'Scroll to Summary',
     currency: 'SAR',
-    invalidQuantity: 'Quantity must be in increments of 0.5 for Kilo or integer for others',
-    invalidProduct: 'Invalid or non-existent product ID',
-    invalidPrice: 'Price does not match the product',
+    invalidQuantity: 'Quantity must be in increments of 0.5 kg or an integer depending on the unit',
   },
 };
 
@@ -318,7 +310,7 @@ const QuantityInput = ({
       return false;
     }
     if (isKgUnit && num % 0.5 !== 0) {
-      const message = isRtl ? 'الكمية يجب أن تكون مضاعفات 0.5 للكيلو' : 'Quantity must be in increments of 0.5 for Kilo';
+      const message = isRtl ? 'الكمية يجب أن تكون مضاعفات 0.5 كجم' : 'Quantity must be in increments of 0.5 kg';
       setError(message);
       toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
       return false;
@@ -492,7 +484,7 @@ const OrderConfirmModal = ({
 };
 
 const isValidQuantity = (quantity: number, unit: string): boolean => {
-  if (unit === 'كيلو' || unit === 'Kilo' || unit === 'kg' || unit === 'كجم') {
+  if (unit === 'كيلو' || unit === 'Kilo') {
     return quantity >= 0.5 && quantity % 0.5 === 0;
   }
   return Number.isInteger(quantity) && quantity >= 1;
@@ -710,10 +702,6 @@ export function NewOrder() {
             item.productId === product._id ? { ...item, quantity: newQuantity } : item
           );
         }
-        if (!isValidQuantity(increment, product.displayUnit)) {
-          toast.error(t.invalidQuantity, { position: isRtl ? 'top-right' : 'top-left' });
-          return prev;
-        }
         return [
           ...prev,
           {
@@ -727,7 +715,7 @@ export function NewOrder() {
                 displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
               },
             },
-            quantity: increment,
+            quantity: isKgUnit ? 0.5 : 1,
             price: product.price,
           },
         ];
@@ -750,7 +738,7 @@ export function NewOrder() {
         return;
       }
       setOrderItems((prev) =>
-        prev.map((item) => (item.productId === productId ? { ...item, quantity: Number(quantity.toFixed(1)) } : item))
+        prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
       );
     },
     [orderItems, isRtl, t]
@@ -799,24 +787,6 @@ export function NewOrder() {
         toast.error(t.branchRequired, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
-      // Validate all items before submission
-      for (const item of orderItems) {
-        if (!mongoose.isValidObjectId(item.productId)) {
-          setError(t.invalidProduct);
-          toast.error(t.invalidProduct, { position: isRtl ? 'top-right' : 'top-left' });
-          return;
-        }
-        if (!isValidQuantity(item.quantity, item.product.displayUnit)) {
-          setError(t.invalidQuantity);
-          toast.error(t.invalidQuantity, { position: isRtl ? 'top-right' : 'top-left' });
-          return;
-        }
-        if (item.price !== item.product.price) {
-          setError(t.invalidPrice);
-          toast.error(t.invalidPrice, { position: isRtl ? 'top-right' : 'top-left' });
-          return;
-        }
-      }
       setShowConfirmModal(true);
     },
     [orderItems, branch, user, t, isRtl]
@@ -831,18 +801,25 @@ export function NewOrder() {
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
           product: item.productId,
-          quantity: Number(item.quantity.toFixed(1)),
+          quantity: item.quantity,
           price: item.price,
+          productName: item.product.name,
+          productNameEn: item.product.nameEn,
+          unit: item.product.unit,
+          unitEn: item.product.unitEn,
+          department: item.product.department,
         })),
         status: 'pending',
         priority: 'medium',
         createdBy: user?.id || user?._id,
+        isRtl,
+        eventId,
       };
       console.log('Sending order:', JSON.stringify(orderData, null, 2)); // Debug log
       const response = await ordersAPI.create(orderData, isRtl);
       const branchData = branches.find((b) => b._id === orderData.branchId);
       socket.emit('orderCreated', {
-        _id: response.data._id || response.data.id,
+        _id: response.data.id,
         orderNumber: response.data.orderNumber,
         branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'Unknown', nameEn: t.branches?.unknown || 'Unknown' },
         items: response.data.items,
@@ -853,7 +830,7 @@ export function NewOrder() {
         _id: eventId,
         type: 'success',
         message: t.orderCreated,
-        data: { orderId: response.data._id || response.data.id, eventId },
+        data: { orderId: response.data.id, eventId },
         read: false,
         createdAt: new Date().toISOString(),
         sound: '/sounds/notification.mp3',
@@ -869,16 +846,8 @@ export function NewOrder() {
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left', toastId: eventId });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
-      let errorMessage = t.createError;
-      if (err.message.includes('Invalid product ID')) {
-        errorMessage = t.invalidProduct;
-      } else if (err.message.includes('Invalid quantity')) {
-        errorMessage = t.invalidQuantity;
-      } else if (err.message.includes('Price does not match')) {
-        errorMessage = t.invalidPrice;
-      }
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      setError(err.message || t.createError);
+      toast.error(err.message || t.createError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setSubmitting(false);
     }
