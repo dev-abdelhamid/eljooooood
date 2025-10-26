@@ -1308,7 +1308,7 @@ const ReportsAnalytics: React.FC = () => {
             <p className="text-xs text-gray-500">{t.subtitle}</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="flex flex-col md:flex-row justify-center  align-center items-center gap-3">
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => debouncedSearch(e.target.value)}
@@ -1393,7 +1393,7 @@ const ReportsAnalytics: React.FC = () => {
                   <p className="text-lg font-bold font-alexandria">{analytics.topProduct.displayName}</p>
                 </div>
               </div>
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="col-span-1 md:col-span-2  p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesTrends}</h3>
                 {analytics.salesTrends.length > 0 ? (
                   <div className="h-64">
@@ -1560,7 +1560,7 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'orders' && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 ">
               <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-3">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalOrders}</h4>
@@ -1634,8 +1634,8 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'returns' && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 ">
+              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 ">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalReturns}</h4>
                   <p className="text-lg font-bold font-alexandria">{returnAnalytics.totalReturns}</p>
@@ -1749,7 +1749,7 @@ const ReportsAnalytics: React.FC = () => {
                   <NoDataMessage message={t.noData} />
                 )}
               </div>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.totalSalesVsOrders}</h3>
                   {analytics.salesTrends.length > 0 ? (
