@@ -16,7 +16,7 @@ const style = document.createElement('style');
 style.textContent = `
   .text-2xs {
     font-size: 9px;
-    line-height: 1.2;
+    line-height: 1.1;
   }
 `;
 document.head.appendChild(style);
@@ -33,7 +33,7 @@ const Button: React.FC<{
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-2xs font-medium transition-all duration-200 ${
+      className={`flex items-center gap-0.5 rounded-full px-2 py-0.8 text-2xs font-medium transition-all duration-200 ${
         variant === 'primary' && !disabled
           ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
           : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -62,19 +62,19 @@ const ProductSearchInput: React.FC<{
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute px-1.5 py-1 inset-y-0 ${isRtl ? 'left-1.5' : 'right-1.5'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute px-1 py-0.8 inset-y-0 ${isRtl ? 'left-1' : 'right-1'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
-        <Search className="w-2.5 h-2.5" />
+        <Search className="w-2 h-2" />
       </motion.div>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-8 pr-2' : 'pr-8 pl-2'} px-1.5 py-1 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-7 pr-1.5' : 'pr-7 pl-1.5'} px-1 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -83,10 +83,10 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute px-1.5 py-1 inset-y-0 ${isRtl ? 'left-1.5' : 'right-1.5'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
+          className={`absolute px-1 py-0.8 inset-y-0 ${isRtl ? 'left-1' : 'right-1'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-2.5 h-2.5" />
+          <X className="w-2 h-2" />
         </motion.button>
       )}
     </div>
@@ -118,16 +118,16 @@ const ProductDropdown = ({
     <div className="relative group">
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-2.5 py-1 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-2xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-2 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-2xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label || (isRtl ? 'غير معروف' : 'Unknown')}</span>
         <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
-          <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+          <ChevronDown className="w-3 h-3 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
         </div>
       </button>
       {isOpen && !disabled && (
-        <div className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-100 z-20 max-h-40 overflow-y-auto scrollbar-none">
+        <div className="absolute w-full mt-0.5 bg-white rounded-lg shadow-lg border border-gray-100 z-20 max-h-36 overflow-y-auto scrollbar-none">
           {options.map((option) => (
             <div
               key={option.value}
@@ -135,7 +135,7 @@ const ProductDropdown = ({
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className="px-2.5 py-1 text-2xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              className="px-2 py-0.8 text-2xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
             >
               {option.label || (isRtl ? 'غير معروف' : 'Unknown')}
             </div>
@@ -205,19 +205,19 @@ const generatePDFHeader = (
   fontLoaded: boolean
 ) => {
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
-  doc.text(title, isRtl ? pageWidth - 3 : 3, 6, { align: isRtl ? 'right' : 'left' });
-  doc.setFontSize(6);
+  doc.text(title, isRtl ? pageWidth - 2.5 : 2.5, 5, { align: isRtl ? 'right' : 'left' });
+  doc.setFontSize(5);
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
     ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الطلبات: ${toArabicNumerals(totalOrders)} وحدة | إجمالي المرتجعات: ${toArabicNumerals(totalReturns)} وحدة`
     : `Total Products: ${totalItems} | Total Orders: ${totalOrders} units | Total Returns: ${totalReturns} units`;
-  doc.text(stats, isRtl ? pageWidth - 3 : 3, 10, { align: isRtl ? 'right' : 'left' });
-  doc.setLineWidth(0.2);
+  doc.text(stats, isRtl ? pageWidth - 2.5 : 2.5, 8, { align: isRtl ? 'right' : 'left' });
+  doc.setLineWidth(0.15);
   doc.setDrawColor(245, 158, 11);
-  doc.line(3, 12, pageWidth - 3, 12);
+  doc.line(2.5, 10, pageWidth - 2.5, 10);
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
@@ -226,13 +226,13 @@ const generatePDFHeader = (
   });
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(5);
+    doc.setFontSize(4);
     doc.setTextColor(150, 150, 150);
     doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     const footerText = isRtl
       ? `تم إنشاؤه بواسطة نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
       : `Generated by elgoodia Management System - ${currentDate}`;
-    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 3, { align: 'center' });
+    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 2.5, { align: 'center' });
   }
 };
 
@@ -245,13 +245,13 @@ const generatePDFTable = (
   fontName: string
 ) => {
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 3;
+  const margin = 2.5;
   const numColumns = headers.length;
   const maxTableWidth = pageWidth - 2 * margin;
-  const columnWidth = Math.min(12, maxTableWidth / numColumns);
-  const fontSizeHead = 6;
-  const fontSizeBody = 5;
-  const cellPadding = 0.4;
+  const columnWidth = Math.min(10, maxTableWidth / numColumns);
+  const fontSizeHead = 5.5;
+  const fontSizeBody = 4.5;
+  const cellPadding = 0.3;
   const columnStyles = headers.reduce((styles, _, i) => {
     styles[i] = {
       cellWidth: columnWidth,
@@ -266,8 +266,8 @@ const generatePDFTable = (
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 14,
-    margin: { top: 14, bottom: 8, left: margin, right: margin },
+    startY: 12,
+    margin: { top: 12, bottom: 6, left: margin, right: margin },
     tableWidth: 'auto',
     columnStyles,
     headStyles: {
@@ -433,39 +433,39 @@ const TableRow = memo(
   }) => {
     const totalRatio = row.displayedTotalRatio;
     return (
-      <tr className={`hover:bg-amber-50/30 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <td className="px-0.5 py-1 text-gray-700 text-center text-2xs">{formatNumber(index + 1, isRtl)}</td>
-        <td className="px-0.5 py-1 text-gray-700 text-center text-2xs truncate max-w-[40px]">{row.code}</td>
-        <td className="px-0.5 py-1 text-gray-700 text-center text-2xs truncate max-w-[100px]">{row.product}</td>
-        <td className="px-0.5 py-1 text-gray-700 text-center text-2xs truncate max-w-[40px]">{row.unit}</td>
+      <tr className={`hover:bg-amber-50/20 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium">{formatNumber(index + 1, isRtl)}</td>
+        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium truncate max-w-[35px]">{row.code}</td>
+        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium truncate max-w-[90px]">{row.product}</td>
+        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium truncate max-w-[35px]">{row.unit}</td>
         {displayedDays.map((_, i) => {
           const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
           const dailyTotal = Math.abs(row.displayedDailyOrders[i] - row.displayedDailyReturns[i]);
           return (
             <Fragment key={i}>
               <td
-                className={`px-0.5 py-1 text-center text-2xs font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50/30 text-green-600' : 'text-gray-700'}`}
+                className={`px-0.3 py-0.8 text-center text-2xs font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50/20 text-green-600' : 'text-gray-800'}`}
                 data-tooltip-id="orders-tooltip"
                 data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
               >
                 {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl, 'orders') : '-'}
               </td>
               <td
-                className={`px-0.5 py-1 text-center text-2xs font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50/30 text-red-600' : 'text-gray-700'}`}
+                className={`px-0.3 py-0.8 text-center text-2xs font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50/20 text-red-600' : 'text-gray-800'}`}
                 data-tooltip-id="returns-tooltip"
                 data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
               >
                 {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl, 'returns') : '-'}
               </td>
-              <td className={`px-0.5 py-1 text-center text-2xs font-medium ${getRatioColor(dailyRatio)}`}>
+              <td className={`px-0.3 py-0.8 text-center text-2xs font-medium ${getRatioColor(dailyRatio)}`}>
                 {formatNumber(dailyTotal, isRtl, 'total')}
               </td>
             </Fragment>
           );
         })}
-        <td className="px-0.5 py-1 text-gray-700 text-center text-2xs font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
-        <td className="px-0.5 py-1 text-gray-700 text-center text-2xs font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
-        <td className={`px-0.5 py-1 text-center text-2xs font-medium ${getRatioColor(totalRatio)}`}>
+        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
+        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
+        <td className={`px-0.3 py-0.8 text-center text-2xs font-medium ${getRatioColor(totalRatio)}`}>
           {formatNumber(totalRatio.toFixed(2), isRtl, 'ratio')}%
         </td>
       </tr>
@@ -764,9 +764,9 @@ const ReturnsVsOrdersPage: React.FC = () => {
   };
 
   const getRatioColor = (ratio: number) => {
-    if (ratio > 10) return 'text-red-600 bg-red-50/30';
-    if (ratio > 5) return 'text-yellow-600 bg-yellow-50/30';
-    return 'text-green-600 bg-green-50/30';
+    if (ratio > 10) return 'text-red-600 bg-red-50/20';
+    if (ratio > 5) return 'text-yellow-600 bg-yellow-50/20';
+    return 'text-green-600 bg-green-50/20';
   };
 
   const exportTable = (format: 'excel' | 'pdf') => {
@@ -841,48 +841,48 @@ const ReturnsVsOrdersPage: React.FC = () => {
 
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
     return (
-      <div className="text-center py-8 text-2xs font-medium text-gray-700 max-w-6xl mx-auto">
+      <div className="text-center py-6 text-2xs font-medium text-gray-700 max-w-5xl mx-auto">
         {isRtl ? 'لا يوجد صلاحية' : 'No access'}
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen px-2 py-4 max-w-6xl mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
-      <div className="mb-3 bg-white shadow-sm rounded-lg p-2 border border-gray-50">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <h2 className="text-sm font-bold text-gray-800 truncate">
+    <div className={`min-h-screen px-1.5 py-3 max-w-5xl mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
+      <div className="mb-2 bg-gray-50/80 shadow-sm rounded-lg p-1.5 border border-gray-50">
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 mb-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <h2 className="text-xs font-bold text-gray-800 truncate">
             {isRtl ? 'تقرير حركة الطلبات مقابل المرتجعات' : 'Orders vs Returns Report'} - {monthName}
           </h2>
-          <div className="flex gap-1.5 items-center flex-wrap">
+          <div className="flex gap-1 items-center flex-wrap">
             <ProductDropdown
               value={selectedMonth}
               onChange={setSelectedMonth}
               options={months}
               ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
-              className="w-28 sm:w-32"
+              className="w-24 sm:w-28"
             />
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
               disabled={filteredData.length === 0}
-              className="flex items-center gap-1"
+              className="flex items-center gap-0.5"
             >
-              <Upload className="w-2.5 h-2.5" />
+              <Upload className="w-2 h-2" />
               {isRtl ? 'Excel' : 'Excel'}
             </Button>
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
               disabled={filteredData.length === 0}
-              className="flex items-center gap-1"
+              className="flex items-center gap-0.5"
             >
-              <Upload className="w-2.5 h-2.5" />
+              <Upload className="w-2 h-2" />
               {isRtl ? 'PDF' : 'PDF'}
             </Button>
           </div>
         </div>
-        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 items-center mb-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5 items-center mb-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -905,18 +905,18 @@ const ReturnsVsOrdersPage: React.FC = () => {
             className="max-w-none"
           />
           {selectedPeriod === 'custom' && (
-            <div className="col-span-1 sm:col-span-2 md:col-span-3 flex flex-col sm:flex-row gap-2">
+            <div className="col-span-1 sm:col-span-2 md:col-span-3 flex flex-col sm:flex-row gap-1.5">
               <input
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="flex-1 px-1.5 py-1 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
+                className="flex-1 px-1 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
               />
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="flex-1 px-1.5 py-1 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
+                className="flex-1 px-1 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
               />
             </div>
           )}
@@ -929,49 +929,49 @@ const ReturnsVsOrdersPage: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
-          className="text-center py-8 bg-white shadow-sm rounded-lg border border-gray-50"
+          className="text-center py-6 bg-white shadow-sm rounded-lg border border-gray-50"
         >
           <p className="text-gray-500 text-2xs font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
         </motion.div>
       ) : (
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: 'easeOut' }}
           className="overflow-x-auto rounded-lg shadow-sm border border-gray-50 bg-white"
         >
-          <table className="min-w-full divide-y divide-gray-50 text-2xs">
+          <table className="min-w-full divide-y divide-gray-100 text-2xs">
             <thead className="bg-amber-50/50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[25px] text-xs">{isRtl ? 'رقم' : 'No.'}</th>
-                <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[40px] text-xs">{isRtl ? 'الكود' : 'Code'}</th>
-                <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[100px] text-xs">{isRtl ? 'المنتج' : 'Product'}</th>
-                <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[40px] text-xs">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">{isRtl ? 'رقم' : 'No.'}</th>
+                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[35px] text-xs">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[90px] text-xs">{isRtl ? 'المنتج' : 'Product'}</th>
+                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[35px] text-xs">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                 {displayedDays.map((day, i) => (
                   <Fragment key={i}>
-                    <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[25px] text-xs">
+                    <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">
                       {isRtl ? `${day} - طلبات` : `${day} - Orders`}
                     </th>
-                    <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[25px] text-xs">
+                    <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">
                       {isRtl ? `${day} - مرتجعات` : `${day} - Returns`}
                     </th>
-                    <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[25px] text-xs">
+                    <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">
                       {isRtl ? `${day} - إجمالي` : `${day} - Total`}
                     </th>
                   </Fragment>
                 ))}
-                <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[60px] text-xs">
+                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[50px] text-xs">
                   {isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
                 </th>
-                <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[60px] text-xs">
+                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[50px] text-xs">
                   {isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
                 </th>
-                <th className="px-0.5 py-1 font-semibold text-gray-700 text-center min-w-[60px] text-xs">
+                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[50px] text-xs">
                   {isRtl ? 'نسبة إجمالية %' : 'Total Ratio %'}
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100">
               {filteredData.map((row, index) => (
                 <TableRow
                   key={row.id}
@@ -984,36 +984,36 @@ const ReturnsVsOrdersPage: React.FC = () => {
                   getRatioColor={getRatioColor}
                 />
               ))}
-              <tr className={`font-semibold bg-gray-50/30 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-0.5 py-1 text-gray-800 text-center text-2xs" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+              <tr className={`font-semibold bg-gray-50/20 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                 {displayedDays.map((_, i) => (
                   <Fragment key={i}>
-                    <td className="px-0.5 py-1 text-gray-800 text-center text-2xs">
+                    <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">
                       {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl, 'orders')}
                     </td>
-                    <td className="px-0.5 py-1 text-gray-800 text-center text-2xs">
+                    <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">
                       {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl, 'returns')}
                     </td>
-                    <td className="px-0.5 py-1 text-gray-800 text-center text-2xs">
+                    <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">
                       {formatNumber(Math.abs(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0) - filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0)), isRtl, 'total')}
                     </td>
                   </Fragment>
                 ))}
-                <td className="px-0.5 py-1 text-gray-800 text-center text-2xs">{formatNumber(grandTotalOrders, isRtl)}</td>
-                <td className="px-0.5 py-1 text-gray-800 text-center text-2xs">{formatNumber(grandTotalReturns, isRtl)}</td>
-                <td className="px-0.5 py-1 text-gray-800 text-center text-2xs">{formatNumber(Number(grandTotalRatio), isRtl, 'ratio')}%</td>
+                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">{formatNumber(grandTotalOrders, isRtl)}</td>
+                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">{formatNumber(grandTotalReturns, isRtl)}</td>
+                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">{formatNumber(Number(grandTotalRatio), isRtl, 'ratio')}%</td>
               </tr>
             </tbody>
           </table>
           <Tooltip
             id="orders-tooltip"
             place="top"
-            className="custom-tooltip whitespace-pre-line z-[9999] shadow-sm bg-white border border-gray-100 rounded-md p-1.5 max-w-xs text-2xs text-gray-800 font-medium"
+            className="custom-tooltip whitespace-pre-line z-[9999] shadow-sm bg-white border border-gray-100 rounded-md p-1 max-w-xs text-2xs text-gray-800 font-medium"
           />
           <Tooltip
             id="returns-tooltip"
             place="top"
-            className="custom-tooltip whitespace-pre-line z-[9999] shadow-sm bg-white border border-gray-100 rounded-md p-1.5 max-w-xs text-2xs text-gray-800 font-medium"
+            className="custom-tooltip whitespace-pre-line z-[9999] shadow-sm bg-white border border-gray-100 rounded-md p-1 max-w-xs text-2xs text-gray-800 font-medium"
           />
         </motion.div>
       )}
