@@ -371,7 +371,7 @@ export const OrderDetailsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center ">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-amber-600"></div>
       </div>
     );
@@ -382,7 +382,7 @@ export const OrderDetailsPage: React.FC = () => {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="min-h-screen flex items-center justify-center bg-gray-50 px-4"
+        className="min-h-screen flex items-center justify-center  px-4"
       >
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 max-w-md text-center">
           <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-3" />
@@ -417,7 +417,7 @@ export const OrderDetailsPage: React.FC = () => {
           <div className="flex items-center  gap-2">
             <Button
               onClick={() => navigate('/orders')}
-              className=" p-5 rounded-full  bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center"
+              className="px-4 py-1.5 bg-amber-600 text-white hover:bg-amber-700 text-sm rounded-lg"
               aria-label={t('common.back')}
 
             >
@@ -428,8 +428,7 @@ export const OrderDetailsPage: React.FC = () => {
               )}
             </Button>
             <h1 className="text-xl font-semibold  text-gray-800">
-              {t('orders.order_details')}  
-              <span className="text-amber-600">{order.orderNumber}</span>
+              {t('orders.order_details', { orderNumber: order.orderNumber })}
             </h1>
           </div>
         </motion.div>
