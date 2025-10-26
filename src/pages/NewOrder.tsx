@@ -759,11 +759,10 @@ export function NewOrder() {
         </button>
       )}
 
-      <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6' : ''}`}>
+     <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6' : ''}`}>
         <div className={orderItems.length > 0 ? 'lg:col-span-2' : ''}>
           <div className="p-6 bg-white rounded-xl shadow-sm border">
-           <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6' : ''}`}>
-      
+            {/* البحث: 2 col | الفلتر: 1 col */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2">
                 <ProductSearchInput
