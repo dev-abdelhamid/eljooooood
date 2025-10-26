@@ -287,6 +287,7 @@ const translations = {
     "salesReport.productSales": "مبيعات المنتجات",
     "salesReport.departmentSales": "مبيعات الأقسام",
     "salesReport.sale_success": "تم إنشاء المبيعة بنجاح",
+    "returns-vs-orders": "المرتجعات مقابل الطلبات",
 
     // الأقسام
     "departments": "الأقسام",
@@ -422,6 +423,8 @@ const translations = {
     "orders.review": " orders Review",
     "sales.review": " sales Review",
     "productionTasks": " production tasks ",
+    "returns-vs-orders": "returns vs orders",
+
 
     "returns.review": " returns Review",
 

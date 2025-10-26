@@ -89,6 +89,7 @@ export function Sidebar({
       { path: '/dailyOrdersSummary', icon: ArrowRightLeft , label: t('dailyOrdersSummary') },
 
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
+            { path: '/returns-vs-orders', icon: BarChart2, label: t('returns-vs-orders') },
       { path: '/sales', icon: TrendingUp, label: t('sales') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },
@@ -120,6 +121,7 @@ export function Sidebar({
       { path: '/dailyOrdersSummary', icon: ArrowRightLeft , label: t('dailyOrdersSummary') },
 
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
+      { path: '/returns-vs-orders', icon: BarChart2, label: t('returns-vs-orders') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },
           // New separate report links for production
