@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, AlertCircle, Clock, Package, Truck, CheckCircle, X } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Clock, Package, Truck, CheckCircle, X , ChevronRight} from 'lucide-react';
 import { ordersAPI, chefsAPI } from '../services/api';
 import { Order, Chef, AssignChefsForm } from '../types';
 import { Input } from '../components/UI/Input';
@@ -407,20 +407,24 @@ export const OrderDetailsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen px-4 py-6">
+      <div className=" mx-auto">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between mb-4"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center  gap-2">
             <Button
               onClick={() => navigate('/orders')}
-              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full"
+              className="p-1 rounded-full bg-gray-100 hover:bg-gray-200"
               aria-label={t('common.back')}
             >
-              <ChevronLeft className="w-5 h-5 text-gray-600" />
+              {isRtl ? (
+                           <ChevronLeft className="w-5 h-5 text-gray-700" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-gray-700" />
+              )}
             </Button>
             <h1 className="text-xl font-semibold text-gray-800">
               {t('orders.order_details', { orderNumber: order.orderNumber })}
