@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo  , useRef} from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { salesAPI, ordersAPI, returnsAPI, branchesAPI } from '../services/api';
@@ -496,7 +496,7 @@ const calculateTrends = (list: any[], dateField: string, valueField: string, cou
   const startD = new Date(start);
   const endD = new Date(end);
   for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
-    const period = formatDate(d, lang);
+    const period = `${d.getDate()}/${d.getMonth() + 1}`;
     const dayList = list.filter(item => new Date(item[dateField]).toDateString() === d.toDateString());
     const totalValue = dayList.reduce((sum, item) => sum + (item.total || 0), 0);
     const totalCount = dayList.length;
@@ -1308,7 +1308,7 @@ const ReportsAnalytics: React.FC = () => {
             <p className="text-xs text-gray-500">{t.subtitle}</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => debouncedSearch(e.target.value)}
@@ -1374,8 +1374,8 @@ const ReportsAnalytics: React.FC = () => {
           className="space-y-6"
         >
           {activeTab === 'sales' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 col-span-3 lg:col-span-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalSales}</h4>
                   <p className="text-lg font-bold font-alexandria">{analytics.totalSales.toFixed(2)} {t.currency}</p>
@@ -1393,7 +1393,7 @@ const ReportsAnalytics: React.FC = () => {
                   <p className="text-lg font-bold font-alexandria">{analytics.topProduct.displayName}</p>
                 </div>
               </div>
-              <div className="col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesTrends}</h3>
                 {analytics.salesTrends.length > 0 ? (
                   <div className="h-64">
@@ -1541,7 +1541,7 @@ const ReportsAnalytics: React.FC = () => {
                   className="text-xs mt-4"
                 />
               </div>
-              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 col-span-3 md:col-span-1 lg:col-span-3">
+              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 col-span-1 md:col-span-2 lg:col-span-3">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.topCustomers}</h3>
                 <DataTable
                   title={t.topCustomers}
@@ -1560,8 +1560,8 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'orders' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 col-span-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-3">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalOrders}</h4>
                   <p className="text-lg font-bold font-alexandria">{orderAnalytics.totalOrders}</p>
@@ -1575,7 +1575,7 @@ const ReportsAnalytics: React.FC = () => {
                   <p className="text-lg font-bold font-alexandria">{orderAnalytics.averageOrderValue.toFixed(2)} {t.currency}</p>
                 </div>
               </div>
-              <div className="col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.orderTrends}</h3>
                 {orderAnalytics.orderTrends.length > 0 ? (
                   <div className="h-64">
@@ -1634,8 +1634,8 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'returns' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 col-span-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-3">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalReturns}</h4>
                   <p className="text-lg font-bold font-alexandria">{returnAnalytics.totalReturns}</p>
@@ -1649,7 +1649,7 @@ const ReportsAnalytics: React.FC = () => {
                   <p className="text-lg font-bold font-alexandria">{returnAnalytics.averageReturnValue.toFixed(2)} {t.currency}</p>
                 </div>
               </div>
-              <div className="col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.returnTrends}</h3>
                 {returnAnalytics.returnTrends.length > 0 ? (
                   <div className="h-64">
@@ -1708,8 +1708,8 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'trends' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-1">
+              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesTrends}</h3>
                 {analytics.salesTrends.length > 0 ? (
                   <div className="h-64">
@@ -1719,7 +1719,7 @@ const ReportsAnalytics: React.FC = () => {
                   <NoDataMessage message={t.noData} />
                 )}
               </div>
-              <div className="col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.orderTrends}</h3>
                 {orderAnalytics.orderTrends.length > 0 ? (
                   <div className="h-64">
@@ -1729,7 +1729,7 @@ const ReportsAnalytics: React.FC = () => {
                   <NoDataMessage message={t.noData} />
                 )}
               </div>
-              <div className="col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.returnTrends}</h3>
                 {returnAnalytics.returnTrends.length > 0 ? (
                   <div className="h-64">
@@ -1739,7 +1739,7 @@ const ReportsAnalytics: React.FC = () => {
                   <NoDataMessage message={t.noData} />
                 )}
               </div>
-              <div className="col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.comparisons}</h3>
                 {analytics.salesTrends.length > 0 ? (
                   <div className="h-64">
@@ -1749,35 +1749,37 @@ const ReportsAnalytics: React.FC = () => {
                   <NoDataMessage message={t.noData} />
                 )}
               </div>
-              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.totalSalesVsOrders}</h3>
-                {analytics.salesTrends.length > 0 ? (
-                  <div className="h-64">
-                    <Line data={chartData.salesVsOrders} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.totalSalesVsOrders } } }} />
-                  </div>
-                ) : (
-                  <NoDataMessage message={t.noData} />
-                )}
-              </div>
-              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesVsReturns}</h3>
-                {analytics.salesTrends.length > 0 ? (
-                  <div className="h-64">
-                    <Line data={chartData.salesVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.salesVsReturns } } }} />
-                  </div>
-                ) : (
-                  <NoDataMessage message={t.noData} />
-                )}
-              </div>
-              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.ordersVsReturns}</h3>
-                {orderAnalytics.orderTrends.length > 0 ? (
-                  <div className="h-64">
-                    <Line data={chartData.ordersVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.ordersVsReturns } } }} />
-                  </div>
-                ) : (
-                  <NoDataMessage message={t.noData} />
-                )}
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.totalSalesVsOrders}</h3>
+                  {analytics.salesTrends.length > 0 ? (
+                    <div className="h-64">
+                      <Line data={chartData.salesVsOrders} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.totalSalesVsOrders } } }} />
+                    </div>
+                  ) : (
+                    <NoDataMessage message={t.noData} />
+                  )}
+                </div>
+                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesVsReturns}</h3>
+                  {analytics.salesTrends.length > 0 ? (
+                    <div className="h-64">
+                      <Line data={chartData.salesVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.salesVsReturns } } }} />
+                    </div>
+                  ) : (
+                    <NoDataMessage message={t.noData} />
+                  )}
+                </div>
+                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.ordersVsReturns}</h3>
+                  {orderAnalytics.orderTrends.length > 0 ? (
+                    <div className="h-64">
+                      <Line data={chartData.ordersVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.ordersVsReturns } } }} />
+                    </div>
+                  ) : (
+                    <NoDataMessage message={t.noData} />
+                  )}
+                </div>
               </div>
             </div>
           )}
