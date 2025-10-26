@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Fragment, memo } from 'react';
 import { motion } from 'framer-motion';
 import { Search, X, Upload, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -10,6 +10,16 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
+
+// Define custom text-2xs for smaller font size
+const style = document.createElement('style');
+style.textContent = `
+  .text-2xs {
+    font-size: 9px;
+    line-height: 1.2;
+  }
+`;
+document.head.appendChild(style);
 
 // Button component
 const Button: React.FC<{
@@ -23,7 +33,7 @@ const Button: React.FC<{
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-2 rounded-full flex-row px-4 py-2 text-xs font-medium transition-all duration-200 ${
+      className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-2xs font-medium transition-all duration-200 ${
         variant === 'primary' && !disabled
           ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
           : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -52,19 +62,19 @@ const ProductSearchInput: React.FC<{
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute px-2 py-1.5 inset-y-0 ${isRtl ? 'left-2' : 'right-2'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
-        <Search className="w-4 h-4" />
+        <Search className="w-3 h-3" />
       </motion.div>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-10 pr-3' : 'pr-10 pl-3'} px-2 py-1.5 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -73,10 +83,10 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
+          className={`absolute px-2 py-1.5 inset-y-0 ${isRtl ? 'left-2' : 'right-2'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-4 h-4" />
+          <X className="w-3 h-3" />
         </motion.button>
       )}
     </div>
@@ -108,16 +118,16 @@ const ProductDropdown = ({
     <div className="relative group">
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-3 py-1.5 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-2xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label || (isRtl ? 'غير معروف' : 'Unknown')}</span>
         <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
-          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+          <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
         </div>
       </button>
       {isOpen && !disabled && (
-        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+        <div className="absolute w-full mt-1 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-48 overflow-y-auto scrollbar-none">
           {options.map((option) => (
             <div
               key={option.value}
@@ -125,7 +135,7 @@ const ProductDropdown = ({
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              className="px-3 py-1.5 text-2xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
             >
               {option.label || (isRtl ? 'غير معروف' : 'Unknown')}
             </div>
@@ -193,19 +203,19 @@ const generatePDFHeader = (
   fontLoaded: boolean
 ) => {
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-  doc.setFontSize(16);
+  doc.setFontSize(12);
   doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
-  doc.text(title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
-  doc.setFontSize(9);
+  doc.text(title, isRtl ? pageWidth - 10 : 10, 8, { align: isRtl ? 'right' : 'left' });
+  doc.setFontSize(7);
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
     ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الطلبات: ${toArabicNumerals(totalOrders)} وحدة | إجمالي المرتجعات: ${toArabicNumerals(totalReturns)} وحدة`
     : `Total Products: ${totalItems} | Total Orders: ${totalOrders} units | Total Returns: ${totalReturns} units`;
-  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
-  doc.setLineWidth(0.5);
+  doc.text(stats, isRtl ? pageWidth - 10 : 10, 14, { align: isRtl ? 'right' : 'left' });
+  doc.setLineWidth(0.3);
   doc.setDrawColor(245, 158, 11);
-  doc.line(20, 25, pageWidth - 20, 25);
+  doc.line(10, 18, pageWidth - 10, 18);
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
@@ -214,13 +224,13 @@ const generatePDFHeader = (
   });
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(8);
+    doc.setFontSize(6);
     doc.setTextColor(150, 150, 150);
     doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     const footerText = isRtl
       ? `تم إنشاؤه بواسطة نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
       : `Generated by elgoodia Management System - ${currentDate}`;
-    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 5, { align: 'center' });
   }
 };
 
@@ -233,32 +243,30 @@ const generatePDFTable = (
   fontName: string
 ) => {
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 10;
-  let tableWidth = 0;
-  headers.forEach(header => {
-    tableWidth += doc.getTextWidth(header) + 10;
-  });
-  const leftMargin = (pageWidth - tableWidth) / 2;
+  const margin = 5;
   const numColumns = headers.length;
-  const fontSizeHead = Math.max(5, Math.min(8, Math.floor(280 / numColumns)));
-  const fontSizeBody = fontSizeHead - 1;
-  const cellPadding = numColumns > 20 ? 0.5 : 1;
-  const columnStyles = {};
-  headers.forEach((_, i) => {
-    columnStyles[i] = {
-      cellWidth: 'auto',
-      minCellWidth: 4,
+  const maxTableWidth = pageWidth - 2 * margin;
+  const columnWidth = Math.min(15, maxTableWidth / numColumns); // Dynamic column width
+  const fontSizeHead = 7;
+  const fontSizeBody = 6;
+  const cellPadding = 0.5;
+  const columnStyles = headers.reduce((styles, _, i) => {
+    styles[i] = {
+      cellWidth: columnWidth,
       halign: 'center',
       fontStyle: 'bold',
+      overflow: 'linebreak',
     };
-  });
+    return styles;
+  }, {});
+
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 30,
-    margin: { top: 10, bottom: 10, left: leftMargin, right: pageWidth - leftMargin - tableWidth },
-    tableWidth: tableWidth,
+    startY: 20,
+    margin: { top: 20, bottom: 10, left: margin, right: margin },
+    tableWidth: 'auto',
     columnStyles,
     headStyles: {
       fillColor: [245, 158, 11],
@@ -356,16 +364,16 @@ const exportToExcel = (
       ws['!views'] = [{ RTL: true }];
     }
     ws['!cols'] = [
-      { wch: 5 },
+      { wch: 4 },
+      { wch: 8 },
+      { wch: 20 },
+      { wch: 8 },
+      ...headers.slice(4, -3).map(() => ({ wch: 5 })),
       { wch: 10 },
-      { wch: 25 },
       { wch: 10 },
-      ...headers.slice(4, -3).map(() => ({ wch: 6 })),
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
+      { wch: 10 },
     ];
-    ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
+    ws['!rows'] = Array(rows.length + 1).fill({ hpt: 12 });
     const amberColor = 'FFF59E0B';
     const whiteColor = 'FFFFFFFF';
     const blackColor = 'FF000000';
@@ -442,6 +450,66 @@ interface Branch {
   nameEn: string;
   displayName: string;
 }
+
+// Memoized TableRow component
+const TableRow = memo(
+  ({
+    row,
+    index,
+    displayedDays,
+    isRtl,
+    selectedBranch,
+    getTooltipContent,
+    getRatioColor,
+  }: {
+    row: OrdersVsReturnsRow;
+    index: number;
+    displayedDays: string[];
+    isRtl: boolean;
+    selectedBranch: string;
+    getTooltipContent: (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: string) => string;
+    getRatioColor: (ratio: number) => string;
+  }) => {
+    const totalRatio = row.displayedTotalRatio;
+    return (
+      <tr className={`hover:bg-amber-50/50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <td className="px-1 py-1.5 text-gray-700 text-center text-2xs">{formatNumber(index + 1, isRtl)}</td>
+        <td className="px-1 py-1.5 text-gray-700 text-center text-2xs truncate max-w-[80px]">{row.code}</td>
+        <td className="px-1 py-1.5 text-gray-700 text-center text-2xs truncate max-w-[150px]">{row.product}</td>
+        <td className="px-1 py-1.5 text-gray-700 text-center text-2xs truncate max-w-[60px]">{row.unit}</td>
+        {displayedDays.map((_, i) => {
+          const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
+          return (
+            <Fragment key={i}>
+              <td
+                className={`px-1 py-1.5 text-center text-2xs font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50/50 text-green-600' : 'text-gray-700'}`}
+                data-tooltip-id="orders-tooltip"
+                data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
+              >
+                {row.displayedDailyOrders[i] !== 0 ? `${row.displayedDailyOrders[i] > 0 ? '+' : ''}${formatNumber(row.displayedDailyOrders[i], isRtl)}` : '-'}
+              </td>
+              <td
+                className={`px-1 py-1.5 text-center text-2xs font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50/50 text-red-600' : 'text-gray-700'}`}
+                data-tooltip-id="returns-tooltip"
+                data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
+              >
+                {row.displayedDailyReturns[i] !== 0 ? `${row.displayedDailyReturns[i] > 0 ? '+' : ''}${formatNumber(row.displayedDailyReturns[i], isRtl)}` : '-'}
+              </td>
+              <td className={`px-1 py-1.5 text-center text-2xs font-medium ${getRatioColor(dailyRatio)}`}>
+                {formatNumber(dailyRatio.toFixed(2), isRtl)}%
+              </td>
+            </Fragment>
+          );
+        })}
+        <td className="px-1 py-1.5 text-gray-700 text-center text-2xs font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
+        <td className="px-1 py-1.5 text-gray-700 text-center text-2xs font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
+        <td className={`px-1 py-1.5 text-center text-2xs font-medium ${getRatioColor(totalRatio)}`}>
+          {formatNumber(totalRatio.toFixed(2), isRtl)}%
+        </td>
+      </tr>
+    );
+  }
+);
 
 // Main ReturnsVsOrdersPage component
 const ReturnsVsOrdersPage: React.FC = () => {
@@ -734,9 +802,9 @@ const ReturnsVsOrdersPage: React.FC = () => {
   };
 
   const getRatioColor = (ratio: number) => {
-    if (ratio > 10) return 'text-red-600 bg-red-50';
-    if (ratio > 5) return 'text-yellow-600 bg-yellow-50';
-    return 'text-green-600 bg-green-50';
+    if (ratio > 10) return 'text-red-600 bg-red-50/50';
+    if (ratio > 5) return 'text-yellow-600 bg-yellow-50/50';
+    return 'text-green-600 bg-green-50/50';
   };
 
   const exportTable = (format: 'excel' | 'pdf') => {
@@ -811,82 +879,82 @@ const ReturnsVsOrdersPage: React.FC = () => {
 
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
     return (
-      <div className="text-center py-12 text-sm font-medium text-gray-700">
+      <div className="text-center py-10 text-2xs font-medium text-gray-700 max-w-7xl mx-auto">
         {isRtl ? 'لا يوجد صلاحية' : 'No access'}
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
-      <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <h2 className="text-lg font-bold text-gray-800">
+    <div className={`min-h-screen px-2 sm:px-4 py-6 max-w-7xl mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
+      <div className="mb-4 bg-white shadow-sm rounded-lg p-3 border border-gray-100">
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <h2 className="text-base font-bold text-gray-800 truncate">
             {isRtl ? 'تقرير حركة الطلبات مقابل المرتجعات' : 'Orders vs Returns Report'} - {monthName}
           </h2>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <ProductDropdown
               value={selectedMonth}
               onChange={setSelectedMonth}
               options={months}
               ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
-              className="w-40"
+              className="w-32 sm:w-36"
             />
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
               disabled={filteredData.length === 0}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1"
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="w-3 h-3" />
               {isRtl ? 'Excel' : 'Excel'}
             </Button>
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
               disabled={filteredData.length === 0}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1"
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="w-3 h-3" />
               {isRtl ? 'PDF' : 'PDF'}
             </Button>
           </div>
         </div>
-        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-center mb-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={isRtl ? 'بحث حسب المنتج أو الكود' : 'Search by product or code'}
             ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
-            className="md:col-span-1 max-w-none"
+            className="max-w-none"
           />
           <ProductDropdown
             value={selectedBranch}
             onChange={setSelectedBranch}
             options={branchOptions}
             ariaLabel={isRtl ? 'اختر الفرع' : 'Select branch'}
-            className="md:col-span-1"
+            className="max-w-none"
           />
           <ProductDropdown
             value={selectedPeriod}
             onChange={setSelectedPeriod}
             options={periodOptions}
             ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
-            className="md:col-span-1"
+            className="max-w-none"
           />
           {selectedPeriod === 'custom' && (
-            <div className="col-span-1 md:col-span-3 flex flex-col sm:flex-row gap-4">
+            <div className="col-span-1 sm:col-span-2 md:col-span-3 flex flex-col sm:flex-row gap-3">
               <input
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
               />
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
               />
             </div>
           )}
@@ -899,100 +967,72 @@ const ReturnsVsOrdersPage: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
-          className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
+          className="text-center py-10 bg-white shadow-sm rounded-lg border border-gray-100"
         >
-          <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+          <p className="text-gray-500 text-2xs font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
         </motion.div>
       ) : (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="overflow-x-auto rounded-lg shadow-sm border border-gray-100 bg-white"
         >
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
-            <thead className="bg-amber-50 sticky top-0 z-10">
+          <table className="min-w-full divide-y divide-gray-100 text-2xs">
+            <thead className="bg-amber-50/70 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'الكود' : 'Code'}</th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[200px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[30px] text-xs">{isRtl ? 'رقم' : 'No.'}</th>
+                <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[50px] text-xs">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[120px] text-xs">{isRtl ? 'المنتج' : 'Product'}</th>
+                <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[50px] text-xs">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                 {displayedDays.map((day, i) => (
                   <Fragment key={i}>
-                    <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
+                    <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[40px] text-xs">
                       {isRtl ? `${day} - طلبات` : `${day} - Orders`}
                     </th>
-                    <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
+                    <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[40px] text-xs">
                       {isRtl ? `${day} - مرتجعات` : `${day} - Returns`}
                     </th>
-                    <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
+                    <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[40px] text-xs">
                       {isRtl ? `${day} - نسبة %` : `${day} - Ratio %`}
                     </th>
                   </Fragment>
                 ))}
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[70px] text-xs">
                   {isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
                 </th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[70px] text-xs">
                   {isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
                 </th>
-                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                <th className="px-1 py-1.5 font-semibold text-gray-700 text-center min-w-[70px] text-xs">
                   {isRtl ? 'نسبة إجمالية %' : 'Total Ratio %'}
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredData.map((row, index) => {
-                const totalRatio = row.displayedTotalRatio;
-                return (
-                  <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-2 py-2 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                    <td className="px-2 py-2 text-gray-700 text-center truncate">{row.code}</td>
-                    <td className="px-2 py-2 text-gray-700 text-center truncate">{row.product}</td>
-                    <td className="px-2 py-2 text-gray-700 text-center truncate">{row.unit}</td>
-                    {displayedDays.map((_, i) => {
-                      const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
-                      return (
-                        <Fragment key={i}>
-                          <td
-                            className={`px-1 py-2 text-center font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
-                            data-tooltip-id="orders-tooltip"
-                            data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
-                          >
-                            {row.displayedDailyOrders[i] !== 0 ? `${row.displayedDailyOrders[i] > 0 ? '+' : ''}${formatNumber(row.displayedDailyOrders[i], isRtl)}` : '-'}
-                          </td>
-                          <td
-                            className={`px-1 py-2 text-center font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'}`}
-                            data-tooltip-id="returns-tooltip"
-                            data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
-                          >
-                            {row.displayedDailyReturns[i] !== 0 ? `${row.displayedDailyReturns[i] > 0 ? '+' : ''}${formatNumber(row.displayedDailyReturns[i], isRtl)}` : '-'}
-                          </td>
-                          <td className={`px-1 py-2 text-center font-medium ${getRatioColor(dailyRatio)}`}>
-                            {formatNumber(dailyRatio.toFixed(2), isRtl)}%
-                          </td>
-                        </Fragment>
-                      );
-                    })}
-                    <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
-                    <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
-                    <td className={`px-2 py-2 text-center font-medium ${getRatioColor(totalRatio)}`}>
-                      {formatNumber(totalRatio.toFixed(2), isRtl)}%
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-2 py-2 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+            <tbody className="divide-y divide-gray-100">
+              {filteredData.map((row, index) => (
+                <TableRow
+                  key={row.id}
+                  row={row}
+                  index={index}
+                  displayedDays={displayedDays}
+                  isRtl={isRtl}
+                  selectedBranch={selectedBranch}
+                  getTooltipContent={getTooltipContent}
+                  getRatioColor={getRatioColor}
+                />
+              ))}
+              <tr className={`font-semibold bg-gray-50/70 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <td className="px-1 py-1.5 text-gray-800 text-center text-2xs" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                 {displayedDays.map((_, i) => (
                   <Fragment key={i}>
-                    <td className="px-1 py-2 text-gray-800 text-center">
+                    <td className="px-1 py-1.5 text-gray-800 text-center text-2xs">
                       {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl)}
                     </td>
-                    <td className="px-1 py-2 text-gray-800 text-center">
+                    <td className="px-1 py-1.5 text-gray-800 text-center text-2xs">
                       {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl)}
                     </td>
-                    <td className="px-1 py-2 text-gray-800 text-center">
+                    <td className="px-1 py-1.5 text-gray-800 text-center text-2xs">
                       {(() => {
                         const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0);
                         const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0);
@@ -1002,21 +1042,21 @@ const ReturnsVsOrdersPage: React.FC = () => {
                     </td>
                   </Fragment>
                 ))}
-                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
-                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
-                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(Number(grandTotalRatio), isRtl)}%</td>
+                <td className="px-1 py-1.5 text-gray-800 text-center text-2xs">{formatNumber(grandTotalOrders, isRtl)}</td>
+                <td className="px-1 py-1.5 text-gray-800 text-center text-2xs">{formatNumber(grandTotalReturns, isRtl)}</td>
+                <td className="px-1 py-1.5 text-gray-800 text-center text-2xs">{formatNumber(Number(grandTotalRatio), isRtl)}%</td>
               </tr>
             </tbody>
           </table>
           <Tooltip
             id="orders-tooltip"
             place="top"
-            className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
+            className="custom-tooltip whitespace-pre-line z-[9999] shadow-md bg-white border border-gray-200 rounded-md p-2 max-w-xs text-2xs text-gray-800 font-medium"
           />
           <Tooltip
             id="returns-tooltip"
             place="top"
-            className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
+            className="custom-tooltip whitespace-pre-line z-[9999] shadow-md bg-white border border-gray-200 rounded-md p-2 max-w-xs text-2xs text-gray-800 font-medium"
           />
         </motion.div>
       )}
