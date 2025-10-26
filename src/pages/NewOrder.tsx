@@ -816,7 +816,7 @@ export function NewOrder() {
         </div>
 
         {orderItems.length > 0 && (
-          <div className="md:sticky lg:col-span-1 space-y-6" ref={summaryRef}>
+          <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-10rem)] overflow-y-auto scrollbar-none" ref={summaryRef}>
             <div className="p-6 bg-white rounded-xl shadow-sm border">
               <h3 className="text-xl font-bold mb-4">{t.orderSummary}</h3>
               {orderItems.map(item => (

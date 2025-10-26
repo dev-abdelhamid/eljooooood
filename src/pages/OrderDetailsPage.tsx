@@ -12,8 +12,6 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Button } from '../components/UI/Button';
 
-
-
 export const OrderDetailsPage: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -31,38 +29,41 @@ export const OrderDetailsPage: React.FC = () => {
   const [returnNotes, setReturnNotes] = useState<{ [returnId: string]: string }>({});
 
   const statusIcons = {
-    pending: <Clock className="w-5 h-5" />,
-    approved: <CheckCircle className="w-5 h-5" />,
-    in_production: <Package className="w-5 h-5" />,
-    in_transit: <Truck className="w-5 h-5" />,
-    delivered: <CheckCircle className="w-5 h-5" />,
-    completed: <CheckCircle className="w-5 h-5" />,
-    cancelled: <AlertCircle className="w-5 h-5" />,
+    pending: <Clock className="w-4 h-4" />,
+    approved: <CheckCircle className="w-4 h-4" />,
+    in_production: <Package className="w-4 h-4" />,
+    in_transit: <Truck className="w-4 h-4" />,
+    delivered: <CheckCircle className="w-4 h-4" />,
+    completed: <CheckCircle className="w-4 h-4" />,
+    cancelled: <AlertCircle className="w-4 h-4" />,
   };
 
-
-    const formatDateTime = useCallback((dateString: string) => {
-    const date = new Date(dateString);
-    if (isRtl) {
-      const formatter = new Intl.DateTimeFormat('ar-EG', {
+  const formatDateTime = useCallback(
+    (dateString: string) => {
+      const date = new Date(dateString);
+      if (isRtl) {
+        const formatter = new Intl.DateTimeFormat('ar-EG', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        return formatter.format(date).replace('AM', 'ص').replace('PM', 'م');
+      }
+      return date.toLocaleString('en-US', {
         year: 'numeric',
-        month: 'long',
+        month: 'short',
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
       });
-      return formatter.format(date).replace('AM', 'ص').replace('PM', 'م');
-    }
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  }, [isRtl]); 
+    },
+    [isRtl]
+  );
+
   const fetchOrder = useCallback(async () => {
     if (!id || !user) {
       setError(t('errors.invalid_input'));
@@ -79,15 +80,15 @@ export const OrderDetailsPage: React.FC = () => {
         ...orderResponse,
         branchName: orderResponse.branch?.name || t('branches.unknown'),
         branchId: orderResponse.branch?._id || 'unknown',
-        date: formatDateTime(orderResponse.createdAt, language),
+        date: formatDateTime(orderResponse.createdAt),
         statusHistory: orderResponse.statusHistory?.map((h: any) => ({
           ...h,
-          changedAt: formatDateTime(h.changedAt, language),
+          changedAt: formatDateTime(h.changedAt),
         })) || [],
         returns: orderResponse.returns?.map((ret: any) => ({
           ...ret,
-          createdAt: formatDateTime(ret.createdAt, language),
-          reviewedAt: ret.reviewedAt ? formatDateTime(ret.reviewedAt, language) : null,
+          createdAt: formatDateTime(ret.createdAt),
+          reviewedAt: ret.reviewedAt ? formatDateTime(ret.reviewedAt) : null,
         })) || [],
       });
       setChefs(
@@ -106,7 +107,7 @@ export const OrderDetailsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, user, t, language, isRtl]);
+  }, [id, user, t, isRtl]);
 
   useEffect(() => {
     fetchOrder();
@@ -122,11 +123,13 @@ export const OrderDetailsPage: React.FC = () => {
   useEffect(() => {
     const handleUserInteraction = () => {
       const audio = new Audio('/sounds/notification.mp3');
-      audio.play().then(() => {
-        audio.pause();
-        audio.currentTime = 0;
-        console.log(`[${new Date().toISOString()}] تم تهيئة سياق الصوت`);
-      }).catch((err) => console.error(`[${new Date().toISOString()}] فشل تهيئة سياق الصوت:`, err));
+      audio.play()
+        .then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+          console.log(`[${new Date().toISOString()}] تم تهيئة سياق الصوت`);
+        })
+        .catch((err) => console.error(`[${new Date().toISOString()}] فشل تهيئة سياق الصوت:`, err));
       document.removeEventListener('click', handleUserInteraction);
     };
     document.addEventListener('click', handleUserInteraction, { once: true });
@@ -139,10 +142,10 @@ export const OrderDetailsPage: React.FC = () => {
     const handleSocketEvents = {
       taskAssigned: ({ orderId, items }: { orderId: string; items: any[] }) => {
         if (orderId === order.id) {
-          setOrder(prev => ({
+          setOrder((prev) => ({
             ...prev!,
-            items: prev!.items.map(i => {
-              const assignment = items.find(a => a._id === i._id);
+            items: prev!.items.map((i) => {
+              const assignment = items.find((a) => a._id === i._id);
               return assignment
                 ? {
                     ...i,
@@ -154,7 +157,7 @@ export const OrderDetailsPage: React.FC = () => {
                   }
                 : i;
             }),
-            status: prev!.items.every(i => i.status === 'assigned') ? 'in_production' : prev!.status,
+            status: prev!.items.every((i) => i.status === 'assigned') ? 'in_production' : prev!.status,
           }));
           toast.info(t('socket.task_assigned', { orderId }), { position: isRtl ? 'top-left' : 'top-right' });
           if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -163,10 +166,10 @@ export const OrderDetailsPage: React.FC = () => {
       },
       itemStatusUpdated: ({ orderId, itemId, status, productName }: { orderId: string; itemId: string; status: string; productName: string }) => {
         if (orderId === order.id) {
-          setOrder(prev => ({
+          setOrder((prev) => ({
             ...prev!,
-            items: prev!.items.map(i => (i._id === itemId ? { ...i, status: status as any } : i)),
-            status: prev!.items.every(i => i.status === 'completed') ? 'completed' : prev!.status,
+            items: prev!.items.map((i) => (i._id === itemId ? { ...i, status: status as any } : i)),
+            status: prev!.items.every((i) => i.status === 'completed') ? 'completed' : prev!.status,
           }));
           toast.info(t('socket.item_status_updated', { productName, status: t(`orders.${status}`) }), {
             position: isRtl ? 'top-left' : 'top-right',
@@ -177,7 +180,7 @@ export const OrderDetailsPage: React.FC = () => {
       },
       orderStatusUpdated: ({ orderId, status }: { orderId: string; status: string }) => {
         if (orderId === order.id) {
-          setOrder(prev => ({ ...prev!, status: status as any }));
+          setOrder((prev) => ({ ...prev!, status: status as any }));
           toast.info(t('socket.order_status_updated', { status: t(`orders.${status}`) }), {
             position: isRtl ? 'top-left' : 'top-right',
           });
@@ -185,18 +188,30 @@ export const OrderDetailsPage: React.FC = () => {
           playNotificationSound();
         }
       },
-      returnStatusUpdated: ({ returnId, orderId, status, adjustedTotal, reviewNotes }: { returnId: string; orderId: string; status: string; adjustedTotal: number; reviewNotes?: string }) => {
+      returnStatusUpdated: ({
+        returnId,
+        orderId,
+        status,
+        adjustedTotal,
+        reviewNotes,
+      }: {
+        returnId: string;
+        orderId: string;
+        status: string;
+        adjustedTotal: number;
+        reviewNotes?: string;
+      }) => {
         if (orderId === order.id) {
-          setOrder(prev => ({
+          setOrder((prev) => ({
             ...prev!,
             adjustedTotal,
-            returns: prev!.returns!.map(ret =>
+            returns: prev!.returns!.map((ret) =>
               ret.returnId === returnId
                 ? {
                     ...ret,
                     status: status as any,
                     reviewNotes: reviewNotes || ret.reviewNotes,
-                    reviewedAt: formatDateTime(new Date(), language),
+                    reviewedAt: formatDateTime(new Date().toISOString()),
                   }
                 : ret
             ),
@@ -217,18 +232,18 @@ export const OrderDetailsPage: React.FC = () => {
       },
     };
 
-    Object.keys(handleSocketEvents).forEach(event => socket.on(event, handleSocketEvents[event]));
+    Object.keys(handleSocketEvents).forEach((event) => socket.on(event, handleSocketEvents[event]));
     return () => {
-      Object.keys(handleSocketEvents).forEach(event => socket.off(event, handleSocketEvents[event]));
+      Object.keys(handleSocketEvents).forEach((event) => socket.off(event, handleSocketEvents[event]));
     };
-  }, [socket, order, t, isRtl, language, playNotificationSound]);
+  }, [socket, order, t, isRtl, playNotificationSound]);
 
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: Order['status']) => {
       setSubmitting(`order-${orderId}`);
       try {
         await ordersAPI.updateStatus(orderId, { status: newStatus });
-        setOrder(prev => ({ ...prev!, status: newStatus }));
+        setOrder((prev) => ({ ...prev!, status: newStatus }));
         socket?.emit('orderStatusUpdated', { orderId, status: newStatus, timestamp: new Date().toISOString() });
         toast.success(t('orders.status_updated', { status: t(`orders.${newStatus}`) }), {
           position: isRtl ? 'top-left' : 'top-right',
@@ -249,16 +264,16 @@ export const OrderDetailsPage: React.FC = () => {
       setSubmitting(`return-${returnId}`);
       try {
         const response = await ordersAPI.updateReturnStatus(returnId, { status, reviewNotes });
-        setOrder(prev => ({
+        setOrder((prev) => ({
           ...prev!,
           adjustedTotal: response.adjustedTotal,
-          returns: prev!.returns!.map(ret =>
+          returns: prev!.returns!.map((ret) =>
             ret.returnId === returnId
               ? {
                   ...ret,
                   status,
                   reviewNotes,
-                  reviewedAt: formatDateTime(new Date(), language),
+                  reviewedAt: formatDateTime(new Date().toISOString()),
                 }
               : ret
           ),
@@ -274,7 +289,7 @@ export const OrderDetailsPage: React.FC = () => {
         toast.success(t('returns.status_updated', { status: t(`returns.${status}`) }), {
           position: isRtl ? 'top-left' : 'top-right',
         });
-        setReturnNotes(prev => ({ ...prev, [returnId]: '' }));
+        setReturnNotes((prev) => ({ ...prev, [returnId]: '' }));
       } catch (err: any) {
         setError(t('errors.update_return_status') + ': ' + (err.message || t('errors.unknown')));
         toast.error(t('errors.update_return_status'), { position: isRtl ? 'top-left' : 'top-right' });
@@ -282,7 +297,7 @@ export const OrderDetailsPage: React.FC = () => {
         setSubmitting(null);
       }
     },
-    [t, isRtl, socket, order, returnNotes, language]
+    [t, isRtl, socket, order, returnNotes]
   );
 
   const openAssignModal = useCallback(
@@ -293,8 +308,8 @@ export const OrderDetailsPage: React.FC = () => {
       }
       setAssignFormData({
         items: order.items
-          .filter(item => !item.assignedTo)
-          .map(item => ({
+          .filter((item) => !item.assignedTo)
+          .map((item) => ({
             itemId: item._id,
             assignedTo: '',
             product: item.product._id,
@@ -310,31 +325,31 @@ export const OrderDetailsPage: React.FC = () => {
     async (orderId: string) => {
       setSubmitting(`order-${orderId}`);
       try {
-        const validAssignments = assignFormData.items.filter(item => item.assignedTo);
+        const validAssignments = assignFormData.items.filter((item) => item.assignedTo);
         if (validAssignments.length === 0) {
           toast.warn(t('orders.no_chefs_selected'), { position: isRtl ? 'top-left' : 'top-right' });
           return;
         }
         await ordersAPI.assignChef(orderId, { items: validAssignments });
-        setOrder(prev => ({
+        setOrder((prev) => ({
           ...prev!,
-          items: prev!.items.map(i => {
-            const assignment = validAssignments.find(a => a.itemId === i._id);
+          items: prev!.items.map((i) => {
+            const assignment = validAssignments.find((a) => a.itemId === i._id);
             return assignment
               ? {
                   ...i,
-                  assignedTo: chefs.find(c => c.userId === assignment.assignedTo),
+                  assignedTo: chefs.find((c) => c.userId === assignment.assignedTo),
                   status: 'assigned',
                 }
               : i;
           }),
-          status: prev!.items.every(i => i.status === 'assigned') ? 'in_production' : prev!.status,
+          status: prev!.items.every((i) => i.status === 'assigned') ? 'in_production' : prev!.status,
         }));
         socket?.emit('taskAssigned', {
           orderId,
-          items: validAssignments.map(item => ({
+          items: validAssignments.map((item) => ({
             _id: item.itemId,
-            assignedTo: chefs.find(c => c.userId === item.assignedTo),
+            assignedTo: chefs.find((c) => c.userId === item.assignedTo),
             status: 'assigned',
             timestamp: new Date().toISOString(),
           })),
@@ -356,8 +371,8 @@ export const OrderDetailsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-amber-600"></div>
       </div>
     );
   }
@@ -365,47 +380,55 @@ export const OrderDetailsPage: React.FC = () => {
   if (error || !order) {
     return (
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="min-h-screen flex items-center justify-center bg-gray-100"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="min-h-screen flex items-center justify-center bg-gray-50 px-4"
       >
-        <div className="bg-white p-6 rounded-lg shadow-lg max-w-md text-center">
-          <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-4" />
-          <p className="text-lg font-medium text-red-600">{error || t('errors.order_not_found')}</p>
-          <Button
-            onClick={fetchOrder}
-            className="mt-4 bg-blue-600 text-white hover:bg-blue-700"
-          >
-            {t('common.retry')}
-          </Button>
-          <Button
-            onClick={() => navigate('/orders')}
-            className="mt-2 bg-gray-200 text-gray-900 hover:bg-gray-300"
-          >
-            {t('common.back')}
-          </Button>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 max-w-md text-center">
+          <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-3" />
+          <p className="text-sm font-medium text-gray-700">{error || t('errors.order_not_found')}</p>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-center">
+            <Button
+              onClick={fetchOrder}
+              className="px-4 py-1.5 bg-amber-600 text-white hover:bg-amber-700 text-sm rounded-lg"
+            >
+              {t('common.retry')}
+            </Button>
+            <Button
+              onClick={() => navigate('/orders')}
+              className="px-4 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 text-sm rounded-lg"
+            >
+              {t('common.back')}
+            </Button>
+          </div>
         </div>
       </motion.div>
     );
   }
 
   return (
-    <div className={`min-h-screen `}>
-      <div className=" mx-auto ">
+    <div className="min-h-screen bg-gray-50 px-4 py-6">
+      <div className="max-w-7xl mx-auto">
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row justify-between items-center mb-6"
+          className="flex items-center justify-between mb-4"
         >
-          <div className="flex items-center ">
-       
-            <h1 className="text-2xl  font-bold text-gray-800">
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => navigate('/orders')}
+              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full"
+              aria-label={t('common.back')}
+            >
+              <ChevronLeft className="w-5 h-5 text-gray-600" />
+            </Button>
+            <h1 className="text-xl font-semibold text-gray-800">
               {t('orders.order_details', { orderNumber: order.orderNumber })}
             </h1>
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <OrderCard
               order={order}
@@ -421,27 +444,27 @@ export const OrderDetailsPage: React.FC = () => {
             />
           </div>
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">{t('orders.status_history')}</h2>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <h2 className="text-base font-semibold text-gray-800 mb-3">{t('orders.status_history')}</h2>
               <div className="relative">
-                <div className="absolute h-full w-1 bg-gray-200 left-4 top-0"></div>
+                <div className={`absolute h-full w-0.5 bg-gray-200 ${isRtl ? 'right-3' : 'left-3'} top-0`}></div>
                 {order.statusHistory?.map((history, index) => (
                   <motion.div
                     key={index}
-                    initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+                    initial={{ opacity: 0, x: isRtl ? 10 : -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="mb-6 relative"
+                    className="mb-4 relative"
                   >
-                    <div className="flex items-center">
-                      <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white z-10">
-                        {statusIcons[history.status as keyof typeof statusIcons] || <Clock className="w-5 h-5" />}
+                    <div className="flex items-start">
+                      <div className="w-6 h-6 bg-amber-600 rounded-full flex items-center justify-center text-white z-10">
+                        {statusIcons[history.status as keyof typeof statusIcons] || <Clock className="w-4 h-4" />}
                       </div>
-                      <div className={`ml-4 ${isRtl ? 'mr-4 ml-0' : ''}`}>
-                        <p className="font-medium">{t(`orders.${history.status}`)}</p>
-                        <p className="text-sm text-gray-600">{history.changedAt}</p>
-                        <p className="text-sm text-gray-500">{history.changedBy || t('orders.unknown')}</p>
-                        {history.notes && <p className="text-sm text-gray-500 mt-1">{history.notes}</p>}
+                      <div className={`ml-3 ${isRtl ? 'mr-3 ml-0' : ''}`}>
+                        <p className="text-sm font-medium text-gray-700">{t(`orders.${history.status}`)}</p>
+                        <p className="text-xs text-gray-500">{history.changedAt}</p>
+                        <p className="text-xs text-gray-500">{history.changedBy || t('orders.unknown')}</p>
+                        {history.notes && <p className="text-xs text-gray-500 mt-0.5">{history.notes}</p>}
                       </div>
                     </div>
                   </motion.div>
@@ -506,10 +529,10 @@ const OrderCard: React.FC<OrderCardProps> = ({
   const calculateAdjustedTotal = useCallback(
     (order: Order): number => {
       const approvedReturnsTotal = (order.returns || [])
-        .filter(ret => ret.status === 'approved')
+        .filter((ret) => ret.status === 'approved')
         .reduce((sum, ret) => {
           const returnTotal = ret.items.reduce((retSum, item) => {
-            const orderItem = order.items.find(i => i._id === item.itemId);
+            const orderItem = order.items.find((i) => i._id === item.itemId);
             return retSum + (orderItem ? orderItem.price * item.quantity : 0);
           }, 0);
           return sum + returnTotal;
@@ -521,80 +544,99 @@ const OrderCard: React.FC<OrderCardProps> = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6"
+      className="bg-white rounded-xl shadow-sm border border-gray-100 p-4"
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <div>
-          <h2 className="text-lg font-semibold">{t('orders.order_number')}: {order.orderNumber}</h2>
-          <p className="text-gray-600">{t('orders.branch')}: {order.branchName}</p>
-          <p className="text-gray-600">{t('orders.date')}: {order.date}</p>
-          <p className="text-gray-600">{t('orders.priority')}: {t(`orders.${order.priority}`)}</p>
+          <h2 className="text-base font-semibold text-gray-800">{t('orders.order_number')}: {order.orderNumber}</h2>
+          <p className="text-xs text-gray-600">{t('orders.branch')}: {order.branchName}</p>
+          <p className="text-xs text-gray-600">{t('orders.date')}: {order.date}</p>
+          <p className="text-xs text-gray-600">{t('orders.priority')}: {t(`orders.${order.priority}`)}</p>
         </div>
         <div className={`text-right ${isRtl ? 'text-left' : 'text-right'}`}>
-          <p className="text-gray-600">{t('orders.total_amount')}: {order.totalAmount.toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
-          <p className="text-gray-600">{t('orders.adjusted_total')}: {(order.adjustedTotal ?? calculateAdjustedTotal(order)).toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
-          <p className={`text-lg font-semibold ${order.status === 'cancelled' ? 'text-red-600' : 'text-green-600'}`}>
+          <p className="text-xs text-gray-600">{t('orders.total_amount')}: {order.totalAmount.toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
+          <p className="text-xs text-gray-600">{t('orders.adjusted_total')}: {(order.adjustedTotal ?? calculateAdjustedTotal(order)).toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
+          <p className={`text-sm font-semibold ${order.status === 'cancelled' ? 'text-red-600' : 'text-amber-600'}`}>
             {t('orders.status')}: {t(`orders.${order.status}`)}
           </p>
         </div>
       </div>
 
-      <h3 className="text-lg font-semibold mb-4">{t('orders.items')}</h3>
-      <div className="space-y-4">
-        {order.items.map(item => {
-          const itemReturns = (order.returns || []).filter(ret => ret.items.some(r => r.itemId === item._id));
+      <h3 className="text-sm font-semibold text-gray-800 mb-3">{t('orders.items')}</h3>
+      <div className="space-y-3">
+        {order.items.map((item) => {
+          const itemReturns = (order.returns || []).filter((ret) => ret.items.some((r) => r.itemId === item._id));
           return (
             <motion.div
               key={item._id}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="border-b pb-4"
+              className="border-b border-gray-100 pb-3 last:border-b-0"
             >
-              <div className="flex flex-col sm:flex-row justify-between gap-4">
+              <div className="flex flex-col sm:flex-row justify-between gap-3">
                 <div>
-                  <p className="font-medium">{item.product?.name || t('product.unknown')}</p>
-                  <p className="text-sm text-gray-600">{t('orders.quantity')}: {item.quantity}</p>
-                  <p className="text-sm text-gray-600">{t('orders.department')}: {item.product?.department?.name || t('departments.unknown')}</p>
+                  <p className="text-sm font-medium text-gray-700">{item.product?.name || t('product.unknown')}</p>
+                  <p className="text-xs text-gray-500">{t('orders.quantity')}: {item.quantity}</p>
+                  <p className="text-xs text-gray-500">{t('orders.department')}: {item.product?.department?.name || t('departments.unknown')}</p>
                   {item.assignedTo && (
-                    <p className="text-sm text-gray-600">{t('orders.assigned_to')}: {item.assignedTo?.name || t('orders.unknown_chef')}</p>
+                    <p className="text-xs text-gray-500">{t('orders.assigned_to')}: {item.assignedTo?.name || t('orders.unknown_chef')}</p>
                   )}
-                  <p className={`text-sm font-medium ${item.status === 'completed' ? 'text-green-600' : 'text-blue-600'}`}>
+                  <p className={`text-xs font-medium ${item.status === 'completed' ? 'text-amber-600' : 'text-blue-600'}`}>
                     {t(`orders.${item.status}`)}
                   </p>
                 </div>
                 {itemReturns.length > 0 && (
-                  <div className="mt-4 sm:mt-0">
-                    <h4 className="text-sm font-semibold text-gray-700">{t('orders.returns')}</h4>
-                    {itemReturns.map(ret => (
-                      <div key={ret.returnId} className="mt-2 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-600">{t('orders.return_status')}: {t(`returns.${ret.status}`)}</p>
-                        <p className="text-sm text-gray-600">{t('orders.created_at')}: {ret.createdAt}</p>
-                        {ret.reviewedAt && <p className="text-sm text-gray-600">{t('returns.reviewed_at')}: {ret.reviewedAt}</p>}
-                        {ret.reviewNotes && <p className="text-sm text-gray-600">{t('orders.review_notes')}: {ret.reviewNotes}</p>}
-                        <div className="mt-2">
+                  <div className="mt-3 sm:mt-0">
+                    <h4 className="text-xs font-semibold text-gray-700">{t('orders.returns')}</h4>
+                    {itemReturns.map((ret) => (
+                      <div key={ret.returnId} className="mt-2 p-2 bg-gray-50 rounded-lg">
+                        <p className="text-xs text-gray-600">{t('orders.return_status')}: {t(`returns.${ret.status}`)}</p>
+                        <p className="text-xs text-gray-600">{t('orders.created_at')}: {ret.createdAt}</p>
+                        {ret.reviewedAt && <p className="text-xs text-gray-600">{t('returns.reviewed_at')}: {ret.reviewedAt}</p>}
+                        {ret.reviewNotes && <p className="text-xs text-gray-600">{t('orders.review_notes')}: {ret.reviewNotes}</p>}
+                        <div className="mt-1">
                           {ret.items
-                            .filter(r => r.itemId === item._id)
+                            .filter((r) => r.itemId === item._id)
                             .map((r, index) => (
-                              <p key={index} className="text-sm text-gray-600">
+                              <p key={index} className="text-xs text-gray-600">
                                 {r.quantity} x {item.product?.name || t('product.unknown')} - {t('orders.reason')}: {t(`returns.${r.reason}`) || t('returns.no_reason')}
                               </p>
                             ))}
                         </div>
                         {ret.status === 'pending_approval' && (user.role === 'admin' || user.role === 'production') && (
-                          <div className="mt-4 space-y-4">
+                          <div className="mt-2 space-y-2">
                             <div>
-                              <label className="block text-sm font-medium text-gray-700">{t('returns.review_notes')}</label>
+                              <label className="block text-xs font-medium text-gray-700">{t('returns.review_notes')}</label>
                               <Input
                                 value={returnNotes[ret.returnId] || ''}
-                                onChange={(e) => setReturnNotes(prev => ({ ...prev, [ret.returnId]: e.target.value }))}
+                                onChange={(e) => setReturnNotes((prev) => ({ ...prev, [ret.returnId]: e.target.value }))}
                                 placeholder={t('returns.review_notes_placeholder')}
-                                className="w-full mt-1 p-2 border rounded-lg"
+                                className="w-full mt-1 p-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
                                 aria-label={t('returns.review_notes')}
                               />
                             </div>
-                         
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={() => updateReturnStatus(ret.returnId, 'approved')}
+                                disabled={submitting === `return-${ret.returnId}`}
+                                className={`px-3 py-1.5 text-sm rounded-lg text-white ${
+                                  submitting === `return-${ret.returnId}` ? 'bg-gray-400' : 'bg-amber-600 hover:bg-amber-700'
+                                }`}
+                              >
+                                {t('returns.approve')}
+                              </Button>
+                              <Button
+                                onClick={() => updateReturnStatus(ret.returnId, 'rejected')}
+                                disabled={submitting === `return-${ret.returnId}`}
+                                className={`px-3 py-1.5 text-sm rounded-lg ${
+                                  submitting === `return-${ret.returnId}` ? 'bg-gray-400' : 'bg-red-600 hover:bg-red-700 text-white'
+                                }`}
+                              >
+                                {t('returns.reject')}
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -608,13 +650,39 @@ const OrderCard: React.FC<OrderCardProps> = ({
       </div>
 
       {order.notes && (
-        <div className="mt-6">
-          <h3 className="text-lg font-semibold">{t('orders.notes')}</h3>
-          <p className="text-gray-600">{order.notes}</p>
+        <div className="mt-4">
+          <h3 className="text-sm font-semibold text-gray-800">{t('orders.notes')}</h3>
+          <p className="text-xs text-gray-600 mt-1">{order.notes}</p>
         </div>
       )}
 
-      
+      {(user.role === 'admin' || user.role === 'production') && validTransitions[order.status]?.length > 0 && (
+        <div className="mt-4 flex gap-2">
+          {validTransitions[order.status].map((status) => (
+            <Button
+              key={status}
+              onClick={() => updateOrderStatus(order.id, status)}
+              disabled={submitting === `order-${order.id}`}
+              className={`px-3 py-1.5 text-sm rounded-lg text-white ${
+                submitting === `order-${order.id}` ? 'bg-gray-400' : status === 'cancelled' ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
+              }`}
+            >
+              {t(`orders.${status}`)}
+            </Button>
+          ))}
+          {order.status === 'approved' && (
+            <Button
+              onClick={() => openAssignModal(order)}
+              disabled={submitting === `order-${order.id}`}
+              className={`px-3 py-1.5 text-sm rounded-lg text-white ${
+                submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+            >
+              {t('orders.assign_chefs')}
+            </Button>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 };
@@ -646,10 +714,8 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const handleAssignChange = useCallback(
     (itemId: string, value: string) => {
-      setAssignFormData(prev => ({
-        items: prev.items.map(item =>
-          item.itemId === itemId ? { ...item, assignedTo: value } : item
-        ),
+      setAssignFormData((prev) => ({
+        items: prev.items.map((item) => (item.itemId === itemId ? { ...item, assignedTo: value } : item)),
       }));
     },
     []
@@ -662,33 +728,38 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="assign-chefs-modal-title"
         >
           <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
+            initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.8, opacity: 0 }}
-            className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-lg"
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white rounded-xl p-4 max-w-md w-full"
           >
-            <h2 id="assign-chefs-modal-title" className="text-xl font-semibold mb-4">{t('orders.assign_chefs')}</h2>
-            {assignFormData.items.map(item => {
-              const departmentId = order.items.find(i => i._id === item.itemId)?.product?.department?._id;
-              const availableChefs = chefs.filter(c => c.department?._id === departmentId);
+            <div className="flex justify-between items-center mb-3">
+              <h2 id="assign-chefs-modal-title" className="text-base font-semibold text-gray-800">{t('orders.assign_chefs')}</h2>
+              <Button onClick={onClose} className="p-1 bg-gray-100 hover:bg-gray-200 rounded-full" aria-label={t('common.cancel')}>
+                <X className="w-4 h-4 text-gray-600" />
+              </Button>
+            </div>
+            {assignFormData.items.map((item) => {
+              const departmentId = order.items.find((i) => i._id === item.itemId)?.product?.department?._id;
+              const availableChefs = chefs.filter((c) => c.department?._id === departmentId);
               return (
-                <div key={item.itemId} className="mb-4">
-                  <p className="font-medium">{order.items.find(i => i._id === item.itemId)?.product?.name || t('product.unknown')}</p>
-                  <p className="text-sm text-gray-600">{t('orders.quantity')}: {item.quantity}</p>
+                <div key={item.itemId} className="mb-3">
+                  <p className="text-sm font-medium text-gray-700">{order.items.find((i) => i._id === item.itemId)?.product?.name || t('product.unknown')}</p>
+                  <p className="text-xs text-gray-500">{t('orders.quantity')}: {item.quantity}</p>
                   <Select
                     value={item.assignedTo}
                     onChange={(e) => handleAssignChange(item.itemId, e.target.value)}
-                    className="w-full mt-2 p-2 border rounded-lg"
+                    className="w-full mt-1 p-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
                     aria-label={t('orders.select_chef')}
                   >
                     <option value="">{t('orders.select_chef')}</option>
-                    {availableChefs.map(chef => (
+                    {availableChefs.map((chef) => (
                       <option key={chef._id} value={chef.userId}>
                         {chef.name || t('orders.unknown_chef')}
                       </option>
@@ -697,10 +768,10 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 </div>
               );
             })}
-            <div className="flex justify-end gap-4 mt-6">
+            <div className="flex justify-end gap-2 mt-4">
               <Button
                 onClick={onClose}
-                className="px-4 py-2 bg-gray-200 text-gray-900 hover:bg-gray-300"
+                className="px-3 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 text-sm rounded-lg"
                 aria-label={t('common.cancel')}
               >
                 {t('common.cancel')}
@@ -708,8 +779,8 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
               <Button
                 onClick={() => assignChefs(order.id)}
                 disabled={submitting === `order-${order.id}`}
-                className={`px-4 py-2 rounded-full text-white ${
-                  submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+                className={`px-3 py-1.5 text-sm rounded-lg text-white ${
+                  submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-amber-600 hover:bg-amber-700'
                 }`}
                 aria-label={t('orders.assign')}
               >
