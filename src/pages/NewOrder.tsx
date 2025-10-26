@@ -8,6 +8,7 @@ import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 
+// واجهات TypeScript (Interfaces) كما في الكود الأصلي
 interface Product {
   _id: string;
   name: string;
@@ -113,6 +114,7 @@ interface Translations {
   };
 }
 
+// الترجمات كما في الكود الأصلي
 const translations: Translations = {
   ar: {
     createOrder: 'إنشاء طلب جديد',
@@ -184,7 +186,7 @@ const translations: Translations = {
   },
 };
 
-// === دالة التحقق من الكمية (تسمح بـ 0.25، 1.25، 1.4، 1.7...) ===
+// دوال التحقق من الكمية (كما في الكود الأصلي)
 const isValidKgQuantity = (qty: number): boolean => {
   if (qty <= 0) return false;
   const multiplied = Math.round(qty * 100);
@@ -199,7 +201,8 @@ const isValidQuantity = (quantity: number, unit: string): boolean => {
   return Number.isInteger(quantity) && quantity >= 1;
 };
 
-// === مكون إدخال الكمية ===
+// مكونات QuantityInput, ProductSearchInput, ProductDropdown, ProductCard, ProductSkeletonCard, OrderConfirmModal
+// نفس الكود الأصلي بدون تغييرات لأنها تعمل كما هي
 const QuantityInput = ({
   value,
   onChange,
@@ -485,7 +488,7 @@ const OrderConfirmModal = ({
   );
 };
 
-// === المكون الرئيسي ===
+// المكون الرئيسي
 export function NewOrder() {
   const { user } = useAuth();
   const { language } = useLanguage();
@@ -625,7 +628,7 @@ export function NewOrder() {
     socket.on('orderCreated', (data) => {
       if (!data?._id) return;
       const msg = user.role === 'branch' ? t.orderCreated : `طلب جديد: #${data.orderNumber}`;
-    
+      addNotification({ _id: crypto.randomUUID(), type: 'success', message: msg, data: { orderId: data._id }, read: false, createdAt: new Date().toISOString() });
     });
 
     return () => { socket.disconnect(); };
@@ -674,6 +677,7 @@ export function NewOrder() {
     setOrderItems([]);
     if (user?.role === 'admin') setBranch('');
     setSearchInput(''); setSearchTerm(''); setFilterDepartment('');
+    toast.success(t.orderCleared);
   }, [user, t]);
 
   const total = useMemo(() => orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0).toFixed(2), [orderItems]);
@@ -734,7 +738,7 @@ export function NewOrder() {
   const scrollToSummary = () => summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   return (
-    <div className="mx-auto px-4 py-8 min-h-screen" >
+    <div className="mx-auto px-4 py-8 min-h-screen">
       <div className="mb-8 flex flex-col items-center md:items-start justify-center md:justify-start text-center">
         <div className="flex items-center md:items-start justify-center md:justify-start gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
@@ -762,14 +766,23 @@ export function NewOrder() {
       <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6' : ''}`}>
         <div className={orderItems.length > 0 ? 'lg:col-span-2' : ''}>
           <div className="p-6 bg-white rounded-xl shadow-sm border">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <ProductSearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} ariaLabel={t.searchPlaceholder} />
-              <ProductDropdown
-                value={filterDepartment}
-                onChange={setFilterDepartment}
-                options={[{ value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' }, ...departments.map(d => ({ value: d._id, label: d.displayName }))]}
-                ariaLabel={t.department}
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
+                <ProductSearchInput
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  placeholder={t.searchPlaceholder}
+                  ariaLabel={t.searchPlaceholder}
+                />
+              </div>
+              <div className="lg:col-span-1">
+                <ProductDropdown
+                  value={filterDepartment}
+                  onChange={setFilterDepartment}
+                  options={[{ value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' }, ...departments.map(d => ({ value: d._id, label: d.displayName }))]}
+                  ariaLabel={t.department}
+                />
+              </div>
             </div>
             <p className="mt-2 text-center text-sm text-gray-600">{filteredProducts.length} منتج</p>
           </div>
@@ -820,7 +833,7 @@ export function NewOrder() {
                       onDecrement={() => updateQuantity(item.productId, Math.max(0, item.quantity - (['كيلو', 'Kilo', 'كجم', 'kg'].includes(item.product.displayUnit) ? 0.25 : 1)))}
                       unit={item.product.displayUnit}
                     />
-                    <button onClick={() => removeFromOrder(item.productId)} className="w-8 h-8 bg-red-600 text-white rounded-full-full flex items-center justify-center">
+                    <button onClick={() => removeFromOrder(item.productId)} className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
