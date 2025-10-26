@@ -50,6 +50,8 @@ const translations = {
     "pagination.previous": "السابق",
     "pagination.next": "التالي",
     "pagination.page": "الصفحة {current} من {total}",
+    "orders.total_amount": "المبلغ الإجمالي",
+    "orders.date": "تاريخ الطلب",
 
     // لوحة التحكم الرئيسية
     "admin.dashboard": "لوحة تحكم المدير العام",
@@ -413,6 +415,8 @@ const translations = {
     "settings": "Settings",
     "common.present": "Present",
     "common.absent": "Absent",
+    "orders.total_amount": "Total Amount",
+    "orders.date": "Order Date",
     "pagination.previous": "Previous",
     "pagination.next": "Next",
     "orders.review": " orders Review",

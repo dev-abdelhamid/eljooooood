@@ -545,7 +545,6 @@ const OrderCard: React.FC<OrderCardProps> = ({
           <h2 className="text-base font-semibold text-gray-800">{t('orders.order_number')}: {order.orderNumber}</h2>
           <p className="text-xs text-gray-600">{t('orders.branch')}: {order.branchName}</p>
           <p className="text-xs text-gray-600">{t('orders.date')}: {order.date}</p>
-          <p className="text-xs text-gray-600">{t('orders.priority')}: {t(`orders.${order.priority}`)}</p>
         </div>
         <div className={`text-right ${isRtl ? 'text-left' : 'text-right'}`}>
           <p className="text-xs text-gray-600">{t('orders.total_amount')}: {order.totalAmount.toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
@@ -648,33 +647,8 @@ const OrderCard: React.FC<OrderCardProps> = ({
         </div>
       )}
 
-      {(user.role === 'admin' || user.role === 'production') && validTransitions[order.status]?.length > 0 && (
-        <div className="mt-4 flex gap-2">
-          {validTransitions[order.status].map((status) => (
-            <Button
-              key={status}
-              onClick={() => updateOrderStatus(order.id, status)}
-              disabled={submitting === `order-${order.id}`}
-              className={`px-3 py-1.5 text-sm rounded-lg text-white ${
-                submitting === `order-${order.id}` ? 'bg-gray-400' : status === 'cancelled' ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'
-              }`}
-            >
-              {t(`orders.${status}`)}
-            </Button>
-          ))}
-          {order.status === 'approved' && (
-            <Button
-              onClick={() => openAssignModal(order)}
-              disabled={submitting === `order-${order.id}`}
-              className={`px-3 py-1.5 text-sm rounded-lg text-white ${
-                submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {t('orders.assign_chefs')}
-            </Button>
-          )}
-        </div>
-      )}
+     
+     
     </motion.div>
   );
 };
