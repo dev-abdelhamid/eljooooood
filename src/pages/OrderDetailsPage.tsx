@@ -546,7 +546,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
           <p className="text-xs text-gray-600">{t('orders.branch')}: {order.branchName}</p>
           <p className="text-xs text-gray-600">{t('orders.date')}: {order.date}</p>
         </div>
-        <div className="text-sm sm:text-right">
+        <div className={`text-right `}>
           <p className="text-xs text-gray-600">{t('orders.total_amount')}: {order.totalAmount.toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
           <p className="text-xs text-gray-600">{t('orders.adjusted_total')}: {(order.adjustedTotal ?? calculateAdjustedTotal(order)).toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
           <p className={`text-sm font-semibold ${order.status === 'cancelled' ? 'text-red-600' : 'text-amber-600'}`}>
