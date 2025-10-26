@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, Fragment, memo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
 import { motion } from 'framer-motion';
 import { Search, X, Upload, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -10,16 +10,6 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-
-// Define custom text-2xs for smaller font size
-const style = document.createElement('style');
-style.textContent = `
-  .text-2xs {
-    font-size: 9px;
-    line-height: 1.1;
-  }
-`;
-document.head.appendChild(style);
 
 // Button component
 const Button: React.FC<{
@@ -33,7 +23,7 @@ const Button: React.FC<{
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-0.5 rounded-full px-2 py-0.8 text-2xs font-medium transition-all duration-200 ${
+      className={`flex items-center gap-2 rounded-full flex-row px-4 py-2 text-xs font-medium transition-all duration-200 ${
         variant === 'primary' && !disabled
           ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
           : 'bg-gray-200 text-gray-500 cursor-not-allowed'
@@ -62,19 +52,19 @@ const ProductSearchInput: React.FC<{
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute px-1 py-0.8 inset-y-0 ${isRtl ? 'left-1' : 'right-1'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
-        <Search className="w-2 h-2" />
+        <Search className="w-4 h-4" />
       </motion.div>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-7 pr-1.5' : 'pr-7 pl-1.5'} px-1 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -83,10 +73,10 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute px-1 py-0.8 inset-y-0 ${isRtl ? 'left-1' : 'right-1'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
+          className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-2 h-2" />
+          <X className="w-4 h-4" />
         </motion.button>
       )}
     </div>
@@ -118,16 +108,16 @@ const ProductDropdown = ({
     <div className="relative group">
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-2 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-2xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label || (isRtl ? 'غير معروف' : 'Unknown')}</span>
         <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
-          <ChevronDown className="w-3 h-3 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
         </div>
       </button>
       {isOpen && !disabled && (
-        <div className="absolute w-full mt-0.5 bg-white rounded-lg shadow-lg border border-gray-100 z-20 max-h-36 overflow-y-auto scrollbar-none">
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
           {options.map((option) => (
             <div
               key={option.value}
@@ -135,7 +125,7 @@ const ProductDropdown = ({
                 onChange(option.value);
                 setIsOpen(false);
               }}
-              className="px-2 py-0.8 text-2xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
             >
               {option.label || (isRtl ? 'غير معروف' : 'Unknown')}
             </div>
@@ -152,9 +142,7 @@ const toArabicNumerals = (number: string | number): string => {
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-const formatNumber = (num: number, isRtl: boolean, type: 'orders' | 'returns' | 'total' | 'ratio' = 'total'): string => {
-  if (type === 'orders' && num !== 0) return `${num > 0 ? '+' : ''}${isRtl ? toArabicNumerals(num) : num}`;
-  if (type === 'returns' && num !== 0) return `${num > 0 ? '-' : ''}${isRtl ? toArabicNumerals(num) : num}`;
+const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
@@ -205,19 +193,19 @@ const generatePDFHeader = (
   fontLoaded: boolean
 ) => {
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(16);
   doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
-  doc.text(title, isRtl ? pageWidth - 2.5 : 2.5, 5, { align: isRtl ? 'right' : 'left' });
-  doc.setFontSize(5);
+  doc.text(title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
+  doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
     ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الطلبات: ${toArabicNumerals(totalOrders)} وحدة | إجمالي المرتجعات: ${toArabicNumerals(totalReturns)} وحدة`
     : `Total Products: ${totalItems} | Total Orders: ${totalOrders} units | Total Returns: ${totalReturns} units`;
-  doc.text(stats, isRtl ? pageWidth - 2.5 : 2.5, 8, { align: isRtl ? 'right' : 'left' });
-  doc.setLineWidth(0.15);
+  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
+  doc.setLineWidth(0.5);
   doc.setDrawColor(245, 158, 11);
-  doc.line(2.5, 10, pageWidth - 2.5, 10);
+  doc.line(20, 25, pageWidth - 20, 25);
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
@@ -226,13 +214,13 @@ const generatePDFHeader = (
   });
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(4);
+    doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     const footerText = isRtl
       ? `تم إنشاؤه بواسطة نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
       : `Generated by elgoodia Management System - ${currentDate}`;
-    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 2.5, { align: 'center' });
+    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
   }
 };
 
@@ -245,30 +233,32 @@ const generatePDFTable = (
   fontName: string
 ) => {
   const pageWidth = doc.internal.pageSize.width;
-  const margin = 2.5;
+  const margin = 10;
+  let tableWidth = 0;
+  headers.forEach(header => {
+    tableWidth += doc.getTextWidth(header) + 10;
+  });
+  const leftMargin = (pageWidth - tableWidth) / 2;
   const numColumns = headers.length;
-  const maxTableWidth = pageWidth - 2 * margin;
-  const columnWidth = Math.min(10, maxTableWidth / numColumns);
-  const fontSizeHead = 5.5;
-  const fontSizeBody = 4.5;
-  const cellPadding = 0.3;
-  const columnStyles = headers.reduce((styles, _, i) => {
-    styles[i] = {
-      cellWidth: columnWidth,
+  const fontSizeHead = Math.max(5, Math.min(8, Math.floor(280 / numColumns)));
+  const fontSizeBody = fontSizeHead - 1;
+  const cellPadding = numColumns > 20 ? 0.5 : 1;
+  const columnStyles = {};
+  headers.forEach((_, i) => {
+    columnStyles[i] = {
+      cellWidth: 'auto',
+      minCellWidth: 4,
       halign: 'center',
       fontStyle: 'bold',
-      overflow: 'linebreak',
     };
-    return styles;
-  }, {});
-
+  });
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
-    startY: 12,
-    margin: { top: 12, bottom: 6, left: margin, right: margin },
-    tableWidth: 'auto',
+    startY: 30,
+    margin: { top: 10, bottom: 10, left: leftMargin, right: pageWidth - leftMargin - tableWidth },
+    tableWidth: tableWidth,
     columnStyles,
     headStyles: {
       fillColor: [245, 158, 11],
@@ -293,7 +283,7 @@ const generatePDFTable = (
       if (hookData.section === 'body' || hookData.section === 'head') {
         hookData.cell.text = hookData.cell.text.map(text => {
           let processedText = text;
-          if (isRtl && !text.includes('%')) {
+          if (isRtl) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
           }
           return processedText;
@@ -365,6 +355,47 @@ const exportToExcel = (
     if (isRtl) {
       ws['!views'] = [{ RTL: true }];
     }
+    ws['!cols'] = [
+      { wch: 5 },
+      { wch: 10 },
+      { wch: 25 },
+      { wch: 10 },
+      ...headers.slice(4, -3).map(() => ({ wch: 6 })),
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+    ];
+    ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
+    const amberColor = 'FFF59E0B';
+    const whiteColor = 'FFFFFFFF';
+    const blackColor = 'FF000000';
+    for (let c = 0; c < sheetHeaders.length; c++) {
+      const cell = XLSX.utils.encode_cell({ r: 0, c });
+      if (ws[cell]) {
+        ws[cell].s = {
+          fill: { fgColor: { rgb: amberColor } },
+          font: { color: { rgb: whiteColor }, bold: true },
+          alignment: { horizontal: 'center' },
+        };
+      }
+    }
+    for (let r = 1; r <= rows.length; r++) {
+      for (let c = 0; c < sheetHeaders.length; c++) {
+        const cell = XLSX.utils.encode_cell({ r: r, c });
+        if (ws[cell]) {
+          ws[cell].s = {
+            alignment: { horizontal: 'center' },
+            font: { color: { rgb: blackColor } },
+          };
+        }
+      }
+    }
+    for (let c = 0; c < sheetHeaders.length; c++) {
+      const cell = XLSX.utils.encode_cell({ r: rows.length, c });
+      if (ws[cell]) {
+        ws[cell].s.font = { ...ws[cell].s.font, bold: true };
+      }
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Orders_vs_Returns_${monthName}`);
     XLSX.writeFile(wb, generateFileName('Orders_vs_Returns', monthName, isRtl, 'xlsx'));
@@ -411,67 +442,6 @@ interface Branch {
   nameEn: string;
   displayName: string;
 }
-
-// Memoized TableRow component
-const TableRow = memo(
-  ({
-    row,
-    index,
-    displayedDays,
-    isRtl,
-    selectedBranch,
-    getTooltipContent,
-    getRatioColor,
-  }: {
-    row: OrdersVsReturnsRow;
-    index: number;
-    displayedDays: string[];
-    isRtl: boolean;
-    selectedBranch: string;
-    getTooltipContent: (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: string) => string;
-    getRatioColor: (ratio: number) => string;
-  }) => {
-    const totalRatio = row.displayedTotalRatio;
-    return (
-      <tr className={`hover:bg-amber-50/20 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium">{formatNumber(index + 1, isRtl)}</td>
-        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium truncate max-w-[35px]">{row.code}</td>
-        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium truncate max-w-[90px]">{row.product}</td>
-        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium truncate max-w-[35px]">{row.unit}</td>
-        {displayedDays.map((_, i) => {
-          const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
-          const dailyTotal = Math.abs(row.displayedDailyOrders[i] - row.displayedDailyReturns[i]);
-          return (
-            <Fragment key={i}>
-              <td
-                className={`px-0.3 py-0.8 text-center text-2xs font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50/20 text-green-600' : 'text-gray-800'}`}
-                data-tooltip-id="orders-tooltip"
-                data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
-              >
-                {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl, 'orders') : '-'}
-              </td>
-              <td
-                className={`px-0.3 py-0.8 text-center text-2xs font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50/20 text-red-600' : 'text-gray-800'}`}
-                data-tooltip-id="returns-tooltip"
-                data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
-              >
-                {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl, 'returns') : '-'}
-              </td>
-              <td className={`px-0.3 py-0.8 text-center text-2xs font-medium ${getRatioColor(dailyRatio)}`}>
-                {formatNumber(dailyTotal, isRtl, 'total')}
-              </td>
-            </Fragment>
-          );
-        })}
-        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
-        <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
-        <td className={`px-0.3 py-0.8 text-center text-2xs font-medium ${getRatioColor(totalRatio)}`}>
-          {formatNumber(totalRatio.toFixed(2), isRtl, 'ratio')}%
-        </td>
-      </tr>
-    );
-  }
-);
 
 // Main ReturnsVsOrdersPage component
 const ReturnsVsOrdersPage: React.FC = () => {
@@ -756,7 +726,7 @@ const ReturnsVsOrdersPage: React.FC = () => {
 
   const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: string) => {
     let header = type === 'orders' ? (isRtl ? 'طلبات' : 'Orders') : (isRtl ? 'مرتجعات' : 'Returns');
-    let content = `${header}: ${type === 'orders' ? (dailyQuantity > 0 ? '+' : '') : (dailyQuantity > 0 ? '-' : '')}${formatNumber(dailyQuantity, isRtl)}`;
+    let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
     if (Object.keys(branchDetails).length > 0) {
       content += '\n' + Object.entries(branchDetails).sort(([a], [b]) => a.localeCompare(b)).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
     }
@@ -764,9 +734,9 @@ const ReturnsVsOrdersPage: React.FC = () => {
   };
 
   const getRatioColor = (ratio: number) => {
-    if (ratio > 10) return 'text-red-600 bg-red-50/20';
-    if (ratio > 5) return 'text-yellow-600 bg-yellow-50/20';
-    return 'text-green-600 bg-green-50/20';
+    if (ratio > 10) return 'text-red-600 bg-red-50';
+    if (ratio > 5) return 'text-yellow-600 bg-yellow-50';
+    return 'text-green-600 bg-green-50';
   };
 
   const exportTable = (format: 'excel' | 'pdf') => {
@@ -779,7 +749,7 @@ const ReturnsVsOrdersPage: React.FC = () => {
     const dayHeaders = displayedDays.flatMap(day => [
       isRtl ? `${day} - طلبات` : `${day} - Orders`,
       isRtl ? `${day} - مرتجعات` : `${day} - Returns`,
-      isRtl ? `${day} - إجمالي` : `${day} - Total`,
+      isRtl ? `${day} - نسبة %` : `${day} - Ratio %`,
     ]);
     const totalHeaders = [
       isRtl ? 'إجمالي الطلبات' : 'Total Orders',
@@ -795,9 +765,9 @@ const ReturnsVsOrdersPage: React.FC = () => {
         unit: row.unit,
         ...Object.fromEntries(
           displayedDays.flatMap((day, i) => [
-            [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl, 'orders') : '-'],
-            [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl, 'returns') : '-'],
-            [`${day} - ${isRtl ? 'إجمالي' : 'Total'}`, Math.abs(row.displayedDailyOrders[i] - row.displayedDailyReturns[i])],
+            [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, row.displayedDailyOrders[i] !== 0 ? row.displayedDailyOrders[i] : '-'],
+            [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.displayedDailyReturns[i] !== 0 ? row.displayedDailyReturns[i] : '-'],
+            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.displayedDailyOrders[i] > 0 ? ((row.displayedDailyReturns[i] / row.displayedDailyOrders[i]) * 100).toFixed(2) : '0.00'],
           ])
         ),
         totalOrders: row.displayedTotalOrders,
@@ -813,7 +783,7 @@ const ReturnsVsOrdersPage: React.FC = () => {
           displayedDays.flatMap((day, i) => [
             [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0)],
             [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0)],
-            [`${day} - ${isRtl ? 'إجمالي' : 'Total'}`, Math.abs(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0) - filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0))],
+            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, (filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0) > 0) ? ((filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0) / filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0)) * 100).toFixed(2) : '0.00'],
           ])
         ),
         totalOrders: grandTotalOrders,
@@ -841,82 +811,82 @@ const ReturnsVsOrdersPage: React.FC = () => {
 
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
     return (
-      <div className="text-center py-6 text-2xs font-medium text-gray-700 max-w-5xl mx-auto">
+      <div className="text-center py-12 text-sm font-medium text-gray-700">
         {isRtl ? 'لا يوجد صلاحية' : 'No access'}
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen px-1.5 py-3 max-w-5xl mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
-      <div className="mb-2 bg-gray-50/80 shadow-sm rounded-lg p-1.5 border border-gray-50">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 mb-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <h2 className="text-xs font-bold text-gray-800 truncate">
+    <div className={`min-h-screen px-4 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
+      <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <h2 className="text-lg font-bold text-gray-800">
             {isRtl ? 'تقرير حركة الطلبات مقابل المرتجعات' : 'Orders vs Returns Report'} - {monthName}
           </h2>
-          <div className="flex gap-1 items-center flex-wrap">
+          <div className="flex gap-2 items-center">
             <ProductDropdown
               value={selectedMonth}
               onChange={setSelectedMonth}
               options={months}
               ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
-              className="w-24 sm:w-28"
+              className="w-40"
             />
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
               disabled={filteredData.length === 0}
-              className="flex items-center gap-0.5"
+              className="flex items-center gap-2"
             >
-              <Upload className="w-2 h-2" />
+              <Upload className="w-4 h-4" />
               {isRtl ? 'Excel' : 'Excel'}
             </Button>
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
               disabled={filteredData.length === 0}
-              className="flex items-center gap-0.5"
+              className="flex items-center gap-2"
             >
-              <Upload className="w-2 h-2" />
+              <Upload className="w-4 h-4" />
               {isRtl ? 'PDF' : 'PDF'}
             </Button>
           </div>
         </div>
-        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5 items-center mb-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={isRtl ? 'بحث حسب المنتج أو الكود' : 'Search by product or code'}
             ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
-            className="max-w-none"
+            className="md:col-span-1 max-w-none"
           />
           <ProductDropdown
             value={selectedBranch}
             onChange={setSelectedBranch}
             options={branchOptions}
             ariaLabel={isRtl ? 'اختر الفرع' : 'Select branch'}
-            className="max-w-none"
+            className="md:col-span-1"
           />
           <ProductDropdown
             value={selectedPeriod}
             onChange={setSelectedPeriod}
             options={periodOptions}
             ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
-            className="max-w-none"
+            className="md:col-span-1"
           />
           {selectedPeriod === 'custom' && (
-            <div className="col-span-1 sm:col-span-2 md:col-span-3 flex flex-col sm:flex-row gap-1.5">
+            <div className="col-span-1 md:col-span-3 flex flex-col sm:flex-row gap-4">
               <input
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="flex-1 px-1 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
               />
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="flex-1 px-1 py-0.8 border border-gray-100 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-2xs"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
               />
             </div>
           )}
@@ -929,91 +899,124 @@ const ReturnsVsOrdersPage: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
-          className="text-center py-6 bg-white shadow-sm rounded-lg border border-gray-50"
+          className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
         >
-          <p className="text-gray-500 text-2xs font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+          <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
         </motion.div>
       ) : (
         <motion.div
-          initial={{ opacity: 0, y: 6 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: 'easeOut' }}
-          className="overflow-x-auto rounded-lg shadow-sm border border-gray-50 bg-white"
+          transition={{ duration: 0.3 }}
+          className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
         >
-          <table className="min-w-full divide-y divide-gray-100 text-2xs">
-            <thead className="bg-amber-50/50 sticky top-0 z-10">
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
+            <thead className="bg-amber-50 sticky top-0 z-10">
               <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">{isRtl ? 'رقم' : 'No.'}</th>
-                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[35px] text-xs">{isRtl ? 'الكود' : 'Code'}</th>
-                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[90px] text-xs">{isRtl ? 'المنتج' : 'Product'}</th>
-                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[35px] text-xs">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[200px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                 {displayedDays.map((day, i) => (
                   <Fragment key={i}>
-                    <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">
+                    <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
                       {isRtl ? `${day} - طلبات` : `${day} - Orders`}
                     </th>
-                    <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">
+                    <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
                       {isRtl ? `${day} - مرتجعات` : `${day} - Returns`}
                     </th>
-                    <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[20px] text-xs">
-                      {isRtl ? `${day} - إجمالي` : `${day} - Total`}
+                    <th className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
+                      {isRtl ? `${day} - نسبة %` : `${day} - Ratio %`}
                     </th>
                   </Fragment>
                 ))}
-                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[50px] text-xs">
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
                   {isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
                 </th>
-                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[50px] text-xs">
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
                   {isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
                 </th>
-                <th className="px-0.3 py-0.8 font-semibold text-gray-800 text-center min-w-[50px] text-xs">
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
                   {isRtl ? 'نسبة إجمالية %' : 'Total Ratio %'}
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredData.map((row, index) => (
-                <TableRow
-                  key={row.id}
-                  row={row}
-                  index={index}
-                  displayedDays={displayedDays}
-                  isRtl={isRtl}
-                  selectedBranch={selectedBranch}
-                  getTooltipContent={getTooltipContent}
-                  getRatioColor={getRatioColor}
-                />
-              ))}
-              <tr className={`font-semibold bg-gray-50/20 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+            <tbody className="divide-y divide-gray-200">
+              {filteredData.map((row, index) => {
+                const totalRatio = row.displayedTotalRatio;
+                return (
+                  <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-2 py-2 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                    <td className="px-2 py-2 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-2 py-2 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-2 py-2 text-gray-700 text-center truncate">{row.unit}</td>
+                    {displayedDays.map((_, i) => {
+                      const dailyRatio = row.displayedDailyOrders[i] > 0 ? (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) : 0;
+                      return (
+                        <Fragment key={i}>
+                          <td
+                            className={`px-1 py-2 text-center font-medium ${row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
+                            data-tooltip-id="orders-tooltip"
+                            data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
+                          >
+                            {row.displayedDailyOrders[i] !== 0 ? `${row.displayedDailyOrders[i] > 0 ? '+' : ''}${formatNumber(row.displayedDailyOrders[i], isRtl)}` : '-'}
+                          </td>
+                          <td
+                            className={`px-1 py-2 text-center font-medium ${row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'}`}
+                            data-tooltip-id="returns-tooltip"
+                            data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
+                          >
+                            {row.displayedDailyReturns[i] !== 0 ? `${row.displayedDailyReturns[i] > 0 ? '+' : ''}${formatNumber(row.displayedDailyReturns[i], isRtl)}` : '-'}
+                          </td>
+                          <td className={`px-1 py-2 text-center font-medium ${getRatioColor(dailyRatio)}`}>
+                            {formatNumber(dailyRatio.toFixed(2), isRtl)}%
+                          </td>
+                        </Fragment>
+                      );
+                    })}
+                    <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
+                    <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
+                    <td className={`px-2 py-2 text-center font-medium ${getRatioColor(totalRatio)}`}>
+                      {formatNumber(totalRatio.toFixed(2), isRtl)}%
+                    </td>
+                  </tr>
+                );
+              })}
+              <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <td className="px-2 py-2 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                 {displayedDays.map((_, i) => (
                   <Fragment key={i}>
-                    <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">
-                      {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl, 'orders')}
+                    <td className="px-1 py-2 text-gray-800 text-center">
+                      {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl)}
                     </td>
-                    <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">
-                      {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl, 'returns')}
+                    <td className="px-1 py-2 text-gray-800 text-center">
+                      {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl)}
                     </td>
-                    <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">
-                      {formatNumber(Math.abs(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0) - filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0)), isRtl, 'total')}
+                    <td className="px-1 py-2 text-gray-800 text-center">
+                      {(() => {
+                        const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0);
+                        const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0);
+                        const ratio = dailyOrdersTotal > 0 ? (dailyReturnsTotal / dailyOrdersTotal * 100).toFixed(2) : '0.00';
+                        return `${formatNumber(Number(ratio), isRtl)}%`;
+                      })()}
                     </td>
                   </Fragment>
                 ))}
-                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">{formatNumber(grandTotalOrders, isRtl)}</td>
-                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">{formatNumber(grandTotalReturns, isRtl)}</td>
-                <td className="px-0.3 py-0.8 text-gray-800 text-center text-2xs">{formatNumber(Number(grandTotalRatio), isRtl, 'ratio')}%</td>
+                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(Number(grandTotalRatio), isRtl)}%</td>
               </tr>
             </tbody>
           </table>
           <Tooltip
             id="orders-tooltip"
             place="top"
-            className="custom-tooltip whitespace-pre-line z-[9999] shadow-sm bg-white border border-gray-100 rounded-md p-1 max-w-xs text-2xs text-gray-800 font-medium"
+            className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
           />
           <Tooltip
             id="returns-tooltip"
             place="top"
-            className="custom-tooltip whitespace-pre-line z-[9999] shadow-sm bg-white border border-gray-100 rounded-md p-1 max-w-xs text-2xs text-gray-800 font-medium"
+            className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
           />
         </motion.div>
       )}
