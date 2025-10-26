@@ -417,17 +417,19 @@ export const OrderDetailsPage: React.FC = () => {
           <div className="flex items-center  gap-2">
             <Button
               onClick={() => navigate('/orders')}
-              className="p-1 rounded-full bg-gray-100 hover:bg-gray-200"
+              className="p-1 rounded-full  w-2 h-2 bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center"
               aria-label={t('common.back')}
+
             >
               {isRtl ? (
-                           <ChevronLeft className="w-5 h-5 text-gray-700" />
-              ) : (
                 <ChevronRight className="w-5 h-5 text-gray-700" />
+              ) : (
+                <ChevronLeft className="w-5 h-5 text-gray-700" />
               )}
             </Button>
-            <h1 className="text-xl font-semibold text-gray-800">
-              {t('orders.order_details', { orderNumber: order.orderNumber })}
+            <h1 className="text-xl font-semibold  text-gray-800">
+              {t('orders.order_details')}  
+              <span className="text-amber-600">#{order.orderNumber}</span>
             </h1>
           </div>
         </motion.div>
@@ -467,7 +469,6 @@ export const OrderDetailsPage: React.FC = () => {
                       <div className={`ml-3 ${isRtl ? 'mr-3 ml-0' : ''}`}>
                         <p className="text-sm font-medium text-gray-700">{t(`orders.${history.status}`)}</p>
                         <p className="text-xs text-gray-500">{history.changedAt}</p>
-                        <p className="text-xs text-gray-500">{history.changedBy || t('orders.unknown')}</p>
                         {history.notes && <p className="text-xs text-gray-500 mt-0.5">{history.notes}</p>}
                       </div>
                     </div>
@@ -478,18 +479,6 @@ export const OrderDetailsPage: React.FC = () => {
           </div>
         </div>
 
-        <AssignChefsModal
-          isOpen={isAssignModalOpen}
-          onClose={() => setIsAssignModalOpen(false)}
-          order={order}
-          assignFormData={assignFormData}
-          setAssignFormData={setAssignFormData}
-          chefs={chefs}
-          assignChefs={assignChefs}
-          submitting={submitting}
-          isRtl={isRtl}
-          t={t}
-        />
       </div>
     </div>
   );
@@ -691,111 +680,5 @@ const OrderCard: React.FC<OrderCardProps> = ({
   );
 };
 
-interface AssignChefsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  order: Order | null;
-  assignFormData: AssignChefsForm;
-  setAssignFormData: React.Dispatch<React.SetStateAction<AssignChefsForm>>;
-  chefs: Chef[];
-  assignChefs: (orderId: string) => void;
-  submitting: string | null;
-  isRtl: boolean;
-  t: (key: string, params?: any) => string;
-}
-
-const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
-  isOpen,
-  onClose,
-  order,
-  assignFormData,
-  setAssignFormData,
-  chefs,
-  assignChefs,
-  submitting,
-  isRtl,
-  t,
-}) => {
-  const handleAssignChange = useCallback(
-    (itemId: string, value: string) => {
-      setAssignFormData((prev) => ({
-        items: prev.items.map((item) => (item.itemId === itemId ? { ...item, assignedTo: value } : item)),
-      }));
-    },
-    []
-  );
-
-  return (
-    <AnimatePresence>
-      {isOpen && order && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="assign-chefs-modal-title"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-xl p-4 max-w-md w-full"
-          >
-            <div className="flex justify-between items-center mb-3">
-              <h2 id="assign-chefs-modal-title" className="text-base font-semibold text-gray-800">{t('orders.assign_chefs')}</h2>
-              <Button onClick={onClose} className="p-1 bg-gray-100 hover:bg-gray-200 rounded-full" aria-label={t('common.cancel')}>
-                <X className="w-4 h-4 text-gray-600" />
-              </Button>
-            </div>
-            {assignFormData.items.map((item) => {
-              const departmentId = order.items.find((i) => i._id === item.itemId)?.product?.department?._id;
-              const availableChefs = chefs.filter((c) => c.department?._id === departmentId);
-              return (
-                <div key={item.itemId} className="mb-3">
-                  <p className="text-sm font-medium text-gray-700">{order.items.find((i) => i._id === item.itemId)?.product?.name || t('product.unknown')}</p>
-                  <p className="text-xs text-gray-500">{t('orders.quantity')}: {item.quantity}</p>
-                  <Select
-                    value={item.assignedTo}
-                    onChange={(e) => handleAssignChange(item.itemId, e.target.value)}
-                    className="w-full mt-1 p-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
-                    aria-label={t('orders.select_chef')}
-                  >
-                    <option value="">{t('orders.select_chef')}</option>
-                    {availableChefs.map((chef) => (
-                      <option key={chef._id} value={chef.userId}>
-                        {chef.name || t('orders.unknown_chef')}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              );
-            })}
-            <div className="flex justify-end gap-2 mt-4">
-              <Button
-                onClick={onClose}
-                className="px-3 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 text-sm rounded-lg"
-                aria-label={t('common.cancel')}
-              >
-                {t('common.cancel')}
-              </Button>
-              <Button
-                onClick={() => assignChefs(order.id)}
-                disabled={submitting === `order-${order.id}`}
-                className={`px-3 py-1.5 text-sm rounded-lg text-white ${
-                  submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-amber-600 hover:bg-amber-700'
-                }`}
-                aria-label={t('orders.assign')}
-              >
-                {t('orders.assign')}
-              </Button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
 
 export default OrderDetailsPage;
