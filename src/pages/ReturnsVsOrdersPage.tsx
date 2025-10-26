@@ -1,46 +1,142 @@
-import React, { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, ChevronDown } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { toast } from 'react-toastify';
-import { Tooltip } from 'react-tooltip';
+import React, { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
+import { motion } from 'framer-motion';
+import { Search, X, Upload, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ordersAPI, branchesAPI, returnsAPI } from '../services/api';
+import { toast } from 'react-toastify';
+import { Tooltip } from 'react-tooltip';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-import { ProductSearchInput, ProductDropdown } from './DailyOrdersPage'; // استيراد المكونات من DailyOrdersPage
-import { Button } from '../components/UI/Button';
 
-interface OrdersVsReturnsRow {
-  id: string;
-  code: string;
-  product: string;
-  unit: string;
-  dailyOrders: number[];
-  dailyReturns: number[];
-  dailyBranchDetailsOrders: { [branch: string]: number }[];
-  dailyBranchDetailsReturns: { [branch: string]: number }[];
-  totalOrders: number;
-  totalReturns: number;
-  totalRatio: number;
-  displayedDailyOrders: number[];
-  displayedDailyReturns: number[];
-  displayedDailyBranchDetailsOrders: { [branch: string]: number }[];
-  displayedDailyBranchDetailsReturns: { [branch: string]: number }[];
-  displayedTotalOrders: number;
-  displayedTotalReturns: number;
-  displayedTotalRatio: number;
-}
+// Button component
+const Button: React.FC<{
+  variant: 'primary' | 'secondary';
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}> = ({ variant, onClick, disabled, className, children }) => {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-2 rounded-full flex-row px-4 py-2 text-xs font-medium transition-all duration-200 ${
+        variant === 'primary' && !disabled
+          ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
+          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+      } ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
 
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn: string;
-  displayName: string;
-}
+// ProductSearchInput component
+const ProductSearchInput: React.FC<{
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+  className?: string;
+}> = ({ value, onChange, placeholder, ariaLabel, className }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
 
+  const handleClear = () => {
+    onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
+  };
+
+  return (
+    <div className={`relative group w-full ${className}`}>
+      <motion.div
+        className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
+        initial={false}
+        animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
+        transition={{ duration: 0.2 }}
+      >
+        <Search className="w-4 h-4" />
+      </motion.div>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      {value && (
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.2 }}
+          onClick={handleClear}
+          className={`absolute px-3 py-2 inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-4 h-4" />
+        </motion.button>
+      )}
+    </div>
+  );
+};
+
+// ProductDropdown component
+const ProductDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption =
+    options.find((opt) => opt.value === value) ||
+    options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+
+  return (
+    <div className="relative group">
+      <button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label || (isRtl ? 'غير معروف' : 'Unknown')}</span>
+        <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </div>
+      </button>
+      {isOpen && !disabled && (
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+          {options.map((option) => (
+            <div
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+            >
+              {option.label || (isRtl ? 'غير معروف' : 'Unknown')}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Utility functions
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
@@ -76,10 +172,6 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
     return true;
   } catch (error) {
     console.error('Font loading error:', error);
-    toast.error(isRtl ? 'فشل في تحميل الخط، يتم استخدام الخط الافتراضي' : 'Failed to load font, using default', {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
     return false;
   }
 };
@@ -108,8 +200,8 @@ const generatePDFHeader = (
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
   const stats = isRtl
-    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الطلبات: ${toArabicNumerals(totalOrders)} وحدة | إجمالي المرتجعات: ${toArabicNumerals(totalReturns)}`
-    : `Total Products: ${totalItems} | Total Orders: ${totalOrders} units | Total Returns: ${totalReturns}`;
+    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الطلبات: ${toArabicNumerals(totalOrders)} وحدة | إجمالي المرتجعات: ${toArabicNumerals(totalReturns)} وحدة`
+    : `Total Products: ${totalItems} | Total Orders: ${totalOrders} units | Total Returns: ${totalReturns} units`;
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
   doc.setDrawColor(245, 158, 11);
@@ -135,22 +227,18 @@ const generatePDFHeader = (
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
-  data: any[],
+  data: any[][],
   isRtl: boolean,
   fontLoaded: boolean,
   fontName: string
 ) => {
   const pageWidth = doc.internal.pageSize.width;
   const margin = 10;
-
-  // Calculate approximate table width
   let tableWidth = 0;
   headers.forEach(header => {
     tableWidth += doc.getTextWidth(header) + 10;
   });
-
   const leftMargin = (pageWidth - tableWidth) / 2;
-
   const numColumns = headers.length;
   const fontSizeHead = Math.max(5, Math.min(8, Math.floor(280 / numColumns)));
   const fontSizeBody = fontSizeHead - 1;
@@ -164,7 +252,6 @@ const generatePDFTable = (
       fontStyle: 'bold',
     };
   });
-
   autoTable(doc, {
     head: [isRtl ? headers.slice().reverse() : headers],
     body: isRtl ? data.map(row => row.slice().reverse()) : data,
@@ -213,7 +300,7 @@ const generatePDFTable = (
 };
 
 const exportToPDF = async (
-  data: any[],
+  data: any[][],
   title: string,
   monthName: string,
   headers: string[],
@@ -327,6 +414,36 @@ const exportToExcel = (
   }
 };
 
+// Data interface
+interface OrdersVsReturnsRow {
+  id: string;
+  code: string;
+  product: string;
+  unit: string;
+  dailyOrders: number[];
+  dailyReturns: number[];
+  dailyBranchDetailsOrders: { [branch: string]: number }[];
+  dailyBranchDetailsReturns: { [branch: string]: number }[];
+  totalOrders: number;
+  totalReturns: number;
+  totalRatio: number;
+  displayedDailyOrders: number[];
+  displayedDailyReturns: number[];
+  displayedDailyBranchDetailsOrders: { [branch: string]: number }[];
+  displayedDailyBranchDetailsReturns: { [branch: string]: number }[];
+  displayedTotalOrders: number;
+  displayedTotalReturns: number;
+  displayedTotalRatio: number;
+}
+
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn: string;
+  displayName: string;
+}
+
+// Main ReturnsVsOrdersPage component
 const ReturnsVsOrdersPage: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -338,12 +455,12 @@ const ReturnsVsOrdersPage: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>(currentDate.getMonth().toString());
   const [ordersVsReturnsData, setOrdersVsReturnsData] = useState<{ [month: number]: OrdersVsReturnsRow[] }>({});
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('all');
-  const [selectedPeriod, setSelectedPeriod] = useState(initialWeek);
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(initialWeek);
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
 
   const months = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
     value: i.toString(),
@@ -401,9 +518,9 @@ const ReturnsVsOrdersPage: React.FC = () => {
     setLoading(true);
     try {
       const [ordersResponse, branchesResponse, returnsResponse] = await Promise.all([
-        ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl),
+        ordersAPI.getAll({ page: 1, limit: 5000 }, isRtl),
         branchesAPI.getAll(),
-        returnsAPI.getAll({ page: 1, limit: 10000 }),
+        returnsAPI.getAll({ page: 1, limit: 5000 }),
       ]);
 
       const monthlyOrdersVsReturnsData: { [month: number]: OrdersVsReturnsRow[] } = {};
@@ -420,10 +537,10 @@ const ReturnsVsOrdersPage: React.FC = () => {
       const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
 
       const productDetails = new Map<string, { code: string; product: string; unit: string }>();
-      let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
-      let returnsList = returnsResponse.returns || [];
+      let allOrders = Array.isArray(ordersResponse) ? ordersResponse : [];
+      let allReturns = returnsResponse.returns || [];
 
-      orders.forEach((order: any) => {
+      allOrders.forEach((order: any) => {
         (order.items || []).forEach((item: any) => {
           const productId = item.product?._id || item.productId;
           if (productId && !productDetails.has(productId)) {
@@ -438,10 +555,10 @@ const ReturnsVsOrdersPage: React.FC = () => {
 
       for (let month = 0; month < 12; month++) {
         const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-        const orderMap = new Map<string, { dailyQuantities: number[], dailyBranchDetails: { [branch: string]: number }[], totalQuantity: number, code: string, product: string, unit: string }>();
-        const returnMap = new Map<string, { dailyReturns: number[], dailyBranchDetails: { [branch: string]: number }[], totalReturns: number }>();
+        const orderMap = new Map<string, { dailyOrders: number[], dailyBranchDetailsOrders: { [branch: string]: number }[], totalOrders: number, code: string, product: string, unit: string }>();
+        const returnMap = new Map<string, { dailyReturns: number[], dailyBranchDetailsReturns: { [branch: string]: number }[], totalReturns: number }>();
 
-        orders.forEach((order: any) => {
+        allOrders.forEach((order: any) => {
           const date = new Date(order.createdAt || order.date);
           if (isNaN(date.getTime())) return;
           const orderMonth = date.getMonth();
@@ -461,9 +578,9 @@ const ReturnsVsOrdersPage: React.FC = () => {
               const key = `${productId}-${month}`;
               if (!orderMap.has(key)) {
                 orderMap.set(key, {
-                  dailyQuantities: Array(daysInMonthCount).fill(0),
-                  dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-                  totalQuantity: 0,
+                  dailyOrders: Array(daysInMonthCount).fill(0),
+                  dailyBranchDetailsOrders: Array.from({ length: daysInMonthCount }, () => ({})),
+                  totalOrders: 0,
                   code: details.code,
                   product: details.product,
                   unit: details.unit,
@@ -471,14 +588,14 @@ const ReturnsVsOrdersPage: React.FC = () => {
               }
               const row = orderMap.get(key)!;
               const quantity = Number(item.quantity) || 0;
-              row.dailyQuantities[day] += quantity;
-              row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
-              row.totalQuantity += quantity;
+              row.dailyOrders[day] += quantity;
+              row.dailyBranchDetailsOrders[day][branch] = (row.dailyBranchDetailsOrders[day][branch] || 0) + quantity;
+              row.totalOrders += quantity;
             });
           }
         });
 
-        returnsList.forEach((returnItem: any) => {
+        allReturns.forEach((returnItem: any) => {
           if (returnItem.status !== 'approved') return;
           const date = new Date(returnItem.createdAt);
           if (isNaN(date.getTime())) return;
@@ -500,14 +617,14 @@ const ReturnsVsOrdersPage: React.FC = () => {
               if (!returnMap.has(key)) {
                 returnMap.set(key, {
                   dailyReturns: Array(daysInMonthCount).fill(0),
-                  dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                  dailyBranchDetailsReturns: Array.from({ length: daysInMonthCount }, () => ({})),
                   totalReturns: 0,
                 });
               }
               const row = returnMap.get(key)!;
               const quantity = Number(item.quantity) || 0;
               row.dailyReturns[day] += quantity;
-              row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
+              row.dailyBranchDetailsReturns[day][branch] = (row.dailyBranchDetailsReturns[day][branch] || 0) + quantity;
               row.totalReturns += quantity;
             });
           }
@@ -520,29 +637,29 @@ const ReturnsVsOrdersPage: React.FC = () => {
         const ordersVsReturnsMap = new Map<string, OrdersVsReturnsRow>();
         productKeys.forEach((key) => {
           const ordersRow = orderMap.get(key) || {
-            dailyQuantities: Array(daysInMonthCount).fill(0),
-            dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-            totalQuantity: 0,
+            dailyOrders: Array(daysInMonthCount).fill(0),
+            dailyBranchDetailsOrders: Array.from({ length: daysInMonthCount }, () => ({})),
+            totalOrders: 0,
             code: '',
             product: '',
             unit: '',
           };
           const returnsRow = returnMap.get(key) || {
             dailyReturns: Array(daysInMonthCount).fill(0),
-            dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+            dailyBranchDetailsReturns: Array.from({ length: daysInMonthCount }, () => ({})),
             totalReturns: 0,
           };
-          const totalRatio = ordersRow.totalQuantity > 0 ? (returnsRow.totalReturns / ordersRow.totalQuantity) * 100 : 0;
+          const totalRatio = ordersRow.totalOrders > 0 ? (returnsRow.totalReturns / ordersRow.totalOrders) * 100 : 0;
           ordersVsReturnsMap.set(key, {
             id: key,
             code: ordersRow.code,
             product: ordersRow.product,
             unit: ordersRow.unit,
-            dailyOrders: ordersRow.dailyQuantities,
+            dailyOrders: ordersRow.dailyOrders,
             dailyReturns: returnsRow.dailyReturns,
-            dailyBranchDetailsOrders: ordersRow.dailyBranchDetails,
-            dailyBranchDetailsReturns: returnsRow.dailyBranchDetails,
-            totalOrders: ordersRow.totalQuantity,
+            dailyBranchDetailsOrders: ordersRow.dailyBranchDetailsOrders,
+            dailyBranchDetailsReturns: returnsRow.dailyBranchDetailsReturns,
+            totalOrders: ordersRow.totalOrders,
             totalReturns: returnsRow.totalReturns,
             totalRatio,
             displayedDailyOrders: [],
@@ -575,32 +692,32 @@ const ReturnsVsOrdersPage: React.FC = () => {
   }, [fetchData]);
 
   const filteredData = useMemo(() => {
-    return ordersVsReturnsData[parseInt(selectedMonth)]?.filter(row => 
-      row.product.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      row.code.toLowerCase().includes(searchTerm.toLowerCase())
-    ).map(row => {
-      let displayedDailyOrders = row.dailyOrders.slice(startDay - 1, endDay);
-      let displayedDailyBranchDetailsOrders = row.dailyBranchDetailsOrders.slice(startDay - 1, endDay);
-      let displayedDailyReturns = row.dailyReturns.slice(startDay - 1, endDay);
-      let displayedDailyBranchDetailsReturns = row.dailyBranchDetailsReturns.slice(startDay - 1, endDay);
-      if (selectedBranch !== 'all') {
-        displayedDailyOrders = displayedDailyOrders.map((_, i) => displayedDailyBranchDetailsOrders[i][selectedBranch] || 0);
-        displayedDailyReturns = displayedDailyReturns.map((_, i) => displayedDailyBranchDetailsReturns[i][selectedBranch] || 0);
-      }
-      const displayedTotalOrders = displayedDailyOrders.reduce((sum, q) => sum + q, 0);
-      const displayedTotalReturns = displayedDailyReturns.reduce((sum, q) => sum + q, 0);
-      const displayedTotalRatio = displayedTotalOrders > 0 ? (displayedTotalReturns / displayedTotalOrders * 100) : 0;
-      return {
-        ...row,
-        displayedDailyOrders,
-        displayedDailyReturns,
-        displayedDailyBranchDetailsOrders,
-        displayedDailyBranchDetailsReturns,
-        displayedTotalOrders,
-        displayedTotalReturns,
-        displayedTotalRatio,
-      };
-    }).sort((a, b) => b.displayedTotalRatio - a.displayedTotalRatio) || [];
+    const data = ordersVsReturnsData[parseInt(selectedMonth)] || [];
+    return data
+      .filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()) || row.code.toLowerCase().includes(searchTerm.toLowerCase()))
+      .map(row => {
+        let displayedDailyOrders = row.dailyOrders.slice(startDay - 1, endDay);
+        let displayedDailyBranchDetailsOrders = row.dailyBranchDetailsOrders.slice(startDay - 1, endDay);
+        let displayedDailyReturns = row.dailyReturns.slice(startDay - 1, endDay);
+        let displayedDailyBranchDetailsReturns = row.dailyBranchDetailsReturns.slice(startDay - 1, endDay);
+        if (selectedBranch !== 'all') {
+          displayedDailyOrders = displayedDailyOrders.map((_, i) => displayedDailyBranchDetailsOrders[i][selectedBranch] || 0);
+          displayedDailyReturns = displayedDailyReturns.map((_, i) => displayedDailyBranchDetailsReturns[i][selectedBranch] || 0);
+        }
+        const displayedTotalOrders = displayedDailyOrders.reduce((sum, q) => sum + q, 0);
+        const displayedTotalReturns = displayedDailyReturns.reduce((sum, q) => sum + q, 0);
+        const displayedTotalRatio = displayedTotalOrders > 0 ? (displayedTotalReturns / displayedTotalOrders * 100) : 0;
+        return {
+          ...row,
+          displayedDailyOrders,
+          displayedDailyReturns,
+          displayedDailyBranchDetailsOrders,
+          displayedDailyBranchDetailsReturns,
+          displayedTotalOrders,
+          displayedTotalReturns,
+          displayedTotalRatio,
+        };
+      }).sort((a, b) => b.displayedTotalRatio - a.displayedTotalRatio);
   }, [ordersVsReturnsData, selectedMonth, searchTerm, selectedBranch, startDay, endDay]);
 
   const grandTotalOrders = useMemo(() => filteredData.reduce((sum, row) => sum + row.displayedTotalOrders, 0), [filteredData]);
