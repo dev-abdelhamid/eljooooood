@@ -146,7 +146,7 @@ const translations: Translations = {
     orderCleared: 'تم مسح الطلب',
     scrollToSummary: 'التمرير للملخص',
     currency: 'ريال',
-    invalidQuantity: 'الكمية غير صحيحة. للكيلو: 0.25، 0.5، 0.75، 1.0، 1.25، 1.4، 1.7... | لغير الكيلو: عدد صحيح',
+    invalidQuantity: 'الكمية غير صحيحة. للكيلو: 0.25، 0.5، 0.75، 1.0، 1.25، 1.4، 1.7... (رقمين بعد النقطة) | لغير الكيلو: عدد صحيح',
   },
   en: {
     createOrder: 'Create New Order',
@@ -172,7 +172,7 @@ const translations: Translations = {
     confirmMessage: 'Are you sure you want to submit the order?',
     cancel: 'Cancel',
     confirm: 'Confirm',
-    unauthorized: 'You are not authorized to access',
+    unauthorized: 'Unauthorized access',
     fetchError: 'Error fetching data',
     createError: 'Error creating order',
     cartEmpty: 'Cart is empty',
@@ -180,23 +180,50 @@ const translations: Translations = {
     orderCleared: 'Order cleared',
     scrollToSummary: 'Scroll to Summary',
     currency: 'SAR',
-    invalidQuantity: 'Invalid quantity. For kg: 0.25, 0.5, 0.75, 1.0, 1.25, 1.4, 1.7... | For others: integer only',
+    invalidQuantity: 'Invalid quantity. For kg: 0.25, 0.5, 0.75, 1.0, 1.25, 1.4, 1.7... (max 2 decimals) | Others: integer only',
   },
 };
 
-// === دالة التحقق من الكمية (تسمح بـ 0.25، 1.25، 1.4، 1.7...) ===
-const isValidKgQuantity = (qty: number): boolean => {
-  if (qty <= 0) return false;
-  const multiplied = Math.round(qty * 100);
+// === دالة التحقق من الكمية (رقم أو رقم.رقم - رقمين بعد النقطة فقط) ===
+const isValidKgInput = (input: string): boolean => {
+  const clean = input.trim();
+  if (clean === '') return true;
+
+  // السماح فقط بالأرقام والنقطة
+  if (!/^\d*\.?\d*$/.test(clean)) return false;
+
+  // نقطة واحدة فقط
+  if ((clean.match(/\./g) || []).length > 1) return false;
+
+  const num = parseFloat(clean);
+  if (isNaN(num) || num <= 0) return false;
+
+  // رقمين بعد النقطة فقط
+  const decimalPart = clean.split('.')[1] || '';
+  if (decimalPart.length > 2) return false;
+
+  // مضاعفات 0.25
+  const multiplied = Math.round(num * 100);
   return multiplied % 25 === 0;
 };
 
-const isValidQuantity = (quantity: number, unit: string): boolean => {
+const isValidNonKgInput = (input: string): boolean => {
+  const clean = input.trim();
+  if (clean === '') return true;
+  return /^\d+$/.test(clean) && parseInt(clean, 10) >= 1;
+};
+
+const isValidQuantityInput = (input: string, unit: string): { valid: boolean; value?: number } => {
   const kgUnits = ['كيلو', 'Kilo', 'كجم', 'kg'];
-  if (kgUnits.includes(unit)) {
-    return isValidKgQuantity(quantity);
+  const isKg = kgUnits.includes(unit);
+
+  if (isKg) {
+    if (!isValidKgInput(input)) return { valid: false };
+    return { valid: true, value: parseFloat(input) };
+  } else {
+    if (!isValidNonKgInput(input)) return { valid: false };
+    return { valid: true, value: parseInt(input, 10) };
   }
-  return Number.isInteger(quantity) && quantity >= 1;
 };
 
 // === مكون إدخال الكمية ===
@@ -220,35 +247,16 @@ const QuantityInput = ({
   const isKg = kgUnits.includes(unit);
 
   const validateAndSet = (val: string) => {
-    const cleanVal = val.replace(',', '.').trim();
-    const num = parseFloat(cleanVal);
-
-    if (val === '' || isNaN(num)) {
-      setInputValue('');
-      onChange(0);
-      return;
-    }
-
-    if (num <= 0) {
-      toast.error(isRtl ? 'الكمية يجب أن تكون أكبر من 0' : 'Quantity must be > 0');
+    const result = isValidQuantityInput(val, unit);
+    if (!result.valid) {
+      toast.error(isRtl ? 'الكمية غير صحيحة' : 'Invalid quantity');
       setInputValue(value > 0 ? value.toString() : '');
       return;
     }
-
-    if (isKg && !isValidKgQuantity(num)) {
-      toast.error(isRtl ? 'للكيلو: يجب أن تكون مضاعفات 0.25 (مثل 1.25، 1.4، 1.7)' : 'For kg: must be 0.25 increments');
-      setInputValue(value > 0 ? value.toString() : '');
-      return;
+    if (result.value !== undefined) {
+      setInputValue(result.value > 0 ? result.value.toString() : '');
+      onChange(result.value);
     }
-
-    if (!isKg && !Number.isInteger(num)) {
-      toast.error(isRtl ? 'الكمية يجب أن تكون عددًا صحيحًا' : 'Quantity must be an integer');
-      setInputValue(value > 0 ? value.toString() : '');
-      return;
-    }
-
-    setInputValue(num.toString());
-    onChange(num);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -564,7 +572,7 @@ export function NewOrder() {
           displayUnit: isRtl ? (p.unit || 'غير محدد') : (p.unitEn || p.unit || 'N/A'),
           department: {
             ...p.department,
-            displayName: isRtl ? p.department.name : (p.nameEn || p.department.name),
+            displayName: isRtl ? p.department.name : (p.department.nameEn || p.department.name),
           },
         }));
         setProducts(prods);
@@ -625,7 +633,14 @@ export function NewOrder() {
     socket.on('orderCreated', (data) => {
       if (!data?._id) return;
       const msg = user.role === 'branch' ? t.orderCreated : `طلب جديد: #${data.orderNumber}`;
-    
+      addNotification({
+        _id: data.eventId || crypto.randomUUID(),
+        type: 'success',
+        message: msg,
+        data: { orderId: data._id },
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
     });
 
     return () => { socket.disconnect(); };
@@ -638,7 +653,8 @@ export function NewOrder() {
       const step = isKg ? 0.25 : 1;
       const qty = existing ? existing.quantity + step : step;
 
-      if (!isValidQuantity(qty, product.displayUnit)) {
+      const result = isValidQuantityInput(qty.toString(), product.displayUnit);
+      if (!result.valid) {
         toast.error(t.invalidQuantity);
         return prev;
       }
@@ -659,7 +675,8 @@ export function NewOrder() {
       setOrderItems(prev => prev.filter(i => i.productId !== id));
       return;
     }
-    if (!isValidQuantity(qty, item.product.displayUnit)) {
+    const result = isValidQuantityInput(qty.toString(), item.product.displayUnit);
+    if (!result.valid) {
       toast.error(t.invalidQuantity);
       return;
     }
@@ -674,6 +691,7 @@ export function NewOrder() {
     setOrderItems([]);
     if (user?.role === 'admin') setBranch('');
     setSearchInput(''); setSearchTerm(''); setFilterDepartment('');
+    toast.success(t.orderCleared);
   }, [user, t]);
 
   const total = useMemo(() => orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0).toFixed(2), [orderItems]);
@@ -724,6 +742,7 @@ export function NewOrder() {
       addNotification({ _id: eventId, type: 'success', message: t.orderCreated, data: { orderId: res.data.id }, read: false, createdAt: new Date().toISOString() });
       clearOrder();
       setShowConfirmModal(false);
+      toast.success(t.orderCreated);
     } catch (err: any) {
       toast.error(err.message || t.createError);
     } finally {
@@ -734,9 +753,9 @@ export function NewOrder() {
   const scrollToSummary = () => summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   return (
-    <div className="mx-auto px-4 py-8 min-h-screen" >
-      <div className="mb-8 flex flex-col items-center md:items-start justify-center md:justify-start text-center">
-        <div className="flex items-center md:items-start justify-center md:justify-start gap-3">
+    <div className="mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="mb-8 text-center">
+        <div className="flex items-center justify-center gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
           <h1 className="text-2xl font-bold">{t.createOrder}</h1>
         </div>
@@ -762,14 +781,27 @@ export function NewOrder() {
       <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6' : ''}`}>
         <div className={orderItems.length > 0 ? 'lg:col-span-2' : ''}>
           <div className="p-6 bg-white rounded-xl shadow-sm border">
+            {/* البحث: 2 col في الكبير، 1 col في الصغير */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <ProductSearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} ariaLabel={t.searchPlaceholder} />
-              <ProductDropdown
-                value={filterDepartment}
-                onChange={setFilterDepartment}
-                options={[{ value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' }, ...departments.map(d => ({ value: d._id, label: d.displayName }))]}
-                ariaLabel={t.department}
-              />
+              <div className="sm:col-span-2">
+                <ProductSearchInput
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  placeholder={t.searchPlaceholder}
+                  ariaLabel={t.searchPlaceholder}
+                />
+              </div>
+              <div className="sm:col-span-1">
+                <ProductDropdown
+                  value={filterDepartment}
+                  onChange={setFilterDepartment}
+                  options={[
+                    { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                    ...departments.map(d => ({ value: d._id, label: d.displayName }))
+                  ]}
+                  ariaLabel={t.department}
+                />
+              </div>
             </div>
             <p className="mt-2 text-center text-sm text-gray-600">{filteredProducts.length} منتج</p>
           </div>
@@ -803,7 +835,7 @@ export function NewOrder() {
         </div>
 
         {orderItems.length > 0 && (
-          <div className="md:sticky lg:col-span-1 space-y-6" ref={summaryRef}>
+          <div className="lg:col-span-1 space-y-6" ref={summaryRef}>
             <div className="p-6 bg-white rounded-xl shadow-sm border">
               <h3 className="text-xl font-bold mb-4">{t.orderSummary}</h3>
               {orderItems.map(item => (
@@ -820,7 +852,7 @@ export function NewOrder() {
                       onDecrement={() => updateQuantity(item.productId, Math.max(0, item.quantity - (['كيلو', 'Kilo', 'كجم', 'kg'].includes(item.product.displayUnit) ? 0.25 : 1)))}
                       unit={item.product.displayUnit}
                     />
-                    <button onClick={() => removeFromOrder(item.productId)} className="w-8 h-8 bg-red-600 text-white rounded-full-full flex items-center justify-center">
+                    <button onClick={() => removeFromOrder(item.productId)} className="w-8 h-8 bg-red-600 text-white rounded-full flex items-center justify-center">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
