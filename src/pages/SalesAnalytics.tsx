@@ -1298,7 +1298,7 @@ const ReportsAnalytics: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-4 font-alexandria container mx-auto max-w-7xl">
+    <div className="min-h-screen p-4 font-alexandria  mx-auto" >
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-4">
         <div className="flex items-center gap-2 mb-4">
