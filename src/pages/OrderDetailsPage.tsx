@@ -417,19 +417,19 @@ export const OrderDetailsPage: React.FC = () => {
           <div className="flex items-center  gap-2">
             <Button
               onClick={() => navigate('/orders')}
-              className="p-1 rounded-full  w-2 h-2 bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center"
+              className=" p-5 rounded-full  bg-amber-600 hover:bg-amber-700 text-white flex items-center justify-center"
               aria-label={t('common.back')}
 
             >
               {isRtl ? (
-                <ChevronRight className="w-5 h-5 text-gray-700" />
+                <ChevronRight className="w-3 h-3 text-gray-700" />
               ) : (
-                <ChevronLeft className="w-5 h-5 text-gray-700" />
+                <ChevronLeft className="w-3 h-3 text-gray-700" />
               )}
             </Button>
             <h1 className="text-xl font-semibold  text-gray-800">
               {t('orders.order_details')}  
-              <span className="text-amber-600">#{order.orderNumber}</span>
+              <span className="text-amber-600">{order.orderNumber}</span>
             </h1>
           </div>
         </motion.div>
