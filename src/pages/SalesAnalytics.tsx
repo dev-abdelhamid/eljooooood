@@ -1321,8 +1321,7 @@ const ReportsAnalytics: React.FC = () => {
             options={branchOptions}
             ariaLabel={t.branchFilterPlaceholder}
           />
-          <div className="flex flex-col md:flex-row justify-center  align-center items-center" >
-            <div >
+          <div className=" flex flex-col md:flex-row justify-center  align-center items-center ">
             <label className="block text-xs text-gray-700 font-alexandria mb-1">{t.startDate}</label>
             <input
               type="date"
@@ -1342,8 +1341,6 @@ const ReportsAnalytics: React.FC = () => {
               aria-label={t.endDate}
             />
           </div>
-          </div>
-         
         </div>
       </header>
       {error && (
@@ -1377,7 +1374,7 @@ const ReportsAnalytics: React.FC = () => {
           className="space-y-6"
         >
           {activeTab === 'sales' && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 ">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalSales}</h4>
