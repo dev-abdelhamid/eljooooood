@@ -228,7 +228,7 @@ const translations = {
     "inventory.remaining": "متبقي",
 
     // التقارير
-    "reports": "التقارير",
+    "reports": "الإحصائيات والتقارير",
     "reports.daily": "يومي",
     "reports.weekly": "أسبوعي",
     "reports.monthly": "شهري",
@@ -590,7 +590,7 @@ const translations = {
     "inventory.remaining": "Remaining",
 
     // Reports
-    "reports": "Reports",
+    "reports": "Statistics & Reports",
     "reports.daily": "Daily",
     "reports.weekly": "Weekly",
     "reports.monthly": "Monthly",
