@@ -49,32 +49,23 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   const { t } = useLanguage();
 
   // دعم department كـ array
-// داخل AssignChefsModal
-
-const availableChefsByDepartment = useMemo(() => {
-  const map = new Map<string, Chef[]>();
-  
-  chefs.forEach((chef) => {
-    // تأكد إن department مصفوفة ومش فاضية
-    const departments = Array.isArray(chef.department) ? chef.department : [];
-    
-    departments.forEach((dept) => {
-      const deptId = dept?._id?.toString();
-      if (deptId) {
-        if (!map.has(deptId)) {
-          map.set(deptId, []);
-        }
-        // نضيف نسخة من الشيف لكل قسم (مهم للـ useMemo)
-        map.get(deptId)!.push({
-          ...chef,
-          department: departments, // نحافظ على المصفوفة كاملة
+  const availableChefsByDepartment = useMemo(() => {
+    const map = new Map<string, Chef[]>();
+    chefs.forEach((chef) => {
+      if (Array.isArray(chef.department) && chef.department.length > 0) {
+        chef.department.forEach((dept) => {
+          const deptId = dept.id || dept._id;
+          if (deptId) {
+            if (!map.has(deptId)) {
+              map.set(deptId, []);
+            }
+            map.get(deptId)!.push(chef);
+          }
         });
       }
     });
-  });
-  
-  return map;
-}, [chefs]);
+    return map;
+  }, [chefs]);
 
   const updateAssignment = useCallback(
     (index: number, value: string) => {
