@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key, Eye, EyeOff, Search, X } from 'lucide-react';
+import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key, Eye, EyeOff  , Search ,  X} from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
@@ -29,7 +29,7 @@ interface Chef {
     createdAt: string;
     updatedAt: string;
   } | null;
-  departments: Department[];
+  department: Department | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,7 +47,6 @@ const translations = {
     email: 'الإيميل',
     phone: 'الهاتف',
     department: 'القسم',
-    departments: 'الأقسام',
     createdAt: 'تاريخ الإنشاء',
     updatedAt: 'تاريخ التحديث',
     edit: 'تعديل',
@@ -59,13 +58,13 @@ const translations = {
     nameEnRequired: 'اسم الشيف بالإنجليزية مطلوب',
     usernameRequired: 'اسم المستخدم مطلوب',
     passwordRequired: 'كلمة المرور مطلوبة',
-    departmentRequired: 'يجب اختيار قسم واحد على الأقل',
+    departmentRequired: 'القسم مطلوب',
     namePlaceholder: 'أدخل اسم الشيف',
     nameEnPlaceholder: 'أدخل اسم الشيف بالإنجليزية',
     usernamePlaceholder: 'أدخل اسم المستخدم',
     emailPlaceholder: 'أدخل الإيميل',
     phonePlaceholder: 'أدخل رقم الهاتف',
-    departmentPlaceholder: 'اختر الأقسام',
+    departmentPlaceholder: 'اختر القسم',
     passwordPlaceholder: 'أدخل كلمة المرور',
     update: 'تحديث الشيف',
     requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
@@ -106,7 +105,6 @@ const translations = {
     email: 'Email',
     phone: 'Phone',
     department: 'Department',
-    departments: 'Departments',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     edit: 'Edit',
@@ -118,13 +116,13 @@ const translations = {
     nameEnRequired: 'Chef name in English is required',
     usernameRequired: 'Username is required',
     passwordRequired: 'Password is required',
-    departmentRequired: 'At least one department is required',
+    departmentRequired: 'Department is required',
     namePlaceholder: 'Enter chef name',
     nameEnPlaceholder: 'Enter chef name in English',
     usernamePlaceholder: 'Enter username',
     emailPlaceholder: 'Enter email',
     phonePlaceholder: 'Enter phone number',
-    departmentPlaceholder: 'Select departments',
+    departmentPlaceholder: 'Select department',
     passwordPlaceholder: 'Enter password',
     update: 'Update Chef',
     requiredFields: 'Please fill all required fields',
@@ -251,60 +249,6 @@ const FormInput = ({
   );
 };
 
-const MultiSelectDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  placeholder,
-  error,
-}: {
-  value: string[];
-  onChange: (value: string[]) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-  placeholder: string;
-  error?: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-
-  const toggleOption = (optionValue: string) => {
-    if (value.includes(optionValue)) {
-      onChange(value.filter(v => v !== optionValue));
-    } else {
-      onChange([...value, optionValue]);
-    }
-  };
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs text-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      >
-        {value.length > 0 ? `${value.length} ${isRtl ? 'أقسام مختارة' : 'departments selected'}` : placeholder}
-      </button>
-      {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-md max-h-40 overflow-y-auto">
-          {options.map(option => (
-            <div
-              key={option.value}
-              onClick={() => toggleOption(option.value)}
-              className={`px-3 py-2 cursor-pointer hover:bg-amber-50 text-xs ${value.includes(option.value) ? 'bg-amber-100' : ''}`}
-            >
-              {option.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
 export function Chefs() {
   const { language } = useLanguage();
   const { user: loggedInUser } = useAuth();
@@ -329,7 +273,7 @@ export function Chefs() {
     username: '',
     email: '',
     phone: '',
-    departments: [] as string[],
+    department: '',
     password: '',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -369,13 +313,15 @@ export function Chefs() {
           createdAt: chef.user.createdAt,
           updatedAt: chef.user.updatedAt,
         },
-        departments: chef.departments.map((dept: any) => ({
-          id: dept._id,
-          name: dept.name,
-          nameEn: dept.nameEn,
-          code: dept.code,
-          description: dept.description,
-        })),
+        department: chef.department
+          ? {
+              id: chef.department._id,
+              name: chef.department.name,
+              nameEn: chef.department.nameEn,
+              code: chef.department.code,
+              description: chef.department.description,
+            }
+          : null,
         createdAt: chef.createdAt,
         updatedAt: chef.updatedAt,
       })));
@@ -418,7 +364,7 @@ export function Chefs() {
     if (!formData.nameEn) errors.nameEn = t.nameEnRequired;
     if (!formData.username) errors.username = t.usernameRequired;
     if (!isEditMode && !formData.password) errors.password = t.passwordRequired;
-    if (formData.departments.length === 0) errors.departments = t.departmentRequired;
+    if (!formData.department) errors.department = t.departmentRequired;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -435,7 +381,7 @@ export function Chefs() {
       username: '',
       email: '',
       phone: '',
-      departments: [],
+      department: departments[0].id,
       password: '',
     });
     setIsEditMode(false);
@@ -452,7 +398,7 @@ export function Chefs() {
       username: chef.user?.username || '',
       email: chef.user?.email || '',
       phone: chef.user?.phone || '',
-      departments: chef.departments.map(dept => dept.id),
+      department: chef.department?.id || '',
       password: '',
     });
     setIsEditMode(true);
@@ -493,7 +439,7 @@ export function Chefs() {
           role: 'chef',
           ...(isEditMode ? {} : { password: formData.password.trim() }),
         },
-        departments: formData.departments,
+        department: formData.department,
       };
 
       if (isEditMode && selectedChef) {
@@ -510,13 +456,15 @@ export function Chefs() {
                     createdAt: updatedChef.user.createdAt,
                     updatedAt: updatedChef.user.updatedAt,
                   },
-                  departments: updatedChef.departments.map((dept: any) => ({
-                    id: dept._id,
-                    name: dept.name,
-                    nameEn: dept.nameEn,
-                    code: dept.code,
-                    description: dept.description,
-                  })),
+                  department: updatedChef.department
+                    ? {
+                        id: updatedChef.department._id,
+                        name: updatedChef.department.name,
+                        nameEn: updatedChef.department.nameEn,
+                        code: updatedChef.department.code,
+                        description: updatedChef.department.description,
+                      }
+                    : null,
                   createdAt: updatedChef.createdAt,
                   updatedAt: updatedChef.updatedAt,
                 }
@@ -540,13 +488,15 @@ export function Chefs() {
               createdAt: newChef.user.createdAt,
               updatedAt: newChef.user.updatedAt,
             },
-            departments: newChef.departments.map((dept: any) => ({
-              id: dept._id,
-              name: dept.name,
-              nameEn: dept.nameEn,
-              code: dept.code,
-              description: dept.description,
-            })),
+            department: newChef.department
+              ? {
+                  id: newChef.department._id,
+                  name: newChef.department.name,
+                  nameEn: newChef.department.nameEn,
+                  code: newChef.department.code,
+                  description: newChef.department.description,
+                }
+              : null,
             createdAt: newChef.createdAt,
             updatedAt: newChef.updatedAt,
           },
@@ -730,8 +680,8 @@ export function Chefs() {
                     </h3>
                     <p className="text-xs text-gray-500">{chef.user?.username || '-'}</p>
                   </div>
-                  <p className="text-xs text-amber-600 truncate">
-                    {chef.departments.map(dept => isRtl ? dept.name : dept.nameEn || dept.name).join(', ') || '-'}
+                  <p className="text-xs text-amber-600">
+                    {isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}
                   </p>
                   <p className="text-xs text-gray-600 truncate">{chef.user?.email || '-'}</p>
                 </div>
@@ -776,7 +726,7 @@ export function Chefs() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -838,23 +788,24 @@ export function Chefs() {
                     ariaLabel={t.phone}
                   />
                 </div>
-                <div className="sm:col-span-2">
-                  <label htmlFor="departments" className="block text-xs font-medium text-gray-700 mb-1">{t.departments}</label>
-                  <MultiSelectDropdown
-                    value={formData.departments}
-                    onChange={(value) => setFormData({ ...formData, departments: value })}
-                    options={departments.map((dept) => ({
-                      value: dept.id,
-                      label: isRtl ? dept.name : dept.nameEn || dept.name,
-                    }))}
-                    ariaLabel={t.departments}
-                    placeholder={t.departmentPlaceholder}
-                    error={formErrors.departments}
+                <div>
+                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">{t.department}</label>
+                  <CustomDropdown
+                    value={formData.department}
+                    onChange={(value) => setFormData({ ...formData, department: value })}
+                    options={[
+                      { value: '', label: t.departmentPlaceholder },
+                      ...departments.map((dept) => ({
+                        value: dept.id,
+                        label: isRtl ? dept.name : dept.nameEn || dept.name,
+                      })),
+                    ]}
+                    ariaLabel={t.department}
                   />
-                  {formErrors.departments && <p className="text-xs text-red-600 mt-1">{formErrors.departments}</p>}
+                  {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
                 </div>
                 {!isEditMode && (
-                  <div className="sm:col-span-2">
+                  <div>
                     <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">{t.password}</label>
                     <FormInput
                       value={formData.password}
@@ -900,7 +851,7 @@ export function Chefs() {
       )}
 
       {isResetPasswordModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsResetPasswordModalOpen(false); }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsResetPasswordModalOpen(false); }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -965,7 +916,7 @@ export function Chefs() {
       )}
 
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsDeleteModalOpen(false); }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsDeleteModalOpen(false); }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
