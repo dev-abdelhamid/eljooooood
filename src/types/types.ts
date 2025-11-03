@@ -220,7 +220,13 @@ export interface Chef {
   name: string;
   nameEn?: string;
   displayName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
-  department: Department;
+department: Array<{
+    id: string;
+    _id?: string;
+    name: string;
+    nameEn?: string;
+    displayName?: string;
+  }>;
   status?: 'active' | 'inactive';
 }
 
