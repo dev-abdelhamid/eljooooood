@@ -360,7 +360,6 @@ export function ChefTasks() {
                           </p>
                         </div>
                         <span className={`px-6 py-3 rounded-full text-2xl font-bold flex items-center gap-3 ${getStatusInfo(currentTask.status, t).color}`}>
-                          <getStatusInfo(currentTask.status, t).icon className="w-10 h-10" />
                           {getStatusInfo(currentTask.status, t).label}
                         </span>
                       </div>
