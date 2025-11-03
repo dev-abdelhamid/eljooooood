@@ -568,25 +568,34 @@ export const departmentAPI = {
   },
 };
 
-
 export const chefsAPI = {
   getAll: async () => {
     const response = await api.get('/chefs');
+    console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
     return response;
   },
   getById: async (id) => {
-    if (!isValidObjectId(id)) throw new Error('Invalid chef ID');
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.getById - Invalid chef ID:`, id);
+      throw new Error('Invalid chef ID');
+    }
     const response = await api.get(`/chefs/${id}`);
+    console.log(`[${new Date().toISOString()}] chefsAPI.getById - Response:`, response);
     return response;
   },
   getByUserId: async (userId) => {
-    if (!isValidObjectId(userId)) throw new Error('Invalid user ID');
+    if (!isValidObjectId(userId)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
+      throw new Error('Invalid user ID');
+    }
     const response = await api.get(`/chefs/by-user/${userId}`);
+    console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
     return response;
   },
   create: async (chefData) => {
-    if (!chefData.departments || !Array.isArray(chefData.departments) || chefData.departments.length === 0) {
-      throw new Error('يجب اختيار قسم واحد على الأقل');
+    if (!Array.isArray(chefData.departments) || chefData.departments.length === 0) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid departments:`, chefData.departments);
+      throw new Error('Departments array is required');
     }
     const response = await api.post('/chefs', {
       user: {
@@ -596,17 +605,18 @@ export const chefsAPI = {
         email: chefData.user.email?.trim(),
         phone: chefData.user.phone?.trim(),
         password: chefData.user.password,
-        role: 'chef',
-        isActive: true,
+        role: chefData.user.role,
+        isActive: chefData.user.isActive ?? true,
       },
-      departments: chefData.departments,
+      department: chefData.departments,
     });
+    console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
     return response;
   },
   update: async (id, chefData) => {
-    if (!isValidObjectId(id)) throw new Error('Invalid chef ID');
-    if (!chefData.departments || !Array.isArray(chefData.departments) || chefData.departments.length === 0) {
-      throw new Error('يجب اختيار قسم واحد على الأقل');
+    if (!isValidObjectId(id) || !Array.isArray(chefData.departments) || chefData.departments.length === 0) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid data:`, { id, departments: chefData.departments });
+      throw new Error('Invalid chef ID or departments');
     }
     const response = await api.put(`/chefs/${id}`, {
       user: {
@@ -617,18 +627,27 @@ export const chefsAPI = {
         phone: chefData.user.phone?.trim(),
         isActive: chefData.user.isActive ?? true,
       },
-      departments: chefData.departments,
+      department: chefData.departments,
     });
+    console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
     return response;
   },
   delete: async (id) => {
-    if (!isValidObjectId(id)) throw new Error('Invalid chef ID');
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.delete - Invalid chef ID:`, id);
+      throw new Error('Invalid chef ID');
+    }
     const response = await api.delete(`/chefs/${id}`);
+    console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
     return response;
   },
   resetPassword: async (id, password) => {
-    if (!isValidObjectId(id)) throw new Error('Invalid chef ID');
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
+      throw new Error('Invalid chef ID');
+    }
     const response = await api.post(`/chefs/${id}/reset-password`, { password });
+    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword response:`, response);
     return response;
   },
 };
