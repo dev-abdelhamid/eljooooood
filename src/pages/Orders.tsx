@@ -631,25 +631,27 @@ export const Orders: React.FC = () => {
               : [],
           }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
-        dispatch({
-          type: 'SET_CHEFS',
-          payload: chefsResponse
-            .filter((chef: any) => chef && chef.user?._id)
-            .map((chef: any) => ({
-              _id: chef._id,
-              userId: chef.user._id,
-              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: chef.user?.nameEn || chef.nameEn,
-              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
-              department: chef.department ? {
-                _id: chef.department._id,
-                name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: chef.department.nameEn,
-                displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name)
-              } : null,
-              status: chef.status || 'active',
-            })),
-        });
+      dispatch({
+  type: 'SET_CHEFS',
+  payload: chefsResponse
+    .filter((chef: any) => chef && chef.user?._id)
+    .map((chef: any) => ({
+      _id: chef._id,
+      userId: chef.user._id,
+      displayName: isRtl
+        ? (chef.user?.name || chef.name)
+        : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
+      department: Array.isArray(chef.department)
+        ? chef.department.map((d: any) => ({
+            _id: d._id,
+            name: d.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            nameEn: d.nameEn,
+            displayName: isRtl ? d.name : (d.nameEn || d.name),
+          }))
+        : [],
+      status: chef.status || 'active',
+    })),
+});
         dispatch({
           type: 'SET_BRANCHES',
           payload: branchesResponse
