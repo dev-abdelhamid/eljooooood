@@ -67,7 +67,7 @@ const translations = {
     departmentPlaceholder: 'اختر الأقسام',
     passwordPlaceholder: 'أدخل كلمة المرور',
     update: 'تحديث الشيف',
-    requiredFields: 'يرجى ملء جميع الحقول الم403وبة',
+    requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
     usernameExists: 'اسم المستخدم مستخدم بالفعل',
     emailExists: 'الإيميل مستخدم بالفعل',
     unauthorized: 'غير مصرح لك',
@@ -696,6 +696,7 @@ export function Chefs() {
         )}
       </div>
 
+      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
           <motion.div
@@ -773,6 +774,7 @@ export function Chefs() {
                     ]}
                     multiple
                     ariaLabel={t.department}
+                    placeholder={t.departmentPlaceholder}
                   />
                   {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
                 </div>
@@ -822,8 +824,7 @@ export function Chefs() {
         </div>
       )}
 
-      {/* باقي الـ Modals كما هي */}
-      {/* Reset Password Modal */}
+      {/* باقي الـ Modals (Reset Password & Delete) */}
       {isResetPasswordModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsResetPasswordModalOpen(false); }}>
           <motion.div
@@ -889,7 +890,6 @@ export function Chefs() {
         </div>
       )}
 
-      {/* Delete Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsDeleteModalOpen(false); }}>
           <motion.div
