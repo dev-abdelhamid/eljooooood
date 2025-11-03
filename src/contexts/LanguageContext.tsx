@@ -226,6 +226,7 @@ const translations = {
     "inventory.sold": "مُباع",
     "inventory.returned": "مرتجع",
     "inventory.remaining": "متبقي",
+    "orders.updated_at": "إتمام الإنتاج  ",
 
     // التقارير
     "reports": "الإحصائيات والتقارير",
@@ -288,6 +289,9 @@ const translations = {
     "salesReport.departmentSales": "مبيعات الأقسام",
     "salesReport.sale_success": "تم إنشاء المبيعة بنجاح",
     "returns-vs-orders": "المرتجعات مقابل الطلبات",
+            "orders.chef_tasks": "مهام الإنتاج ",
+            "orders.page": "صفحة {page} من {totalPages}",
+
 
     // الأقسام
     "departments": "الأقسام",
@@ -416,6 +420,7 @@ const translations = {
     "settings": "Settings",
     "common.present": "Present",
     "common.absent": "Absent",
+    "orders.page": "Page {page} of {totalPages}",
     "orders.total_amount": "Total Amount",
     "orders.date": "Order Date",
     "pagination.previous": "Previous",
@@ -500,6 +505,10 @@ const translations = {
     "orders.finalTotal": "Final Total",
     "orders.priority": "Priority",
     "orders.priority.low": "Low",
+        "orders.updated_at": "Production At ",
+        "orders.chef_tasks": "Production Tasks ",
+
+
     "orders.priority.medium": "Medium",
     "orders.priority.high": "High",
     "orders.priority.urgent": "Urgent",
