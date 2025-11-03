@@ -1,16 +1,17 @@
-import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
+import React, { useReducer, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { useOrderNotifications } from '../hooks/useOrderNotifications';
+import { productionAssignmentsAPI, chefsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
+import { ProductSearchInput, ProductDropdown } from './OrdersTablePage'; // تأكد من المسار
 import { CheckCircle, Clock, Package, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { productionAssignmentsAPI, chefsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import Pagination from '../components/Shared/Pagination';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 
@@ -23,7 +24,7 @@ interface ChefTask {
   status: 'pending' | 'in_progress' | 'completed';
   progress: number;
   branchName: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
+  priority: string;
   updatedAt: string;
 }
 
@@ -37,7 +38,6 @@ interface State {
   searchQuery: string;
   currentPage: number;
   totalPages: number;
-  isRtl: boolean;
 }
 
 type Action =
@@ -51,8 +51,7 @@ type Action =
   | { type: 'SET_SEARCH_QUERY'; payload: string }
   | { type: 'SET_PAGE'; payload: number }
   | { type: 'UPDATE_TASK'; payload: { itemId: string; status: string; updatedAt: string } }
-  | { type: 'ADD_TASK'; payload: ChefTask }
-  | { type: 'REMOVE_COMPLETED'; payload: string };
+  | { type: 'ADD_TASK'; payload: ChefTask };
 
 const initialState: State = {
   tasks: [],
@@ -64,7 +63,6 @@ const initialState: State = {
   searchQuery: '',
   currentPage: 1,
   totalPages: 1,
-  isRtl: true,
 };
 
 const reducer = (state: State, action: Action): State => {
@@ -97,45 +95,40 @@ const reducer = (state: State, action: Action): State => {
             ? {
                 ...t,
                 status: action.payload.status as any,
-                progress: action.payload.status === 'completed' ? 100 : action.payload.status === 'in_progress' ? 60 : 30,
+                progress: action.payload.status === 'completed' ? 100 : action.payload.status === 'in_progress' ? 65 : 30,
                 updatedAt: action.payload.updatedAt,
               }
             : t
         ),
       };
     case 'ADD_TASK':
-      return { ...state, tasks: [action.payload, ...state.tasks.filter(t => t.itemId !== action.payload.itemId)] };
-    case 'REMOVE_COMPLETED':
-      return { ...state, tasks: state.tasks.filter(t => t.orderId !== action.payload) };
+      return {
+        ...state,
+        tasks: [action.payload, ...state.tasks.filter(t => t.itemId !== action.payload.itemId)],
+      };
     default:
       return state;
   }
 };
 
-const statusOptions = [
-  { value: 'all', label: 'all_statuses' },
-  { value: 'pending', label: 'item_pending' },
-  { value: 'in_progress', label: 'item_in_progress' },
-  { value: 'completed', label: 'item_completed' },
-];
-
 const getStatusConfig = (status: string) => {
   const map = {
-    pending: { color: 'bg-amber-100 text-amber-800', icon: Clock, progress: 30 },
-    in_progress: { color: 'bg-blue-100 text-blue-800', icon: Package, progress: 60 },
-    completed: { color: 'bg-green-100 text-green-800', icon: CheckCircle, progress: 100 },
+    pending: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: 'item_pending' },
+    in_progress: { color: 'bg-blue-100 text-blue-800', icon: Package, label: 'item_in_progress' },
+    completed: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'item_completed' },
   };
   return map[status as keyof typeof map] || map.pending;
 };
 
 const TASKS_PER_PAGE = 12;
 
-export const ChefTasks: React.FC = () => {
+export function ChefTasks() {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-  const { socket, isConnected, emit } = useSocket();
-  const [state, dispatch] = useReducer(reducer, { ...initialState, isRtl });
+  const { socket, isConnected } = useSocket();
+  const navigate = useNavigate();
+  const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -143,21 +136,22 @@ export const ChefTasks: React.FC = () => {
 
   // جلب معرف الشيف
   const fetchChefId = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) return navigate('/login');
     try {
       const chef = await chefsAPI.getByUserId(user.id);
       dispatch({ type: 'SET_CHEF_ID', payload: chef._id });
     } catch {
-      dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized') });
+      toast.error(t('errors.unauthorized'));
+      navigate('/');
     }
-  }, [user, t]);
+  }, [user, navigate, t]);
 
   // جلب المهام
   const fetchTasks = useCallback(async () => {
     if (!state.chefId) return;
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const res = await productionAssignmentsAPI.getChefTasks(state.chefId, { limit: 100 });
+      const res = await productionAssignmentsAPI.getChefTasks(state.chefId, { limit: 200 });
       const tasks: ChefTask[] = res.map((t: any) => ({
         itemId: t._id,
         orderId: t.order._id,
@@ -165,7 +159,7 @@ export const ChefTasks: React.FC = () => {
         productName: isRtl ? t.product.name : (t.product.nameEn || t.product.name),
         quantity: t.quantity,
         status: t.status,
-        progress: getStatusConfig(t.status).progress,
+        progress: 0,
         branchName: isRtl ? t.order.branch.name : (t.order.branch.nameEn || t.order.branch.name),
         priority: t.order.priority || 'medium',
         updatedAt: t.updatedAt,
@@ -176,7 +170,7 @@ export const ChefTasks: React.FC = () => {
     }
   }, [state.chefId, isRtl, t]);
 
-  // تحديث حالة المهمة
+  // تحديث الحالة
   const completeTask = useCallback(async (task: ChefTask) => {
     if (state.submitting.has(task.itemId)) return;
     dispatch({ type: 'ADD_SUBMITTING', payload: task.itemId });
@@ -191,14 +185,12 @@ export const ChefTasks: React.FC = () => {
         payload: { itemId: task.itemId, status: nextStatus, updatedAt: new Date().toISOString() },
       });
 
-      if (socket && isConnected) {
-        emit('itemStatusUpdated', {
-          orderId: task.orderId,
-          itemId: task.itemId,
-          status: nextStatus,
-          chefId: state.chefId,
-        });
-      }
+      socket?.emit('itemStatusUpdated', {
+        orderId: task.orderId,
+        itemId: task.itemId,
+        status: nextStatus,
+        chefId: state.chefId,
+      });
 
       toast.success(t('orders.task_updated'), { position: isRtl ? 'top-left' : 'top-right' });
     } catch {
@@ -206,13 +198,13 @@ export const ChefTasks: React.FC = () => {
     } finally {
       dispatch({ type: 'REMOVE_SUBMITTING', payload: task.itemId });
     }
-  }, [state.submitting, state.chefId, socket, isConnected, emit, isRtl, t]);
+  }, [state.submitting, state.chefId, socket, isRtl, t]);
 
   // السوكت
   useEffect(() => {
     if (!socket || !state.chefId) return;
 
-    socket.on('taskAssigned', (data: any) => {
+    const handleNewTask = (data: any) => {
       if (data.assignedTo?._id !== state.chefId) return;
       const task: ChefTask = {
         itemId: data._id,
@@ -228,26 +220,29 @@ export const ChefTasks: React.FC = () => {
       };
       dispatch({ type: 'ADD_TASK', payload: task });
       toast.info(`مهمة جديدة: ${task.productName}`, { position: isRtl ? 'top-left' : 'top-right' });
-    });
+    };
 
-    socket.on('itemStatusUpdated', (data: any) => {
+    const handleStatusUpdate = (data: any) => {
       if (data.chefId !== state.chefId) return;
       dispatch({
         type: 'UPDATE_TASK',
         payload: { itemId: data.itemId, status: data.status, updatedAt: data.updatedAt },
       });
-    });
+    };
+
+    socket.on('taskAssigned', handleNewTask);
+    socket.on('itemStatusUpdated', handleStatusUpdate);
 
     return () => {
-      socket.off('taskAssigned');
-      socket.off('itemStatusUpdated');
+      socket.off('taskAssigned', handleNewTask);
+      socket.off('itemStatusUpdated', handleStatusUpdate);
     };
   }, [socket, state.chefId, isRtl]);
 
   useEffect(() => { fetchChefId(); }, [fetchChefId]);
   useEffect(() => { if (state.chefId) fetchTasks(); }, [state.chefId, fetchTasks]);
 
-  // الفلترة
+  // الفلترة والتقسيم
   const filteredTasks = useMemo(() => {
     return state.tasks
       .filter(t => state.filterStatus === 'all' || t.status === state.filterStatus)
@@ -266,10 +261,10 @@ export const ChefTasks: React.FC = () => {
 
   if (state.loading) {
     return (
-      <div className="space-y-4 p-4">
+      <div className="p-6 space-y-4">
         {[...Array(6)].map((_, i) => (
           <Card key={i} className="p-6 animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-3/4 mb-4"></div>
+            <div className="h-8 bg-gray-200 rounded mb-4"></div>
             <div className="space-y-3">
               <div className="h-4 bg-gray-200 rounded"></div>
               <div className="h-4 bg-gray-200 rounded w-5/6"></div>
@@ -282,121 +277,154 @@ export const ChefTasks: React.FC = () => {
 
   if (state.error) {
     return (
-      <Card className="p-8 text-center">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <p className="text-red-600">{state.error}</p>
-        <Button onClick={fetchTasks} className="mt-4">إعادة المحاولة</Button>
-      </Card>
+      <div className="p-6">
+        <Card className="p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-red-600 mb-4">{state.error}</p>
+          <Button onClick={() => { fetchChefId(); fetchTasks(); }}>
+            {t('orders.retry')}
+          </Button>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <div className="p-4" dir={isRtl ? 'rtl' : 'ltr'}>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-3">
-            <Package className="w-7 h-7 text-blue-600" />
-            {t('orders.chef_tasks')}
-          </h1>
-          <span className="text-sm text-gray-600">
-            {filteredTasks.length} {t('orders.tasks')}
-          </span>
-        </div>
-
-        <Card className="p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <ProductSearchInput
-              value={state.searchQuery}
-              onChange={e => dispatch({ type: 'SET_SEARCH_QUERY', payload: e.target.value })}
-              placeholder={t('orders.search_placeholder')}
-            />
-            <ProductDropdown
-              options={statusOptions.map(o => ({ value: o.value, label: t(o.label) }))}
-              value={state.filterStatus}
-              onChange={v => dispatch({ type: 'SET_FILTER_STATUS', payload: v })}
-            />
+    <div className="min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="max-w-7xl mx-auto p-4 sm:p-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          {/* العنوان */}
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <Package className="w-8 h-8 text-blue-600" />
+              {t('orders.chef_tasks')}
+            </h1>
+            <div className="text-sm text-gray-600 bg-white px-4 py-2 rounded-full shadow">
+              {filteredTasks.length} {t('orders.tasks')}
+            </div>
           </div>
-        </Card>
 
-        <AnimatePresence>
-          {paginatedTasks.length === 0 ? (
-            <Card className="p-12 text-center">
-              <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">{t('orders.no_tasks')}</p>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {paginatedTasks.map(task => {
-                const config = getStatusConfig(task.status);
-                const Icon = config.icon;
-                return (
-                  <motion.div
-                    key={task.itemId}
-                    layout
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                  >
-                    <Card className="p-5 hover:shadow-xl transition-all">
-                      <div className="flex justify-between items-start mb-3">
-                        <h3 className="font-bold text-lg truncate">{task.productName}</h3>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${config.color}`}>
-                          <Icon className="w-4 h-4 inline" /> {t(`orders.item_${task.status}`)}
-                        </span>
-                      </div>
+          {/* البحث والفلتر */}
+          <Card className="p-5 mb-6 shadow-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <ProductSearchInput
+                value={state.searchQuery}
+                onChange={(e) => dispatch({ type: 'SET_SEARCH_QUERY', payload: e.target.value })}
+                placeholder={t('orders.search_placeholder')}
+              />
+              <ProductDropdown
+                options={[
+                  { value: 'all', label: t('orders.all_statuses') },
+                  { value: 'pending', label: t('orders.item_pending') },
+                  { value: 'in_progress', label: t('orders.item_in_progress') },
+                  { value: 'completed', label: t('orders.item_completed') },
+                ]}
+                value={state.filterStatus}
+                onChange={(v) => dispatch({ type: 'SET_FILTER_STATUS', payload: v })}
+              />
+            </div>
+          </Card>
 
-                      <div className="space-y-2 text-sm text-gray-600">
-                        <p>طلب: <strong>#{task.orderNumber}</strong></p>
-                        <p>الكمية: <strong>{task.quantity}</strong></p>
-                        <p>الفرع: <strong>{task.branchName}</strong></p>
-                      </div>
+          {/* تنبيه السوكت */}
+          {!isConnected && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center gap-3"
+            >
+              <AlertCircle className="w-5 h-5 text-yellow-600" />
+              <p className="text-yellow-700">{t('errors.socket_disconnected')}</p>
+            </motion.div>
+          )}
 
-                      <div className="mt-4">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <motion.div
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${task.progress}%` }}
-                            transition={{ duration: 0.5 }}
-                          />
+          {/* المهام */}
+          <AnimatePresence>
+            {paginatedTasks.length === 0 ? (
+              <Card className="p-16 text-center">
+                <Package className="w-20 h-20 text-gray-400 mx-auto mb-4" />
+                <p className="text-xl text-gray-500">{t('orders.no_tasks')}</p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {paginatedTasks.map((task) => {
+                  const { color, icon: Icon, label } = getStatusConfig(task.status);
+                  return (
+                    <motion.div
+                      key={task.itemId}
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      whileHover={{ y: -4 }}
+                      className="group"
+                    >
+                      <Card className="h-full p-5 bg-white border border-gray-200 hover:border-blue-300 hover:shadow-xl transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                          <h3 className="font-bold text-lg text-gray-900 line-clamp-2">
+                            {task.productName}
+                          </h3>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${color} flex items-center gap-1`}>
+                            <Icon className="w-4 h-4" />
+                            {t(`orders.${label}`)}
+                          </span>
                         </div>
-                      </div>
 
-                      {task.status !== 'completed' && (
-                        <Button
-                          onClick={() => completeTask(task)}
-                          disabled={state.submitting.has(task.itemId)}
-                          className="mt-4 w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-3 rounded-xl shadow-lg flex items-center justify-center gap-2"
-                        >
-                          {state.submitting.has(task.itemId) ? (
-                            <LoadingSpinner className="w-5 h-5" />
-                          ) : (
-                            <>
-                              <CheckCircle className="w-5 h-5" />
-                              {task.status === 'pending' ? 'بدء الإنتاج' : 'إكمال'}
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </Card>
-                  </motion.div>
-                );
-              })}
+                        <div className="space-y-2 text-sm text-gray-600 mb-4">
+                          <p><strong>{t('orders.order_number')}:</strong> #{task.orderNumber}</p>
+                          <p><strong>{t('orders.quantity')}:</strong> {task.quantity}</p>
+                          <p><strong>{t('orders.branch')}:</strong> {task.branchName}</p>
+                        </div>
+
+                        <div className="mb-4">
+                          <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                            <motion.div
+                              className="h-full bg-gradient-to-r from-blue-500 to-blue-600"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${task.progress}%` }}
+                              transition={{ duration: 0.6, ease: "easeOut" }}
+                            />
+                          </div>
+                        </div>
+
+                        {task.status !== 'completed' && (
+                          <Button
+                            onClick={() => completeTask(task)}
+                            disabled={state.submitting.has(task.itemId)}
+                            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all"
+                          >
+                            {state.submitting.has(task.itemId) ? (
+                              <LoadingSpinner className="w-5 h-5" />
+                            ) : (
+                              <>
+                                <CheckCircle className="w-5 h-5" />
+                                {task.status === 'pending' ? t('orders.start_production') : t('orders.complete')}
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* التنقل بين الصفحات */}
+          {totalPages > 1 && (
+            <div className="mt-10">
+              <Pagination
+                currentPage={state.currentPage}
+                totalPages={totalPages}
+                isRtl={isRtl}
+                handlePageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
+              />
             </div>
           )}
-        </AnimatePresence>
-
-        {totalPages > 1 && (
-          <Pagination
-            currentPage={state.currentPage}
-            totalPages={totalPages}
-            isRtl={isRtl}
-            handlePageChange={page => dispatch({ type: 'SET_PAGE', payload: page })}
-          />
-        )}
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
-};
+}
 
 export default ChefTasks;
