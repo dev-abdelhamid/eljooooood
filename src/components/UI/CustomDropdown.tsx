@@ -36,7 +36,7 @@ export const CustomDropdown = memo(
     const buttonRef = useRef<HTMLButtonElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // تحديد القيم المختارة
+    // القيم المختارة
     const selectedValues = multiple
       ? Array.isArray(value)
         ? value
@@ -45,16 +45,14 @@ export const CustomDropdown = memo(
       ? [value]
       : [];
 
-    const selectedLabels = options
-      .filter((opt) => selectedValues.includes(opt.value))
-      .map((opt) => opt.label);
+    const selectedOptions = options.filter((opt) => selectedValues.includes(opt.value));
 
     const displayText =
-      selectedLabels.length > 0
-        ? selectedLabels.join(', ')
+      selectedOptions.length > 0
+        ? selectedOptions.map((opt) => opt.label).join(', ')
         : placeholder || (isRtl ? 'اختر' : 'Select');
 
-    // تصفية الخيارات بناءً على البحث
+    // تصفية الخيارات
     const filteredOptions = options.filter((opt) =>
       opt.label.toLowerCase().includes(search.toLowerCase())
     );
@@ -73,14 +71,14 @@ export const CustomDropdown = memo(
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isOpen]);
 
-    // فوكس على حقل البحث عند الفتح
+    // فوكس على البحث عند `multiple`
     useEffect(() => {
       if (isOpen && multiple && inputRef.current) {
         inputRef.current.focus();
       }
     }, [isOpen, multiple]);
 
-    // تبديل الخيار
+    // تبديل خيار
     const toggleOption = (optionValue: string) => {
       if (!multiple) {
         onChange(optionValue);
@@ -156,18 +154,18 @@ export const CustomDropdown = memo(
           aria-multiselectable={multiple}
         >
           <div className="flex-1 flex flex-wrap gap-1 items-center min-h-[1.5rem] pr-1">
-            {multiple && selectedLabels.length > 0 ? (
-              selectedLabels.map((label, idx) => (
+            {multiple && selectedOptions.length > 0 ? (
+              selectedOptions.map((option) => (
                 <span
-                  key={selectedValues[idx]}
+                  key={option.value}
                   className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full"
                 >
-                  {label}
+                  {option.label}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeSelected(selectedValues[idx]);
+                      removeSelected(option.value);
                     }}
                     className="hover:text-blue-900"
                   >
@@ -194,7 +192,7 @@ export const CustomDropdown = memo(
               transition={{ duration: 0.15 }}
               className="absolute w-full mt-2 bg-white rounded-md shadow-lg border border-gray-200 z-10 max-h-60 overflow-y-auto"
             >
-              {/* حقل البحث عند multiple */}
+              {/* حقل البحث */}
               {multiple && (
                 <div className="p-2 border-b border-gray-100">
                   <input
