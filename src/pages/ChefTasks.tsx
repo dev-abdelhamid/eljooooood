@@ -7,7 +7,6 @@ import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { productionAssignmentsAPI, chefsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
 import { AlertCircle, CheckCircle, Clock, Package, Search } from 'lucide-react';
 import { debounce } from 'lodash';
@@ -15,7 +14,9 @@ import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatDate } from '../utils/formatDate';
+import { ProductSearchInput, ProductDropdown } from './OrdersTablePage'; // استيراد المكونات
 
+// باقي تعريف الـ interfaces و reducer و getStatusInfo و getNextStatus دون تغيير
 interface ChefTask {
   itemId: string;
   orderId: string;
@@ -401,196 +402,196 @@ export function ChefTasks() {
 
   return (
     <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      {state.loading ? (
-        <div className="flex flex-col gap-4">
-          {[...Array(3)].map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
-      ) : state.error ? (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="max-w-md mx-auto">
-          <Card className="p-6 text-center bg-red-50 shadow-lg rounded-xl border border-red-200">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <AlertCircle className="w-6 h-6 text-red-600" />
-              <p className="text-base font-medium text-red-600">{state.error}</p>
+      <div className="fixed top-0 left-0 right-0 z-10 bg-white shadow-md p-4 sm:p-6 lg:p-8">
+        <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100">
+          <div className="flex flex-col lg:flex-row gap-4 p-6">
+            <div className="lg:w-2/3">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">{t('orders.search')}</label>
+              <ProductSearchInput
+                value={state.filter.search}
+                onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, search: value } })}
+                placeholder={t('orders.search_placeholder')}
+                className="w-full rounded-lg border-gray-300 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
+                aria-label={t('orders.search')}
+              />
             </div>
-            <Button
-              variant="primary"
-              onClick={() => {
-                cache.delete(cacheKey);
-                fetchChefProfile();
-                if (state.chefId) fetchTasks(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-2.5 text-sm shadow-md transition-all"
-              aria-label={t('orders.retry')}
-            >
-              {t('orders.retry')}
-            </Button>
-          </Card>
-        </motion.div>
-      ) : (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Package className="w-6 h-6 text-blue-600" />
-              {t('orders.chef_tasks')}
-            </h1>
+            <div className="lg:w-1/3">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">{t('orders.filter_by_status')}</label>
+              <ProductDropdown
+                options={statusOptions}
+                value={state.filter.status}
+                onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, status: value } })}
+                className="w-full rounded-lg border-gray-300 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
+                aria-label={t('orders.filter_by_status')}
+              />
+            </div>
           </div>
-          <Card className="p-6 mb-8 bg-white shadow-lg rounded-xl border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="relative">
-                <label className="block text-sm font-semibold text-gray-800 mb-2">{t('orders.search')}</label>
-                <div className="flex items-center rounded-lg border border-gray-300 bg-white shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all">
-                  <Search className={`w-5 h-5 text-gray-500 absolute ${isRtl ? 'right-3' : 'left-3'}`} />
-                  <Input
-                    type="text"
-                    value={state.filter.search}
-                    onChange={(e) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, search: e.target.value } })}
-                    placeholder={t('orders.search_placeholder')}
-                    className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 rounded-lg bg-transparent text-sm text-gray-900 border-0 focus:outline-none`}
-                    aria-label={t('orders.search')}
-                  />
-                </div>
+        </Card>
+      </div>
+      <div className="pt-32">
+        {state.loading ? (
+          <div className="flex flex-col gap-4">
+            {[...Array(3)].map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+        ) : state.error ? (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="max-w-md mx-auto">
+            <Card className="p-6 text-center bg-red-50 shadow-lg rounded-xl border border-red-200">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+                <p className="text-base font-medium text-red-600">{state.error}</p>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-800 mb-2">{t('orders.filter_by_status')}</label>
-                <Select
-                  options={statusOptions}
-                  value={state.filter.status}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, status: value } })}
-                  className="w-full rounded-lg border-gray-300 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
-                  aria-label={t('orders.filter_by_status')}
-                />
-              </div>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  cache.delete(cacheKey);
+                  fetchChefProfile();
+                  if (state.chefId) fetchTasks(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-2.5 text-sm shadow-md transition-all"
+                aria-label={t('orders.retry')}
+              >
+                {t('orders.retry')}
+              </Button>
+            </Card>
+          </motion.div>
+        ) : (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+            <div className="flex items-center justify-between mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <Package className="w-6 h-6 text-blue-600" />
+                {t('orders.chef_tasks')}
+              </h1>
             </div>
-          </Card>
-          {!state.socketConnected && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2"
-            >
-              <AlertCircle className="w-5 h-5 text-yellow-600" />
-              <p className="text-sm text-yellow-700">{t('errors.socket_disconnected')}</p>
-            </motion.div>
-          )}
-          <AnimatePresence>
-            {paginatedTasks.length === 0 ? (
-              <Card className="p-8 text-center bg-white shadow-lg rounded-xl border border-gray-100">
-                <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {paginatedTasks.map((task) => {
-                  const { label, color, icon: StatusIcon, progress } = getStatusInfo(task.status);
-                  return (
-                    <motion.div
-                      key={task.itemId}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-all hover:-translate-y-1">
-                        <div className="flex flex-col justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-lg font-bold text-gray-900 truncate">{task.productName}</h3>
-                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${color} flex items-center gap-1`}>
-                                <StatusIcon className="w-5 h-5" />
-                                {t(`orders.${label}`)}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
-                              <p>
-                                <span className="font-semibold">{t('orders.order_number')}:</span> {task.orderNumber}
-                              </p>
-                              <p>
-                                <span className="font-semibold">{t('orders.quantity')}:</span> {task.quantity}
-                              </p>
-                              <p>
-                                <span className="font-semibold">{t('orders.created_at')}:</span>{' '}
-                                {formatDate(task.createdAt, language, 'Europe/Athens')}
-                              </p>
-                              <p>
-                                <span className="font-semibold">{t('orders.updated_at')}:</span>{' '}
-                                {formatDate(task.updatedAt, language, 'Europe/Athens')}
-                              </p>
-                            </div>
-                            <div className="mt-4">
-                              <div className="w-full bg-gray-200 rounded-full h-3">
-                                <div
-                                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
-                                  style={{ width: `${progress}%` }}
-                                ></div>
+            {!state.socketConnected && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2"
+              >
+                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                <p className="text-sm text-yellow-700">{t('errors.socket_disconnected')}</p>
+              </motion.div>
+            )}
+            <AnimatePresence>
+              {paginatedTasks.length === 0 ? (
+                <Card className="p-8 text-center bg-white shadow-lg rounded-xl border border-gray-100">
+                  <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {paginatedTasks.map((task) => {
+                    const { label, color, icon: StatusIcon, progress } = getStatusInfo(task.status);
+                    return (
+                      <motion.div
+                        key={task.itemId}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-all hover:-translate-y-1">
+                          <div className="flex flex-col justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-lg font-bold text-gray-900 truncate">{task.productName}</h3>
+                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${color} flex items-center gap-1`}>
+                                  <StatusIcon className="w-5 h-5" />
+                                  {t(`orders.${label}`)}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
+                                <p>
+                                  <span className="font-semibold">{t('orders.order_number')}:</span> {task.orderNumber}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">{t('orders.quantity')}:</span> {task.quantity}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">{t('orders.created_at')}:</span>{' '}
+                                  {formatDate(task.createdAt, language, 'Europe/Athens')}
+                                </p>
+                                <p>
+                                  <span className="font-semibold">{t('orders.updated_at')}:</span>{' '}
+                                  {formatDate(task.updatedAt, language, 'Europe/Athens')}
+                                </p>
+                              </div>
+                              <div className="mt-4">
+                                <div className="w-full bg-gray-200 rounded-full h-3">
+                                  <div
+                                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                                    style={{ width: `${progress}%` }}
+                                  ></div>
+                                </div>
                               </div>
                             </div>
+                            <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                              {task.status !== 'completed' && (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => handleUpdateTaskStatus(task.itemId, task.orderId, getNextStatus(task.status))}
+                                  disabled={state.submitting === task.itemId || !state.socketConnected}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2.5 text-sm shadow-md transition-all disabled:opacity-50"
+                                  aria-label={t('orders.update_status')}
+                                >
+                                  {state.submitting === task.itemId ? (
+                                    <LoadingSpinner className="w-5 h-5" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'}`} />
+                                      {t(`orders.item_${getNextStatus(task.status)}`)}
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                            {task.status !== 'completed' && (
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => handleUpdateTaskStatus(task.itemId, task.orderId, getNextStatus(task.status))}
-                                disabled={state.submitting === task.itemId || !state.socketConnected}
-                                className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2.5 text-sm shadow-md transition-all disabled:opacity-50"
-                                aria-label={t('orders.update_status')}
-                              >
-                                {state.submitting === task.itemId ? (
-                                  <LoadingSpinner className="w-5 h-5" />
-                                ) : (
-                                  <>
-                                    <CheckCircle className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'}`} />
-                                    {t(`orders.item_${getNextStatus(task.status)}`)}
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
-                    </motion.div>
-                  );
-                })}
-              </div>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </AnimatePresence>
+            {state.totalPages > 1 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="flex justify-center items-center gap-4 mt-8"
+              >
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page - 1 })}
+                  disabled={state.page === 1}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
+                  aria-label={t('orders.previous')}
+                >
+                  {t('orders.previous')}
+                </Button>
+                <span className="text-gray-700 text-sm font-semibold">
+                  {t('orders.page', { current: state.page, total: state.totalPages })}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page + 1 })}
+                  disabled={state.page === state.totalPages}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
+                  aria-label={t('orders.next')}
+                >
+                  {t('orders.next')}
+                </Button>
+              </motion.div>
             )}
-          </AnimatePresence>
-          {state.totalPages > 1 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              className="flex justify-center items-center gap-4 mt-8"
-            >
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page - 1 })}
-                disabled={state.page === 1}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
-                aria-label={t('orders.previous')}
-              >
-                {t('orders.previous')}
-              </Button>
-              <span className="text-gray-700 text-sm font-semibold">
-                {t('orders.page', { current: state.page, total: state.totalPages })}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page + 1 })}
-                disabled={state.page === state.totalPages}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
-                aria-label={t('orders.next')}
-              >
-                {t('orders.next')}
-              </Button>
-            </motion.div>
-          )}
-        </motion.div>
-      )}
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 }
 
-export default ChefTasks; 
+export default ChefTasks;
