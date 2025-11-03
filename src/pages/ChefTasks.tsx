@@ -167,6 +167,9 @@ const getNextStatus = (currentStatus: string) => {
   return statusTransitions[currentStatus] || currentStatus;
 };
 
+// دالة لتأخير الطلبات لتجنب rate limit
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function ChefTasks() {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -177,6 +180,8 @@ export function ChefTasks() {
   const stateRef = useRef(state);
   stateRef.current = state;
   const tasksPerPage = 10;
+  const taskQueue = useRef<Array<{ taskId: string; orderId: string; status: string }>>([]);
+  const isProcessingQueue = useRef(false);
 
   useOrderNotifications(dispatch, stateRef, user);
 
@@ -286,60 +291,85 @@ export function ChefTasks() {
     }
   }, [state.chefId, state.page, state.filter, cacheKey, t, isRtl]);
 
-  const updateSingleTask = useCallback(async (taskId: string, orderId: string, newStatus: string): Promise<void> => {
-    if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
-      throw new Error(t('errors.no_chef_id'));
-    }
-    if (!user?.id && !user?._id) {
-      throw new Error(t('errors.unauthorized'));
-    }
-    if (!/^[0-9a-fA-F]{24}$/.test(orderId) || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
-      throw new Error(t('errors.invalid_task_data'));
-    }
-    dispatch({ type: 'SET_SUBMITTING', payload: { itemId: taskId, add: true } });
-    try {
-      const response = await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: newStatus });
-      dispatch({
-        type: 'UPDATE_ITEM_STATUS',
-        payload: { orderId, itemId: taskId, status: response.task.status, updatedAt: new Date().toISOString() },
-      });
-      const task = state.tasks.find((t) => t.itemId === taskId);
-      if (task && state.socketConnected) {
-        socket.emit('itemStatusUpdated', {
-          orderId,
-          itemId: taskId,
-          status: newStatus,
-          chefId: state.chefId,
-          productName: task.productName,
-          orderNumber: task.orderNumber,
-          branchName: task.branchName,
-          quantity: task.quantity,
-          unit: task.unit || 'unit',
-          eventId: crypto.randomUUID(),
-        });
+  const updateSingleTask = useCallback(
+    async (taskId: string, orderId: string, newStatus: string, retryCount = 1): Promise<void> => {
+      if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
+        throw new Error(t('errors.no_chef_id'));
       }
-      toast.success(t('orders.task_updated', { status: t(`orders.item_${newStatus}`) }), {
-        toastId: `success-taskStatus-${taskId}-${Date.now()}`,
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    } catch (err: any) {
-      const errorMessage = err.message || t('errors.task_update_failed');
-      dispatch({ type: 'SET_ERROR', payload: errorMessage });
-      toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-      throw err;
-    } finally {
-      dispatch({ type: 'SET_SUBMITTING', payload: { itemId: taskId, add: false } });
-    }
-  }, [t, state.tasks, state.chefId, user, socket, state.socketConnected, isRtl]);
+      if (!user?.id && !user?._id) {
+        throw new Error(t('errors.unauthorized'));
+      }
+      if (!/^[0-9a-fA-F]{24}$/.test(orderId) || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
+        throw new Error(t('errors.invalid_task_data'));
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: { itemId: taskId, add: true } });
+      try {
+        const response = await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: newStatus });
+        dispatch({
+          type: 'UPDATE_ITEM_STATUS',
+          payload: { orderId, itemId: taskId, status: response.task.status, updatedAt: new Date().toISOString() },
+        });
+        const task = state.tasks.find((t) => t.itemId === taskId);
+        if (task && state.socketConnected) {
+          socket.emit('itemStatusUpdated', {
+            orderId,
+            itemId: taskId,
+            status: newStatus,
+            chefId: state.chefId,
+            productName: task.productName,
+            orderNumber: task.orderNumber,
+            branchName: task.branchName,
+            quantity: task.quantity,
+            unit: task.unit || 'unit',
+            eventId: crypto.randomUUID(),
+          });
+        }
+        toast.success(t('orders.task_updated', { status: t(`orders.item_${newStatus}`) }), {
+          toastId: `success-taskStatus-${taskId}-${Date.now()}`,
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+      } catch (err: any) {
+        if (retryCount > 0) {
+          console.warn(`Retrying task ${taskId}... Attempts left: ${retryCount}`);
+          await delay(100); // تأخير بسيط قبل إعادة المحاولة
+          return updateSingleTask(taskId, orderId, newStatus, retryCount - 1); // إعادة محاولة
+        }
+        const errorMessage = err.message || t('errors.task_update_failed');
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+        throw err;
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: { itemId: taskId, add: false } });
+      }
+    },
+    [t, state.tasks, state.chefId, user, socket, state.socketConnected, isRtl]
+  );
 
-  const handleUpdateTaskStatus = useCallback(async (tasksToUpdate: Array<{ taskId: string; orderId: string; status: string }>) => {
-    const updates = tasksToUpdate.map(({ taskId, orderId, status }) =>
-      updateSingleTask(taskId, orderId, status).catch((err) => {
-        console.warn(`Failed to update task ${taskId}:`, err);
-      })
-    );
-    await Promise.allSettled(updates);
+  // دالة لمعالجة قائمة الانتظار
+  const processTaskQueue = useCallback(async () => {
+    if (isProcessingQueue.current || taskQueue.current.length === 0) return;
+    isProcessingQueue.current = true;
+    while (taskQueue.current.length > 0) {
+      const task = taskQueue.current.shift();
+      if (task) {
+        try {
+          await updateSingleTask(task.taskId, task.orderId, task.status);
+          await delay(50); // تأخير 50ms بين الطلبات لتجنب rate limit
+        } catch (err) {
+          console.warn(`Failed to process task ${task.taskId} from queue:`, err);
+        }
+      }
+    }
+    isProcessingQueue.current = false;
   }, [updateSingleTask]);
+
+  const handleUpdateTaskStatus = useCallback(
+    async (tasksToUpdate: Array<{ taskId: string; orderId: string; status: string }>) => {
+      taskQueue.current.push(...tasksToUpdate);
+      processTaskQueue();
+    },
+    [processTaskQueue]
+  );
 
   useEffect(() => {
     fetchChefProfile();
@@ -379,7 +409,7 @@ export function ChefTasks() {
   ];
 
   const SkeletonCard = () => (
-    <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 animate-pulse w-full max-w-4xl mx-auto">
+    <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 animate-pulse w-full">
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-3">
@@ -402,7 +432,7 @@ export function ChefTasks() {
 
   return (
     <div className={`px-4 sm:px-6 lg:px-8 py-6 min-h-screen w-full ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100 p-6 w-full max-w-6xl mx-auto">
+      <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100 p-6 w-full">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="lg:w-2/3 w-full">
             <ProductSearchInput
@@ -425,13 +455,13 @@ export function ChefTasks() {
       </Card>
 
       {state.loading ? (
-        <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
+        <div className="flex flex-col gap-4 w-full">
           {[...Array(3)].map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
       ) : state.error ? (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="max-w-md mx-auto">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="w-full">
           <Card className="p-6 text-center bg-red-50 shadow-lg rounded-xl border border-red-200">
             <div className="flex items-center justify-center gap-2 mb-4">
               <AlertCircle className="w-6 h-6 text-red-600" />
@@ -453,7 +483,7 @@ export function ChefTasks() {
         </motion.div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="w-full">
-          <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-8 w-full">
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
               <Package className="w-6 h-6 text-blue-600" />
               {t('orders.chef_tasks')}
@@ -463,7 +493,7 @@ export function ChefTasks() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2 max-w-4xl mx-auto"
+              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2"
             >
               <AlertCircle className="w-5 h-5 text-yellow-600" />
               <p className="text-sm text-yellow-700">{t('errors.socket_disconnected')}</p>
@@ -471,11 +501,11 @@ export function ChefTasks() {
           )}
           <AnimatePresence>
             {paginatedTasks.length === 0 ? (
-              <Card className="p-8 text-center bg-white shadow-lg rounded-xl border border-gray-100 max-w-4xl mx-auto">
+              <Card className="p-8 text-center bg-white shadow-lg rounded-xl border border-gray-100 w-full">
                 <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
               </Card>
             ) : (
-              <div className="space-y-4 w-full max-w-4xl mx-auto">
+              <div className="space-y-4 w-full">
                 {paginatedTasks.map((task) => {
                   const { label, color, icon: StatusIcon, progress } = getStatusInfo(task.status);
                   const isSubmitting = state.submitting.has(task.itemId);
@@ -556,7 +586,7 @@ export function ChefTasks() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
-              className="flex justify-center items-center gap-4 mt-8 max-w-4xl mx-auto"
+              className="flex justify-center items-center gap-4 mt-8 w-full"
             >
               <Button
                 variant="secondary"
