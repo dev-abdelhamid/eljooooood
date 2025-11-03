@@ -848,20 +848,21 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-      dispatch({
-        type: 'SET_ASSIGN_FORM',
-        payload: {
-          items: order.items
-            .filter(item => !item.assignedTo)
-            .map(item => ({
-              itemId: item._id,
-              assignedTo: '',
-              product: item.displayProductName,
-              quantity: item.quantity,
-              unit: translateUnit(item.unit, isRtl),
-            })),
-        },
-      });
+   // عند فتح المودال
+dispatch({
+  type: 'SET_ASSIGN_FORM',
+  payload: {
+    items: order.items
+      .filter(item => !item.assignedTo)
+      .map(item => ({
+        itemId: item._id,
+        assignedTo: '', // سيتم ملؤه بـ userId
+        product: item.displayProductName,
+        quantity: item.quantity,
+        unit: translateUnit(item.unit, isRtl),
+      })),
+  },
+});
       dispatch({ type: 'SET_MODAL', isOpen: true });
     },
     [isRtl]

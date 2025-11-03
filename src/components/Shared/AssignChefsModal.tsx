@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
-import { Select } from '../../components/UI/Select';
+import { CustomDropdown } from '../../components/UI/CustomDropdown'; // ← استخدام CustomDropdown الجديد
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AlertCircle } from 'lucide-react';
 import { Order, Chef, AssignChefsForm } from '../../types/types';
@@ -48,18 +48,33 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 }) => {
   const { t } = useLanguage();
 
-  const availableChefsByDepartment = useMemo(() => {
-    const map = new Map<string, Chef[]>();
-    chefs.forEach((chef) => {
-      if (chef.department?._id) {
-        if (!map.has(chef.department._id)) {
-          map.set(chef.department._id, []);
+  // دعم department كـ array
+// داخل AssignChefsModal
+
+const availableChefsByDepartment = useMemo(() => {
+  const map = new Map<string, Chef[]>();
+  
+  chefs.forEach((chef) => {
+    // تأكد إن department مصفوفة ومش فاضية
+    const departments = Array.isArray(chef.department) ? chef.department : [];
+    
+    departments.forEach((dept) => {
+      const deptId = dept?._id?.toString();
+      if (deptId) {
+        if (!map.has(deptId)) {
+          map.set(deptId, []);
         }
-        map.get(chef.department._id)!.push(chef);
+        // نضيف نسخة من الشيف لكل قسم (مهم للـ useMemo)
+        map.get(deptId)!.push({
+          ...chef,
+          department: departments, // نحافظ على المصفوفة كاملة
+        });
       }
     });
-    return map;
-  }, [chefs]);
+  });
+  
+  return map;
+}, [chefs]);
 
   const updateAssignment = useCallback(
     (index: number, value: string) => {
@@ -77,19 +92,27 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 
     const updatedItems = assignFormData.items.map((item) => {
       const orderItem = selectedOrder.items.find((i) => i._id === item.itemId);
-      const departmentId = orderItem?.department._id || '';
+      const departmentId = orderItem?.department?._id || '';
       const availableChefs = availableChefsByDepartment.get(departmentId) || [];
 
-      if (item.assignedTo === '' && availableChefs.length === 1) {
-        return { ...item, assignedTo: availableChefs[0].userId };
+      let assignedTo = item.assignedTo;
+      if (assignedTo === '' && availableChefs.length === 1) {
+        assignedTo = availableChefs[0].userId;
       }
+
       return {
         ...item,
+        assignedTo,
         unit: translateUnit(orderItem?.unit || 'unit', isRtl),
       };
     });
 
-    const hasChanges = updatedItems.some((item, idx) => item.assignedTo !== assignFormData.items[idx].assignedTo || item.unit !== assignFormData.items[idx].unit);
+    const hasChanges = updatedItems.some(
+      (item, idx) =>
+        item.assignedTo !== assignFormData.items[idx].assignedTo ||
+        item.unit !== assignFormData.items[idx].unit
+    );
+
     if (hasChanges) {
       setAssignForm({ items: updatedItems });
     }
@@ -112,14 +135,14 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       >
         {assignFormData.items.map((item, index) => {
           const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
-          const departmentId = orderItem?.department._id || '';
+          const departmentId = orderItem?.department?._id || '';
           const availableChefs = availableChefsByDepartment.get(departmentId) || [];
 
           const chefOptions = [
             { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
             ...availableChefs.map((chef) => ({
               value: chef.userId,
-              label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+              label: `${chef.displayName} (${chef.department?.[0]?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
             })),
           ];
 
@@ -138,17 +161,19 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                   ? `تعيين شيف لـ ${orderItem?.displayProductName} (${item.quantity} ${item.unit})`
                   : `Assign chef to ${orderItem?.displayProductName} (${item.quantity} ${item.unit})`}
               </label>
-              <Select
-                id={`chef-select-${index}`}
-                options={chefOptions}
+
+              {/* استخدام CustomDropdown بدل Select */}
+              <CustomDropdown
                 value={item.assignedTo}
-                onChange={(value) => updateAssignment(index, value)}
-                className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
-                aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
+                onChange={(value) => updateAssignment(index, value as string)}
+                options={chefOptions}
+                ariaLabel={isRtl ? 'اختر شيف' : 'Select Chef'}
+                className="w-full"
               />
             </motion.div>
           );
         })}
+
         {error && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -159,6 +184,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             <span className="text-red-600 text-sm">{error}</span>
           </motion.div>
         )}
+
         <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <Button
             variant="secondary"
