@@ -2,7 +2,6 @@ import React, { useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
-import { CustomDropdown } from '../../components/UI/CustomDropdown'; // ← استخدام CustomDropdown الجديد
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AlertCircle } from 'lucide-react';
 import { Order, Chef, AssignChefsForm } from '../../types/types';
@@ -49,32 +48,27 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   const { t } = useLanguage();
 
   // دعم department كـ array
-// داخل AssignChefsModal
-
-const availableChefsByDepartment = useMemo(() => {
-  const map = new Map<string, Chef[]>();
-  
-  chefs.forEach((chef) => {
-    // تأكد إن department مصفوفة ومش فاضية
-    const departments = Array.isArray(chef.department) ? chef.department : [];
-    
-    departments.forEach((dept) => {
-      const deptId = dept?._id?.toString();
-      if (deptId) {
-        if (!map.has(deptId)) {
-          map.set(deptId, []);
-        }
-        // نضيف نسخة من الشيف لكل قسم (مهم للـ useMemo)
-        map.get(deptId)!.push({
-          ...chef,
-          department: departments, // نحافظ على المصفوفة كاملة
+  const availableChefsByDepartment = useMemo(() => {
+    const map = new Map<string, Chef[]>();
+    chefs.forEach((chef) => {
+      if (Array.isArray(chef.department) && chef.department.length > 0) {
+        chef.department.forEach((dept) => {
+          const deptId = dept.id || dept._id;
+          if (deptId) {
+            if (!map.has(deptId)) {
+              map.set(deptId, []);
+            }
+            // لا نضيف الشيف أكتر من مرة في نفس القسم
+            const chefsInDept = map.get(deptId)!;
+            if (!chefsInDept.some(c => c.userId === chef.userId)) {
+              chefsInDept.push(chef);
+            }
+          }
         });
       }
     });
-  });
-  
-  return map;
-}, [chefs]);
+    return map;
+  }, [chefs]);
 
   const updateAssignment = useCallback(
     (index: number, value: string) => {
@@ -138,23 +132,16 @@ const availableChefsByDepartment = useMemo(() => {
           const departmentId = orderItem?.department?._id || '';
           const availableChefs = availableChefsByDepartment.get(departmentId) || [];
 
-          const chefOptions = [
-            { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
-            ...availableChefs.map((chef) => ({
-              value: chef.userId,
-              label: `${chef.displayName} (${chef.department?.[0]?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
-            })),
-          ];
-
           return (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, delay: index * 0.1 }}
+              className="space-y-1"
             >
               <label
-                className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                className={`block text-sm font-medium text-gray-900 ${isRtl ? 'text-right' : 'text-left'}`}
                 htmlFor={`chef-select-${index}`}
               >
                 {isRtl
@@ -162,14 +149,36 @@ const availableChefsByDepartment = useMemo(() => {
                   : `Assign chef to ${orderItem?.displayProductName} (${item.quantity} ${item.unit})`}
               </label>
 
-              {/* استخدام CustomDropdown بدل Select */}
-              <CustomDropdown
+              {/* استخدام <select> الأصلي فقط */}
+              <select
+                id={`chef-select-${index}`}
                 value={item.assignedTo}
-                onChange={(value) => updateAssignment(index, value as string)}
-                options={chefOptions}
-                ariaLabel={isRtl ? 'اختر شيف' : 'Select Chef'}
-                className="w-full"
-              />
+                onChange={(e) => updateAssignment(index, e.target.value)}
+                className={`
+                  w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-200 rounded-md 
+                  shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 
+                  transition-all duration-200 cursor-pointer
+                  ${isRtl ? 'text-right' : 'text-left'}
+                `}
+                aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
+              >
+                <option value="">
+                  {isRtl ? 'اختر شيف' : 'Select Chef'}
+                </option>
+                {availableChefs.map((chef) => {
+                  const deptName = Array.isArray(chef.department)
+                    ? chef.department.find(d => (d.id || d._id) === departmentId)?.name ||
+                      chef.department[0]?.name ||
+                      (isRtl ? 'غير معروف' : 'Unknown')
+                    : (isRtl ? 'غير معروف' : 'Unknown');
+
+                  return (
+                    <option key={chef.userId} value={chef.userId}>
+                      {chef.displayName} ({deptName})
+                    </option>
+                  );
+                })}
+              </select>
             </motion.div>
           );
         })}
