@@ -7,12 +7,12 @@ import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { productionAssignmentsAPI, chefsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { AlertCircle, CheckCircle, Clock, Package, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Package, Search, X } from 'lucide-react';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatDate } from '../utils/formatDate';
-import { ProductSearchInput, ProductDropdown } from './OrdersTablePage'; // استيراد المكونات كما طلبت
+import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 
 interface ChefTask {
   itemId: string;
@@ -37,7 +37,7 @@ interface State {
   chefId: string | null;
   loading: boolean;
   error: string;
-  submitting: Set<string>; // تغيير إلى Set لدعم عدة submissions متوازية
+  submitting: Set<string>;
   socketConnected: boolean;
   filter: { status: string; search: string };
   page: number;
@@ -49,7 +49,7 @@ type Action =
   | { type: 'SET_CHEF_ID'; payload: string | null }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
-  | { type: 'SET_SUBMITTING'; payload: { itemId: string; add: boolean } } // لإضافة/إزالة من الـ Set
+  | { type: 'SET_SUBMITTING'; payload: { itemId: string; add: boolean } }
   | { type: 'SET_SOCKET_CONNECTED'; payload: boolean }
   | { type: 'SET_FILTER'; payload: { status: string; search: string } }
   | { type: 'SET_PAGE'; payload: number }
@@ -218,7 +218,7 @@ export function ChefTasks() {
     }
   }, [user, t, isRtl, navigate]);
 
-  const fetchTasks = useCallback(async (forceRefresh = false) => { // إزالة debounce هنا أيضًا للسرعة، لكن مع cache
+  const fetchTasks = useCallback(async (forceRefresh = false) => {
     if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
       dispatch({ type: 'SET_ERROR', payload: t('errors.no_chef_id') });
       toast.error(t('errors.no_chef_id'), { toastId: `error-noChefId-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
@@ -284,9 +284,8 @@ export function ChefTasks() {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [state.chefId, state.page, state.filter, cacheKey, t, isRtl]); // إزالة debounce للسرعة
+  }, [state.chefId, state.page, state.filter, cacheKey, t, isRtl]);
 
-  // دالة مساعدة لتحديث مهمة واحدة (بدون debounce، مع Promise للتوازي)
   const updateSingleTask = useCallback(async (taskId: string, orderId: string, newStatus: string): Promise<void> => {
     if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
       throw new Error(t('errors.no_chef_id'));
@@ -327,21 +326,19 @@ export function ChefTasks() {
       const errorMessage = err.message || t('errors.task_update_failed');
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
       toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-      throw err; // إعادة رمي الخطأ لـ allSettled
+      throw err;
     } finally {
       dispatch({ type: 'SET_SUBMITTING', payload: { itemId: taskId, add: false } });
     }
   }, [t, state.tasks, state.chefId, user, socket, state.socketConnected, isRtl]);
 
-  // الدالة الرئيسية: تدعم إكمال واحد أو متعدد بـ Promise.allSettled للسرعة والتوازي
   const handleUpdateTaskStatus = useCallback(async (tasksToUpdate: Array<{ taskId: string; orderId: string; status: string }>) => {
-    const updates = tasksToUpdate.map(({ taskId, orderId, status }) => 
-      updateSingleTask(taskId, orderId, status).catch(err => {
+    const updates = tasksToUpdate.map(({ taskId, orderId, status }) =>
+      updateSingleTask(taskId, orderId, status).catch((err) => {
         console.warn(`Failed to update task ${taskId}:`, err);
-        // لا يوقف الآخرين
       })
     );
-    await Promise.allSettled(updates); // ينفذ كلها متوازيًا، يتعامل مع الفشل دون إيقاف
+    await Promise.allSettled(updates);
   }, [updateSingleTask]);
 
   useEffect(() => {
@@ -382,7 +379,7 @@ export function ChefTasks() {
   ];
 
   const SkeletonCard = () => (
-    <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 animate-pulse w-full max-w-4xl mx-auto"> {/* ضمان بطاقة واحدة */}
+    <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 animate-pulse w-full max-w-4xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-3">
@@ -404,35 +401,31 @@ export function ChefTasks() {
   );
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen w-full ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}> {/* ضمان الحدود */}
-      {/* الفلتر: غير fixed، لكن مع mb كبير ليكون "ثابتًا" بصريًا، وسكيلتون تحته مباشرة */}
-      <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100 p-6 w-full max-w-6xl mx-auto"> {/* max-w للحدود */}
-        <div className="flex flex-col lg:flex-row gap-4"> {/* responsive: عمودي على صغير، أفقي على lg */}
-          <div className="lg:w-2/3 w-full"> {/* ثلثي على lg، كامل على صغير */}
-            <label className="block text-sm font-semibold text-gray-800 mb-2 sr-only">{t('orders.search')}</label> {/* sr-only للوصولية */}
+    <div className={`px-4 sm:px-6 lg:px-8 py-6 min-h-screen w-full ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100 p-6 w-full max-w-6xl mx-auto">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="lg:w-2/3 w-full">
             <ProductSearchInput
               value={state.filter.search}
-              onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, search: value } })}
+              onChange={(e) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, search: e.target.value } })}
               placeholder={t('orders.search_placeholder')}
-              className="w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
-              aria-label={t('orders.search')}
+              ariaLabel={t('orders.search')}
+              className="w-full"
             />
           </div>
-          <div className="lg:w-1/3 w-full"> {/* ثلث على lg، كامل على صغير */}
-            <label className="block text-sm font-semibold text-gray-800 mb-2 sr-only">{t('orders.filter_by_status')}</label>
+          <div className="lg:w-1/3 w-full">
             <ProductDropdown
               options={statusOptions}
               value={state.filter.status}
               onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, status: value } })}
-              className="w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
-              aria-label={t('orders.filter_by_status')}
+              ariaLabel={t('orders.filter_by_status')}
             />
           </div>
         </div>
       </Card>
 
       {state.loading ? (
-        <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto"> {/* سكيلتون تحت الفلتر مباشرة، بطاقة واحدة */}
+        <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
           {[...Array(3)].map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -460,7 +453,7 @@ export function ChefTasks() {
         </motion.div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="w-full">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-8 max-w-4xl mx-auto">
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
               <Package className="w-6 h-6 text-blue-600" />
               {t('orders.chef_tasks')}
@@ -470,7 +463,7 @@ export function ChefTasks() {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2"
+              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2 max-w-4xl mx-auto"
             >
               <AlertCircle className="w-5 h-5 text-yellow-600" />
               <p className="text-sm text-yellow-700">{t('errors.socket_disconnected')}</p>
@@ -482,7 +475,7 @@ export function ChefTasks() {
                 <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
               </Card>
             ) : (
-              <div className="space-y-4 w-full max-w-4xl mx-auto"> {/* بطاقة واحدة فقط، حتى 4K */}
+              <div className="space-y-4 w-full max-w-4xl mx-auto">
                 {paginatedTasks.map((task) => {
                   const { label, color, icon: StatusIcon, progress } = getStatusInfo(task.status);
                   const isSubmitting = state.submitting.has(task.itemId);
@@ -513,11 +506,11 @@ export function ChefTasks() {
                               </p>
                               <p>
                                 <span className="font-semibold">{t('orders.created_at')}:</span>{' '}
-                                {formatDate(task.createdAt, language, 'Europe/Athens')} {/* تايمر حقيقي */}
+                                {formatDate(task.createdAt, language, 'Europe/Athens')}
                               </p>
                               <p>
                                 <span className="font-semibold">{t('orders.updated_at')}:</span>{' '}
-                                {formatDate(task.updatedAt, language, 'Europe/Athens')} {/* وقت الانتهاء */}
+                                {formatDate(task.updatedAt, language, 'Europe/Athens')}
                               </p>
                             </div>
                             <div className="mt-4">
@@ -534,7 +527,7 @@ export function ChefTasks() {
                               <Button
                                 variant="primary"
                                 size="sm"
-                                onClick={() => handleUpdateTaskStatus([{ taskId: task.itemId, orderId: task.orderId, status: getNextStatus(task.status) }])} {/* دعم للمتعدد */}
+                                onClick={() => handleUpdateTaskStatus([{ taskId: task.itemId, orderId: task.orderId, status: getNextStatus(task.status) }])}
                                 disabled={isSubmitting || !state.socketConnected}
                                 className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2.5 text-sm shadow-md transition-all disabled:opacity-50"
                                 aria-label={t('orders.update_status')}
