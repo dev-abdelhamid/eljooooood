@@ -290,7 +290,7 @@ const translations = {
     "salesReport.sale_success": "تم إنشاء المبيعة بنجاح",
     "returns-vs-orders": "المرتجعات مقابل الطلبات",
             "orders.chef_tasks": "مهام الإنتاج ",
-            "orders.page": "صفحة {page} من {totalPages}",
+            "orders.page": "صفحة / من ",
 
 
     // الأقسام
@@ -421,7 +421,7 @@ const translations = {
     "settings": "Settings",
     "common.present": "Present",
     "common.absent": "Absent",
-    "orders.page": "Page {page} of {totalPages}",
+    "orders.page": "Page / of ",
     "orders.total_amount": "Total Amount",
     "orders.date": "Order Date",
     "pagination.previous": "Previous",
