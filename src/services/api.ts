@@ -593,9 +593,9 @@ export const chefsAPI = {
     return response;
   },
   create: async (chefData) => {
-    if (!Array.isArray(chefData.departments) || chefData.departments.length === 0) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid departments:`, chefData.departments);
-      throw new Error('Departments array is required');
+    if (!isValidObjectId(chefData.department)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid department ID:`, chefData.department);
+      throw new Error('Invalid department ID');
     }
     const response = await api.post('/chefs', {
       user: {
@@ -608,15 +608,15 @@ export const chefsAPI = {
         role: chefData.user.role,
         isActive: chefData.user.isActive ?? true,
       },
-      department: chefData.departments,
+      department: chefData.department,
     });
     console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
     return response;
   },
   update: async (id, chefData) => {
-    if (!isValidObjectId(id) || !Array.isArray(chefData.departments) || chefData.departments.length === 0) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid data:`, { id, departments: chefData.departments });
-      throw new Error('Invalid chef ID or departments');
+    if (!isValidObjectId(id) || !isValidObjectId(chefData.department)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID or department ID:`, { id, department: chefData.department });
+      throw new Error('Invalid chef ID or department ID');
     }
     const response = await api.put(`/chefs/${id}`, {
       user: {
@@ -627,7 +627,7 @@ export const chefsAPI = {
         phone: chefData.user.phone?.trim(),
         isActive: chefData.user.isActive ?? true,
       },
-      department: chefData.departments,
+      department: chefData.department,
     });
     console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
     return response;
@@ -651,6 +651,7 @@ export const chefsAPI = {
     return response;
   },
 };
+
 export const productionAssignmentsAPI = {
   create: async (assignmentData) => {
     if (
