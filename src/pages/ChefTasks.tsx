@@ -7,16 +7,13 @@ import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { productionAssignmentsAPI, chefsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { Input } from '../components/UI/Input';
 import { AlertCircle, CheckCircle, Clock, Package, Search } from 'lucide-react';
-import { debounce } from 'lodash';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatDate } from '../utils/formatDate';
-import { ProductSearchInput, ProductDropdown } from './OrdersTablePage'; // استيراد المكونات
+import { ProductSearchInput, ProductDropdown } from './OrdersTablePage'; // استيراد المكونات كما طلبت
 
-// باقي تعريف الـ interfaces و reducer و getStatusInfo و getNextStatus دون تغيير
 interface ChefTask {
   itemId: string;
   orderId: string;
@@ -40,7 +37,7 @@ interface State {
   chefId: string | null;
   loading: boolean;
   error: string;
-  submitting: string | null;
+  submitting: Set<string>; // تغيير إلى Set لدعم عدة submissions متوازية
   socketConnected: boolean;
   filter: { status: string; search: string };
   page: number;
@@ -52,7 +49,7 @@ type Action =
   | { type: 'SET_CHEF_ID'; payload: string | null }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
-  | { type: 'SET_SUBMITTING'; payload: string | null }
+  | { type: 'SET_SUBMITTING'; payload: { itemId: string; add: boolean } } // لإضافة/إزالة من الـ Set
   | { type: 'SET_SOCKET_CONNECTED'; payload: boolean }
   | { type: 'SET_FILTER'; payload: { status: string; search: string } }
   | { type: 'SET_PAGE'; payload: number }
@@ -65,7 +62,7 @@ const initialState: State = {
   chefId: null,
   loading: true,
   error: '',
-  submitting: null,
+  submitting: new Set(),
   socketConnected: false,
   filter: { status: 'all', search: '' },
   page: 1,
@@ -86,7 +83,13 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_ERROR':
       return { ...state, error: action.payload, loading: false };
     case 'SET_SUBMITTING':
-      return { ...state, submitting: action.payload };
+      const newSubmitting = new Set(state.submitting);
+      if (action.payload.add) {
+        newSubmitting.add(action.payload.itemId);
+      } else {
+        newSubmitting.delete(action.payload.itemId);
+      }
+      return { ...state, submitting: newSubmitting };
     case 'SET_SOCKET_CONNECTED':
       return { ...state, socketConnected: action.payload };
     case 'SET_FILTER':
@@ -215,131 +218,131 @@ export function ChefTasks() {
     }
   }, [user, t, isRtl, navigate]);
 
-  const fetchTasks = useCallback(
-    debounce(async (forceRefresh = false) => {
-      if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
-        dispatch({ type: 'SET_ERROR', payload: t('errors.no_chef_id') });
-        toast.error(t('errors.no_chef_id'), { toastId: `error-noChefId-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        return;
+  const fetchTasks = useCallback(async (forceRefresh = false) => { // إزالة debounce هنا أيضًا للسرعة، لكن مع cache
+    if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
+      dispatch({ type: 'SET_ERROR', payload: t('errors.no_chef_id') });
+      toast.error(t('errors.no_chef_id'), { toastId: `error-noChefId-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+      return;
+    }
+    const cached = cache.get(cacheKey);
+    if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      dispatch({ type: 'SET_TASKS', payload: { tasks: cached.data, totalPages: Math.ceil(cached.data.length / tasksPerPage) || 1 } });
+      return;
+    }
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
+      const query = { page: state.page, limit: tasksPerPage };
+      if (state.filter.status && state.filter.status !== 'all') query.status = state.filter.status;
+      if (state.filter.search) query.search = state.filter.search;
+      const response = await productionAssignmentsAPI.getChefTasks(state.chefId, query);
+      if (!Array.isArray(response)) {
+        throw new Error(t('errors.invalid_response'));
       }
-      const cached = cache.get(cacheKey);
-      if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        dispatch({ type: 'SET_TASKS', payload: { tasks: cached.data, totalPages: Math.ceil(cached.data.length / tasksPerPage) || 1 } });
-        return;
+      const mappedTasks: ChefTask[] = response
+        .filter((task: any) => {
+          if (!task._id || !task.order?._id || !task.product?._id || !task.chef?._id || !/^[0-9a-fA-F]{24}$/.test(task._id)) {
+            console.warn(`[${new Date().toISOString()}] Invalid task data:`, task);
+            toast.warn(t('errors.invalid_task_data'), { toastId: `error-task-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+            return false;
+          }
+          if (!task.quantity || task.quantity <= 0) {
+            console.warn(`[${new Date().toISOString()}] Invalid quantity for task ${task._id}:`, task.quantity);
+            toast.warn(t('errors.invalid_task_quantity'), { toastId: `error-task-quantity-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+            return false;
+          }
+          return true;
+        })
+        .map((task: any) => ({
+          itemId: task._id,
+          orderId: task.order._id || 'unknown',
+          orderNumber: task.order.orderNumber || t('orders.unknown'),
+          productId: task.product._id || 'unknown',
+          productName: task.product.name || t('orders.unknown_product'),
+          quantity: Number(task.quantity) || 1,
+          status: task.status || 'pending',
+          createdAt: task.createdAt || new Date().toISOString(),
+          updatedAt: task.updatedAt || new Date().toISOString(),
+          progress: getStatusInfo(task.status || 'pending').progress,
+          branchName: task.order?.branch?.name || t('orders.unknown_branch'),
+          branchId: task.order?.branch?._id || 'unknown',
+          priority: task.order?.priority || 'medium',
+          department: task.product?.department || { _id: 'unknown', name: t('orders.unknown_department') },
+          assignedTo: task.chef ? { _id: task.chef._id, username: task.chef.username || t('orders.unknown_chef') } : undefined,
+        }));
+      cache.set(cacheKey, { data: mappedTasks, timestamp: Date.now() });
+      dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: Math.ceil(response.length / tasksPerPage) || 1 } });
+      if (mappedTasks.length === 0 && response.length > 0) {
+        dispatch({ type: 'SET_ERROR', payload: t('errors.all_tasks_filtered') });
+        toast.warn(t('errors.all_tasks_filtered'), { toastId: `error-invalidTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: '' });
       }
-      dispatch({ type: 'SET_LOADING', payload: true });
-      try {
-        const query = { page: state.page, limit: tasksPerPage };
-        if (state.filter.status && state.filter.status !== 'all') query.status = state.filter.status;
-        if (state.filter.search) query.search = state.filter.search;
-        const response = await productionAssignmentsAPI.getChefTasks(state.chefId, query);
-        if (!Array.isArray(response)) {
-          throw new Error(t('errors.invalid_response'));
-        }
-        const mappedTasks: ChefTask[] = response
-          .filter((task: any) => {
-            if (!task._id || !task.order?._id || !task.product?._id || !task.chef?._id || !/^[0-9a-fA-F]{24}$/.test(task._id)) {
-              console.warn(`[${new Date().toISOString()}] Invalid task data:`, task);
-              toast.warn(t('errors.invalid_task_data'), { toastId: `error-task-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-              return false;
-            }
-            if (!task.quantity || task.quantity <= 0) {
-              console.warn(`[${new Date().toISOString()}] Invalid quantity for task ${task._id}:`, task.quantity);
-              toast.warn(t('errors.invalid_task_quantity'), { toastId: `error-task-quantity-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-              return false;
-            }
-            return true;
-          })
-          .map((task: any) => ({
-            itemId: task._id,
-            orderId: task.order._id || 'unknown',
-            orderNumber: task.order.orderNumber || t('orders.unknown'),
-            productId: task.product._id || 'unknown',
-            productName: task.product.name || t('orders.unknown_product'),
-            quantity: Number(task.quantity) || 1,
-            status: task.status || 'pending',
-            createdAt: task.createdAt || new Date().toISOString(),
-            updatedAt: task.updatedAt || new Date().toISOString(),
-            progress: getStatusInfo(task.status || 'pending').progress,
-            branchName: task.order?.branch?.name || t('orders.unknown_branch'),
-            branchId: task.order?.branch?._id || 'unknown',
-            priority: task.order?.priority || 'medium',
-            department: task.product?.department || { _id: 'unknown', name: t('orders.unknown_department') },
-            assignedTo: task.chef ? { _id: task.chef._id, username: task.chef.username || t('orders.unknown_chef') } : undefined,
-          }));
-        cache.set(cacheKey, { data: mappedTasks, timestamp: Date.now() });
-        dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: Math.ceil(response.length / tasksPerPage) || 1 } });
-        if (mappedTasks.length === 0 && response.length > 0) {
-          dispatch({ type: 'SET_ERROR', payload: t('errors.all_tasks_filtered') });
-          toast.warn(t('errors.all_tasks_filtered'), { toastId: `error-invalidTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        } else {
-          dispatch({ type: 'SET_ERROR', payload: '' });
-        }
-      } catch (err: any) {
-        const errorMessage = err.message || t('errors.task_fetch_failed');
-        dispatch({ type: 'SET_ERROR', payload: errorMessage });
-        toast.error(errorMessage, { toastId: `error-fetchTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-      } finally {
-        dispatch({ type: 'SET_LOADING', payload: false });
-      }
-    }, 300),
-    [state.chefId, state.page, state.filter, cacheKey, t, isRtl]
-  );
+    } catch (err: any) {
+      const errorMessage = err.message || t('errors.task_fetch_failed');
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      toast.error(errorMessage, { toastId: `error-fetchTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [state.chefId, state.page, state.filter, cacheKey, t, isRtl]); // إزالة debounce للسرعة
 
-  const handleUpdateTaskStatus = useCallback(
-    debounce(async (taskId: string, orderId: string, newStatus: string) => {
-      if (state.submitting === taskId) return;
-      if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
-        dispatch({ type: 'SET_ERROR', payload: t('errors.no_chef_id') });
-        toast.error(t('errors.no_chef_id'), { toastId: `error-noChefId-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      if (!user?.id && !user?._id) {
-        dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized') });
-        toast.error(t('errors.unauthorized'), { toastId: `error-noUserId-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      if (!/^[0-9a-fA-F]{24}$/.test(orderId) || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
-        dispatch({ type: 'SET_ERROR', payload: t('errors.invalid_task_data') });
-        toast.error(t('errors.invalid_task_data'), { toastId: `error-invalidTaskIds-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: taskId });
-      try {
-        const response = await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: newStatus });
-        dispatch({
-          type: 'UPDATE_ITEM_STATUS',
-          payload: { orderId, itemId: taskId, status: response.task.status, updatedAt: new Date().toISOString() },
+  // دالة مساعدة لتحديث مهمة واحدة (بدون debounce، مع Promise للتوازي)
+  const updateSingleTask = useCallback(async (taskId: string, orderId: string, newStatus: string): Promise<void> => {
+    if (!state.chefId || !/^[0-9a-fA-F]{24}$/.test(state.chefId)) {
+      throw new Error(t('errors.no_chef_id'));
+    }
+    if (!user?.id && !user?._id) {
+      throw new Error(t('errors.unauthorized'));
+    }
+    if (!/^[0-9a-fA-F]{24}$/.test(orderId) || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
+      throw new Error(t('errors.invalid_task_data'));
+    }
+    dispatch({ type: 'SET_SUBMITTING', payload: { itemId: taskId, add: true } });
+    try {
+      const response = await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: newStatus });
+      dispatch({
+        type: 'UPDATE_ITEM_STATUS',
+        payload: { orderId, itemId: taskId, status: response.task.status, updatedAt: new Date().toISOString() },
+      });
+      const task = state.tasks.find((t) => t.itemId === taskId);
+      if (task && state.socketConnected) {
+        socket.emit('itemStatusUpdated', {
+          orderId,
+          itemId: taskId,
+          status: newStatus,
+          chefId: state.chefId,
+          productName: task.productName,
+          orderNumber: task.orderNumber,
+          branchName: task.branchName,
+          quantity: task.quantity,
+          unit: task.unit || 'unit',
+          eventId: crypto.randomUUID(),
         });
-        const task = state.tasks.find((t) => t.itemId === taskId);
-        if (task && state.socketConnected) {
-          socket.emit('itemStatusUpdated', {
-            orderId,
-            itemId: taskId,
-            status: newStatus,
-            chefId: state.chefId,
-            productName: task.productName,
-            orderNumber: task.orderNumber,
-            branchName: task.branchName,
-            quantity: task.quantity,
-            unit: task.unit || 'unit',
-            eventId: crypto.randomUUID(),
-          });
-        }
-        toast.success(t('orders.task_updated', { status: t(`orders.item_${newStatus}`) }), {
-          toastId: `success-taskStatus-${taskId}-${Date.now()}`,
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } catch (err: any) {
-        const errorMessage = err.message || t('errors.task_update_failed');
-        dispatch({ type: 'SET_ERROR', payload: errorMessage });
-        toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
-    }, 500),
-    [t, state.tasks, state.chefId, user, socket, state.socketConnected, isRtl]
-  );
+      toast.success(t('orders.task_updated', { status: t(`orders.item_${newStatus}`) }), {
+        toastId: `success-taskStatus-${taskId}-${Date.now()}`,
+        position: isRtl ? 'top-left' : 'top-right',
+      });
+    } catch (err: any) {
+      const errorMessage = err.message || t('errors.task_update_failed');
+      dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+      throw err; // إعادة رمي الخطأ لـ allSettled
+    } finally {
+      dispatch({ type: 'SET_SUBMITTING', payload: { itemId: taskId, add: false } });
+    }
+  }, [t, state.tasks, state.chefId, user, socket, state.socketConnected, isRtl]);
+
+  // الدالة الرئيسية: تدعم إكمال واحد أو متعدد بـ Promise.allSettled للسرعة والتوازي
+  const handleUpdateTaskStatus = useCallback(async (tasksToUpdate: Array<{ taskId: string; orderId: string; status: string }>) => {
+    const updates = tasksToUpdate.map(({ taskId, orderId, status }) => 
+      updateSingleTask(taskId, orderId, status).catch(err => {
+        console.warn(`Failed to update task ${taskId}:`, err);
+        // لا يوقف الآخرين
+      })
+    );
+    await Promise.allSettled(updates); // ينفذ كلها متوازيًا، يتعامل مع الفشل دون إيقاف
+  }, [updateSingleTask]);
 
   useEffect(() => {
     fetchChefProfile();
@@ -379,7 +382,7 @@ export function ChefTasks() {
   ];
 
   const SkeletonCard = () => (
-    <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 animate-pulse">
+    <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 animate-pulse w-full max-w-4xl mx-auto"> {/* ضمان بطاقة واحدة */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-3">
@@ -401,195 +404,194 @@ export function ChefTasks() {
   );
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="fixed top-0 left-0 right-0 z-10 bg-white shadow-md p-4 sm:p-6 lg:p-8">
-        <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100">
-          <div className="flex flex-col lg:flex-row gap-4 p-6">
-            <div className="lg:w-2/3">
-              <label className="block text-sm font-semibold text-gray-800 mb-2">{t('orders.search')}</label>
-              <ProductSearchInput
-                value={state.filter.search}
-                onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, search: value } })}
-                placeholder={t('orders.search_placeholder')}
-                className="w-full rounded-lg border-gray-300 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
-                aria-label={t('orders.search')}
-              />
-            </div>
-            <div className="lg:w-1/3">
-              <label className="block text-sm font-semibold text-gray-800 mb-2">{t('orders.filter_by_status')}</label>
-              <ProductDropdown
-                options={statusOptions}
-                value={state.filter.status}
-                onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, status: value } })}
-                className="w-full rounded-lg border-gray-300 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
-                aria-label={t('orders.filter_by_status')}
-              />
-            </div>
+    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen w-full ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}> {/* ضمان الحدود */}
+      {/* الفلتر: غير fixed، لكن مع mb كبير ليكون "ثابتًا" بصريًا، وسكيلتون تحته مباشرة */}
+      <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100 p-6 w-full max-w-6xl mx-auto"> {/* max-w للحدود */}
+        <div className="flex flex-col lg:flex-row gap-4"> {/* responsive: عمودي على صغير، أفقي على lg */}
+          <div className="lg:w-2/3 w-full"> {/* ثلثي على lg، كامل على صغير */}
+            <label className="block text-sm font-semibold text-gray-800 mb-2 sr-only">{t('orders.search')}</label> {/* sr-only للوصولية */}
+            <ProductSearchInput
+              value={state.filter.search}
+              onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, search: value } })}
+              placeholder={t('orders.search_placeholder')}
+              className="w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
+              aria-label={t('orders.search')}
+            />
           </div>
-        </Card>
-      </div>
-      <div className="pt-32">
-        {state.loading ? (
-          <div className="flex flex-col gap-4">
-            {[...Array(3)].map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
+          <div className="lg:w-1/3 w-full"> {/* ثلث على lg، كامل على صغير */}
+            <label className="block text-sm font-semibold text-gray-800 mb-2 sr-only">{t('orders.filter_by_status')}</label>
+            <ProductDropdown
+              options={statusOptions}
+              value={state.filter.status}
+              onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ...state.filter, status: value } })}
+              className="w-full rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 text-sm shadow-sm transition-all bg-white"
+              aria-label={t('orders.filter_by_status')}
+            />
           </div>
-        ) : state.error ? (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="max-w-md mx-auto">
-            <Card className="p-6 text-center bg-red-50 shadow-lg rounded-xl border border-red-200">
-              <div className="flex items-center justify-center gap-2 mb-4">
-                <AlertCircle className="w-6 h-6 text-red-600" />
-                <p className="text-base font-medium text-red-600">{state.error}</p>
-              </div>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  cache.delete(cacheKey);
-                  fetchChefProfile();
-                  if (state.chefId) fetchTasks(true);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-2.5 text-sm shadow-md transition-all"
-                aria-label={t('orders.retry')}
-              >
-                {t('orders.retry')}
-              </Button>
-            </Card>
-          </motion.div>
-        ) : (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <div className="flex items-center justify-between mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                <Package className="w-6 h-6 text-blue-600" />
-                {t('orders.chef_tasks')}
-              </h1>
+        </div>
+      </Card>
+
+      {state.loading ? (
+        <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto"> {/* سكيلتون تحت الفلتر مباشرة، بطاقة واحدة */}
+          {[...Array(3)].map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      ) : state.error ? (
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="max-w-md mx-auto">
+          <Card className="p-6 text-center bg-red-50 shadow-lg rounded-xl border border-red-200">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+              <p className="text-base font-medium text-red-600">{state.error}</p>
             </div>
-            {!state.socketConnected && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2"
-              >
-                <AlertCircle className="w-5 h-5 text-yellow-600" />
-                <p className="text-sm text-yellow-700">{t('errors.socket_disconnected')}</p>
-              </motion.div>
-            )}
-            <AnimatePresence>
-              {paginatedTasks.length === 0 ? (
-                <Card className="p-8 text-center bg-white shadow-lg rounded-xl border border-gray-100">
-                  <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  {paginatedTasks.map((task) => {
-                    const { label, color, icon: StatusIcon, progress } = getStatusInfo(task.status);
-                    return (
-                      <motion.div
-                        key={task.itemId}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-all hover:-translate-y-1">
-                          <div className="flex flex-col justify-between gap-4">
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between mb-3">
-                                <h3 className="text-lg font-bold text-gray-900 truncate">{task.productName}</h3>
-                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${color} flex items-center gap-1`}>
-                                  <StatusIcon className="w-5 h-5" />
-                                  {t(`orders.${label}`)}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
-                                <p>
-                                  <span className="font-semibold">{t('orders.order_number')}:</span> {task.orderNumber}
-                                </p>
-                                <p>
-                                  <span className="font-semibold">{t('orders.quantity')}:</span> {task.quantity}
-                                </p>
-                                <p>
-                                  <span className="font-semibold">{t('orders.created_at')}:</span>{' '}
-                                  {formatDate(task.createdAt, language, 'Europe/Athens')}
-                                </p>
-                                <p>
-                                  <span className="font-semibold">{t('orders.updated_at')}:</span>{' '}
-                                  {formatDate(task.updatedAt, language, 'Europe/Athens')}
-                                </p>
-                              </div>
-                              <div className="mt-4">
-                                <div className="w-full bg-gray-200 rounded-full h-3">
-                                  <div
-                                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
-                                    style={{ width: `${progress}%` }}
-                                  ></div>
-                                </div>
-                              </div>
+            <Button
+              variant="primary"
+              onClick={() => {
+                cache.delete(cacheKey);
+                fetchChefProfile();
+                if (state.chefId) fetchTasks(true);
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-2.5 text-sm shadow-md transition-all"
+              aria-label={t('orders.retry')}
+            >
+              {t('orders.retry')}
+            </Button>
+          </Card>
+        </motion.div>
+      ) : (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="w-full">
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+              <Package className="w-6 h-6 text-blue-600" />
+              {t('orders.chef_tasks')}
+            </h1>
+          </div>
+          {!state.socketConnected && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2"
+            >
+              <AlertCircle className="w-5 h-5 text-yellow-600" />
+              <p className="text-sm text-yellow-700">{t('errors.socket_disconnected')}</p>
+            </motion.div>
+          )}
+          <AnimatePresence>
+            {paginatedTasks.length === 0 ? (
+              <Card className="p-8 text-center bg-white shadow-lg rounded-xl border border-gray-100 max-w-4xl mx-auto">
+                <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
+              </Card>
+            ) : (
+              <div className="space-y-4 w-full max-w-4xl mx-auto"> {/* بطاقة واحدة فقط، حتى 4K */}
+                {paginatedTasks.map((task) => {
+                  const { label, color, icon: StatusIcon, progress } = getStatusInfo(task.status);
+                  const isSubmitting = state.submitting.has(task.itemId);
+                  return (
+                    <motion.div
+                      key={task.itemId}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-all hover:-translate-y-1 w-full">
+                        <div className="flex flex-col justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-lg font-bold text-gray-900 truncate">{task.productName}</h3>
+                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${color} flex items-center gap-1`}>
+                                <StatusIcon className="w-5 h-5" />
+                                {t(`orders.${label}`)}
+                              </span>
                             </div>
-                            <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                              {task.status !== 'completed' && (
-                                <Button
-                                  variant="primary"
-                                  size="sm"
-                                  onClick={() => handleUpdateTaskStatus(task.itemId, task.orderId, getNextStatus(task.status))}
-                                  disabled={state.submitting === task.itemId || !state.socketConnected}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2.5 text-sm shadow-md transition-all disabled:opacity-50"
-                                  aria-label={t('orders.update_status')}
-                                >
-                                  {state.submitting === task.itemId ? (
-                                    <LoadingSpinner className="w-5 h-5" />
-                                  ) : (
-                                    <>
-                                      <CheckCircle className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'}`} />
-                                      {t(`orders.item_${getNextStatus(task.status)}`)}
-                                    </>
-                                  )}
-                                </Button>
-                              )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
+                              <p>
+                                <span className="font-semibold">{t('orders.order_number')}:</span> {task.orderNumber}
+                              </p>
+                              <p>
+                                <span className="font-semibold">{t('orders.quantity')}:</span> {task.quantity}
+                              </p>
+                              <p>
+                                <span className="font-semibold">{t('orders.created_at')}:</span>{' '}
+                                {formatDate(task.createdAt, language, 'Europe/Athens')} {/* تايمر حقيقي */}
+                              </p>
+                              <p>
+                                <span className="font-semibold">{t('orders.updated_at')}:</span>{' '}
+                                {formatDate(task.updatedAt, language, 'Europe/Athens')} {/* وقت الانتهاء */}
+                              </p>
+                            </div>
+                            <div className="mt-4">
+                              <div className="w-full bg-gray-200 rounded-full h-3">
+                                <div
+                                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                                  style={{ width: `${progress}%` }}
+                                ></div>
+                              </div>
                             </div>
                           </div>
-                        </Card>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              )}
-            </AnimatePresence>
-            {state.totalPages > 1 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-                className="flex justify-center items-center gap-4 mt-8"
-              >
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page - 1 })}
-                  disabled={state.page === 1}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
-                  aria-label={t('orders.previous')}
-                >
-                  {t('orders.previous')}
-                </Button>
-                <span className="text-gray-700 text-sm font-semibold">
-                  {t('orders.page', { current: state.page, total: state.totalPages })}
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page + 1 })}
-                  disabled={state.page === state.totalPages}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
-                  aria-label={t('orders.next')}
-                >
-                  {t('orders.next')}
-                </Button>
-              </motion.div>
+                          <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                            {task.status !== 'completed' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => handleUpdateTaskStatus([{ taskId: task.itemId, orderId: task.orderId, status: getNextStatus(task.status) }])} {/* دعم للمتعدد */}
+                                disabled={isSubmitting || !state.socketConnected}
+                                className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2.5 text-sm shadow-md transition-all disabled:opacity-50"
+                                aria-label={t('orders.update_status')}
+                              >
+                                {isSubmitting ? (
+                                  <LoadingSpinner className="w-5 h-5" />
+                                ) : (
+                                  <>
+                                    <CheckCircle className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'}`} />
+                                    {t(`orders.item_${getNextStatus(task.status)}`)}
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  );
+                })}
+              </div>
             )}
-          </motion.div>
-        )}
-      </div>
+          </AnimatePresence>
+          {state.totalPages > 1 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="flex justify-center items-center gap-4 mt-8 max-w-4xl mx-auto"
+            >
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page - 1 })}
+                disabled={state.page === 1}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
+                aria-label={t('orders.previous')}
+              >
+                {t('orders.previous')}
+              </Button>
+              <span className="text-gray-700 text-sm font-semibold">
+                {t('orders.page', { current: state.page, total: state.totalPages })}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page + 1 })}
+                disabled={state.page === state.totalPages}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
+                aria-label={t('orders.next')}
+              >
+                {t('orders.next')}
+              </Button>
+            </motion.div>
+          )}
+        </motion.div>
+      )}
     </div>
   );
 }
