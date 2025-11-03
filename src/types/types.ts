@@ -123,12 +123,7 @@ export interface User {
   branchId?: string;
   branch?: Branch;
   departmentId?: string;
- department: Array<{
-    id?: string;
-    _id?: string;
-    name: string;
-    nameEn?: string;
-  }>;
+  department?: Department;
 }
 
 export interface OrderItem {
