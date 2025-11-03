@@ -324,6 +324,7 @@ const translations = {
     "errors.update_order_status": "حدث خطأ أثناء تحديث حالة الطلب",
     "errors.assign_chef": "فشل في تعيين الشيف",
     "errors.order_not_found": "الطلب غير موجود",
+    "orders.search_placeholder": "ابحث برقم الطلب، المنتج، أو الملاحظات",
     "errors.invalid_input": "بيانات غير صحيحة",
     "errors.unauthorized_access": "غير مخول للوصول",
     "errors.no_branch_assigned": "لم يتم تخصيص فرع",
@@ -429,6 +430,7 @@ const translations = {
     "sales.review": " sales Review",
     "productionTasks": " production tasks ",
     "returns-vs-orders": "returns vs orders",
+    "orders.search_Placeholder": "Search by order number, product , or notes",
 
 
     "returns.review": " returns Review",
