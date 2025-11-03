@@ -574,7 +574,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
     return response;
   },
-  getById: async (id: string) => {
+  getById: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getById - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
@@ -583,7 +583,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.getById - Response:`, response);
     return response;
   },
-  getByUserId: async (userId: string) => {
+  getByUserId: async (userId) => {
     if (!isValidObjectId(userId)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
       throw new Error('Invalid user ID');
@@ -592,16 +592,11 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
     return response;
   },
-  create: async (chefData: any) => {
-    if (!Array.isArray(chefData.departments) || chefData.departments.length === 0) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid departments:`, chefData.departments);
-      throw new Error('Departments array is required');
-    }
-    if (!chefData.departments.every((id: string) => isValidObjectId(id))) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid department ID in array:`, chefData.departments);
+  create: async (chefData) => {
+    if (!isValidObjectId(chefData.department)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid department ID:`, chefData.department);
       throw new Error('Invalid department ID');
     }
-
     const response = await api.post('/chefs', {
       user: {
         name: chefData.user.name.trim(),
@@ -610,28 +605,19 @@ export const chefsAPI = {
         email: chefData.user.email?.trim(),
         phone: chefData.user.phone?.trim(),
         password: chefData.user.password,
-        role: 'chef',
-        isActive: true,
+        role: chefData.user.role,
+        isActive: chefData.user.isActive ?? true,
       },
-      department: chefData.departments,
+      department: chefData.department,
     });
     console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, chefData: any) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
+  update: async (id, chefData) => {
+    if (!isValidObjectId(id) || !isValidObjectId(chefData.department)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID or department ID:`, { id, department: chefData.department });
+      throw new Error('Invalid chef ID or department ID');
     }
-    if (!Array.isArray(chefData.departments) || chefData.departments.length === 0) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid departments:`, chefData.departments);
-      throw new Error('Departments array is required');
-    }
-    if (!chefData.departments.every((deptId: string) => isValidObjectId(deptId))) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid department ID in array:`, chefData.departments);
-      throw new Error('Invalid department ID');
-    }
-
     const response = await api.put(`/chefs/${id}`, {
       user: {
         name: chefData.user.name.trim(),
@@ -641,12 +627,12 @@ export const chefsAPI = {
         phone: chefData.user.phone?.trim(),
         isActive: chefData.user.isActive ?? true,
       },
-      department: chefData.departments,
+      department: chefData.department,
     });
     console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
     return response;
   },
-  delete: async (id: string) => {
+  delete: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.delete - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
@@ -655,16 +641,17 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
     return response;
   },
-  resetPassword: async (id: string, password: string) => {
+  resetPassword: async (id, password) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
     }
     const response = await api.post(`/chefs/${id}/reset-password`, { password });
-    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword - Response:`, response);
+    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword response:`, response);
     return response;
   },
 };
+
 export const productionAssignmentsAPI = {
   create: async (assignmentData) => {
     if (
