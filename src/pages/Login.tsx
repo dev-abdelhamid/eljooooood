@@ -39,13 +39,15 @@ export function Login() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMessage('');
+
     try {
       const success = await login(username, password);
       if (!success) {
         setError(isRTL ? 'اسم مستخدم أو كلمة مرور غير صحيحة' : 'Invalid username or password');
       }
     } catch {
-      setError(isRTL ? 'حدث خطأ أثناء تسجيل الدخول' : 'An error occurred');
+      setError(isRTL ? 'حدث خطأ أثناء تسجيل الدخول' : 'An error occurred during login');
     } finally {
       setLoading(false);
     }
@@ -54,6 +56,9 @@ export function Login() {
   const handleForgotSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
     setTimeout(() => {
       setSuccessMessage(isRTL 
         ? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني'
@@ -71,120 +76,135 @@ export function Login() {
   return (
     <div
       dir={isRTL ? 'rtl' : 'ltr'}
-      className="min-h-screen bg-gradient-to-br from-amber-100 via-orange-100 to-amber-200 flex flex-col justify-center p-4 sm:p-6"
+      className="min-h-screen bg-gradient-to-br from-amber-100 via-orange-100 to-amber-200 flex flex-col items-center justify-center p-4 sm:p-6"
       style={{ fontFamily: 'Alexandria, sans-serif' }}
     >
-      {/* المحتوى الرئيسي */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="w-full max-w-5xl grid md:grid-cols-2 gap-6 items-center">
-          {/* الجانب الأيسر - الترحيب */}
-          <div
-            className={`hidden md:flex flex-col items-center justify-center text-center space-y-6 transition-all duration-700 ease-out ${
-              mounted ? 'opacity-100 translate-x-0' : (isRTL ? 'opacity-0 translate-x-32' : 'opacity-0 -translate-x-32')
-            }`}
-          >
-            <div className="relative group">
-              <img
-                src="/logo.png"
-                alt={isRTL ? 'الجوديا' : 'Al-Joudia'}
-                width={160}
-                height={160}
-                className="mx-auto drop-shadow-md"
-              />
-              <div className="absolute -inset-3 bg-gradient-to-r from-amber-200/30 to-orange-200/30 rounded-full blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            </div>
-            <div className="space-y-3">
-              <h1 className="text-3xl font-bold text-amber-800">
-                {isRTL ? 'مرحباً بك في نظام الجوديا' : 'Welcome to Al-Joudia System'}
-              </h1>
-              <p className="text-lg text-amber-700 max-w-sm mx-auto leading-relaxed">
-                {isRTL
-                  ? 'اكتشف تجربة إدارة مبتكرة لمصنع الجوديا مع تتبع ذكي للعمليات الداخلية'
-                  : 'Discover an innovative management experience for the sweets factory'}
-              </p>
-            </div>
+      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-6 items-center flex-1">
+        {/* Left Side - Branding */}
+        <div
+          className={`hidden md:flex flex-col items-center justify-center text-center space-y-6 transition-all duration-700 ease-out ${
+            mounted ? 'opacity-100 translate-x-0' : (isRTL ? 'opacity-0 translate-x-20' : 'opacity-0 -translate-x-20')
+          }`}
+        >
+          <div className="relative group">
+            <img
+              src="/logo.png"
+              alt={isRTL ? 'الجوديا' : 'Al-Joudia'}
+              width={160}
+              height={160}
+              className="mx-auto drop-shadow-md transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute -inset-3 bg-gradient-to-r from-amber-200/30 to-orange-200/30 rounded-full blur-lg transition-opacity duration-500 group-hover:opacity-100" />
           </div>
 
-          {/* الجانب الأيمن - النموذج */}
-          <div
-            className={`w-full max-w-sm mx-auto transition-all duration-700 ease-out delay-200 ${
-              mounted ? 'opacity-100 translate-x-0' : (isRTL ? 'opacity-0 -translate-x-32' : 'opacity-0 translate-x-32')
-            }`}
-          >
-            <Card className="border-amber-100/50 shadow-md bg-white/90 backdrop-blur-sm rounded-xl p-5 sm:p-6">
-              {/* لوجو الموبايل */}
-              <div className="md:hidden text-center mb-5">
-                <div className="relative inline-block group">
-                  <img src="/logo.png" alt="الجوديا" width={70} height={70} />
-                  <div className="absolute -inset-2 bg-gradient-to-r from-amber-200/20 to-orange-200/20 rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
+          <div className="space-y-3">
+            <h1 className="text-3xl font-bold text-amber-800">
+              {isRTL ? 'مرحباً بك في نظام الجوديا' : 'Welcome to Al-Joudia System'}
+            </h1>
+            <p className="text-lg text-amber-700 max-w-sm mx-auto leading-relaxed">
+              {isRTL
+                ? 'اكتشف تجربة إدارة مبتكرة لمصنع الجوديا مع تتبع ذكي للعمليات الداخلية وتنسيق سلس بين الإنتاج والفروع لتعزيز الكفاءة'
+                : 'Discover an innovative management experience for the sweets factory, with smart tracking of internal operations and seamless coordination between production and branches to enhance efficiency'}
+            </p>
+          </div>
+        </div>
+
+        {/* Right Side - Form */}
+        <div
+          className={`w-full max-w-sm mx-auto transition-all duration-700 ease-out delay-200 ${
+            mounted ? 'opacity-100 translate-x-0' : (isRTL ? 'opacity-0 -translate-x-20' : 'opacity-0 translate-x-20')
+          }`}
+        >
+          <Card className="border-amber-100/50 shadow-md bg-white/90 backdrop-blur-sm rounded-xl overflow-hidden p-5 sm:p-6">
+            <div className="text-center space-y-3 mb-5">
+              <div className="md:hidden relative mx-auto w-fit group">
+                <img
+                  src="/logo.png"
+                  alt="الجوديا"
+                  width={70}
+                  height={70}
+                  className="transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="absolute -inset-2 bg-gradient-to-r from-amber-200/20 to-orange-200/20 rounded-full blur-md transition-opacity duration-500 group-hover:opacity-100" />
               </div>
 
-              <div className="text-center mb-5">
-                <h1 className="text-xl sm:text-2xl font-bold text-amber-800">
-                  {showForgot 
-                    ? (isRTL ? 'إعادة تعيين كلمة المرور' : 'Reset Password')
-                    : (isRTL ? 'تسجيل الدخول' : 'Login')
-                  }
-                </h1>
-                <p className="text-sm text-amber-600 mt-1">
-                  {showForgot
-                    ? (isRTL ? 'أدخل بريدك لتلقي رابط الإعادة' : 'Enter email to receive reset link')
-                    : (isRTL ? 'أدخل بياناتك للوصول' : 'Enter credentials to access dashboard')
-                  }
-                </p>
-              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-amber-800">
+                {showForgot 
+                  ? (isRTL ? 'إعادة تعيين كلمة المرور' : 'Reset Password')
+                  : (isRTL ? 'تسجيل الدخول' : 'Login')
+                }
+              </h1>
+              <p className="text-sm sm:text-base text-amber-600">
+                {showForgot
+                  ? (isRTL ? 'أدخل بريدك الإلكتروني لتلقي رابط الإعادة' : 'Enter your email to receive a reset link')
+                  : (isRTL ? 'أدخل بياناتك للوصول إلى لوحة التحكم' : 'Enter your credentials to access the dashboard')
+                }
+              </p>
+            </div>
 
-              {/* رسائل */}
+            <div className="space-y-5">
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm text-center">
-                  {error}
+                <div className="p-3 bg-red-50/70 border border-red-100 rounded-md">
+                  <p className="text-red-700 text-xs sm:text-sm">{error}</p>
                 </div>
               )}
               {successMessage && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm text-center">
-                  {successMessage}
+                <div className="p-3 bg-green-50/70 border border-green-100 rounded-md">
+                  <p className="text-green-700 text-xs sm:text-sm">{successMessage}</p>
                 </div>
               )}
 
-              {/* نموذج تسجيل الدخول */}
               {!showForgot ? (
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  {/* اسم المستخدم */}
-                  <div className="relative group">
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className={`w-full ${isRTL ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-3 bg-white/10 border border-amber-100/50 rounded-lg focus:border-amber-400 focus:ring-2 focus:ring-amber-300/30 text-sm outline-none transition-all duration-300 hover:bg-white/20`}
-                      placeholder={isRTL ? 'أدخل اسم المستخدم' : 'Enter username'}
-                      required
-                    />
-                    <User className={`absolute top-1/2 -translate-y-1/2 ${isRTL ? 'right-4' : 'left-4'} text-amber-600 group-hover:text-amber-800 transition-colors h-5 w-5`} />
+                  {/* Username Field */}
+                  <div>
+                    <label className="block text-amber-800 text-sm sm:text-base font-medium mb-2">
+                      {isRTL ? 'اسم المستخدم' : 'Username'}
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-2.5 bg-white/10 border border-amber-100/50 rounded-md focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 text-xs sm:text-sm outline-none transition-all duration-300 hover:bg-white/20`}
+                        placeholder={isRTL ? 'أدخل اسم المستخدم' : 'Enter username'}
+                        required
+                      />
+                      <div className={`absolute inset-y-0 ${isRTL ? 'right-0' : 'left-0'} flex items-center justify-center w-12 pointer-events-none`}>
+                        <User className="h-5 w-5 text-amber-600 group-hover:text-amber-800 transition-colors" />
+                      </div>
+                    </div>
                   </div>
 
-                  {/* كلمة المرور */}
-                  <div className="relative group">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className={`w-full ${isRTL ? 'pr-11 pl-11' : 'pl-11 pr-11'} py-3 bg-white/10 border border-amber-100/50 rounded-lg focus:border-amber-400 focus:ring-2 focus:ring-amber-300/30 text-sm outline-none transition-all duration-300 hover:bg-white/20`}
-                      placeholder="••••••••"
-                      required
-                    />
-                    <Lock className={`absolute top-1/2 -translate-y-1/2 ${isRTL ? 'right-4' : 'left-4'} text-amber-600 group-hover:text-amber-800 transition-colors h-5 w-5`} />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className={`absolute top-1/2 -translate-y-1/2 ${isRTL ? 'left-4' : 'right-4'} text-amber-600 hover:text-amber-800 transition-colors`}
-                    >
-                      {showPassword ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
-                    </button>
+                  {/* Password Field */}
+                  <div>
+                    <label className="block text-amber-800 text-sm sm:text-base font-medium mb-2">
+                      {isRTL ? 'كلمة المرور' : 'Password'}
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className={`w-full ${isRTL ? 'pr-12 pl-12' : 'pl-12 pr-12'} py-2.5 bg-white/10 border border-amber-100/50 rounded-md focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 text-xs sm:text-sm outline-none transition-all duration-300 hover:bg-white/20`}
+                        placeholder="••••••••"
+                        required
+                      />
+                      <div className={`absolute inset-y-0 ${isRTL ? 'right-0' : 'left-0'} flex items-center justify-center w-12 pointer-events-none`}>
+                        <Lock className="h-5 w-5 text-amber-600 group-hover:text-amber-800 transition-colors" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className={`absolute inset-y-0 ${isRTL ? 'left-0' : 'right-0'} flex items-center justify-center w-12 text-amber-600 hover:text-amber-800 transition-colors`}
+                      >
+                        {showPassword ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+                      </button>
+                    </div>
                   </div>
 
-                  {/* الروابط */}
-                  <div className="flex justify-between text-xs">
+                  {/* Links */}
+                  <div className="flex justify-between text-xs sm:text-sm">
                     <button
                       type="button"
                       onClick={() => setShowForgot(true)}
@@ -203,16 +223,16 @@ export function Login() {
                     </button>
                   </div>
 
-                  {/* زر الدخول */}
+                  {/* Submit Button */}
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-3 rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-all duration-300"
+                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-2.5 rounded-md shadow-sm hover:shadow-md transition-all duration-300 text-sm font-medium"
                   >
                     {loading ? (
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        {isRTL ? 'جاري...' : 'Logging in...'}
+                        {isRTL ? 'جاري...' : 'Loading...'}
                       </div>
                     ) : (
                       <div className="flex items-center justify-center gap-2">
@@ -224,22 +244,29 @@ export function Login() {
                 </form>
               ) : (
                 <form onSubmit={handleForgotSubmit} className="space-y-5">
-                  <div className="relative group">
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className={`w-full ${isRTL ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-3 bg-white/10 border border-amber-100/50 rounded-lg focus:border-amber-400 focus:ring-2 focus:ring-amber-300/30 text-sm outline-none transition-all duration-300 hover:bg-white/20`}
-                      placeholder={isRTL ? 'أدخل بريدك الإلكتروني' : 'Enter your email'}
-                      required
-                    />
-                    <User className={`absolute top-1/2 -translate-y-1/2 ${isRTL ? 'right-4' : 'left-4'} text-amber-600 group-hover:text-amber-800 transition-colors h-5 w-5`} />
+                  <div>
+                    <label className="block text-amber-800 text-sm sm:text-base font-medium mb-2">
+                      {isRTL ? 'البريد الإلكتروني' : 'Email'}
+                    </label>
+                    <div className="relative group">
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-2.5 bg-white/10 border border-amber-100/50 rounded-md focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 text-xs sm:text-sm outline-none transition-all duration-300 hover:bg-white/20`}
+                        placeholder="email@company.com"
+                        required
+                      />
+                      <div className={`absolute inset-y-0 ${isRTL ? 'right-0' : 'left-0'} flex items-center justify-center w-12 pointer-events-none`}>
+                        <User className="h-5 w-5 text-amber-600 group-hover:text-amber-800 transition-colors" />
+                      </div>
+                    </div>
                   </div>
 
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-3 rounded-lg font-medium text-sm shadow-sm hover:shadow-md transition-all"
+                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-2.5 rounded-md shadow-sm hover:shadow-md transition-all duration-300 text-sm font-medium"
                   >
                     {loading ? 'جاري الإرسال...' : (isRTL ? 'إرسال الرابط' : 'Send Reset Link')}
                   </Button>
@@ -248,27 +275,30 @@ export function Login() {
                     type="button"
                     variant="ghost"
                     onClick={handleBackToLogin}
-                    className="w-full text-amber-600 hover:text-amber-800 py-3 rounded-lg text-sm font-medium hover:bg-amber-50/50 transition-all"
+                    className="w-full text-amber-600 hover:text-amber-800 py-2.5 rounded-md text-sm font-medium hover:bg-amber-50/50 transition-all"
                   >
                     <ArrowLeft className="h-4 w-4 me-2" />
                     {isRTL ? 'العودة' : 'Back to Login'}
                   </Button>
                 </form>
               )}
-            </Card>
-          </div>
+            </div>
+          </Card>
         </div>
       </div>
 
       {/* جميع الحقوق محفوظة */}
-      <footer className="text-center py-6 text-amber-700 text-xs sm:text-sm">
-        <p className="font-medium">
-          © {new Date().getFullYear()} مصنع حلويات الجوديا - جميع الحقوق محفوظة
+      <footer className="mt-8 text-center text-amber-700 text-xs sm:text-sm opacity-80">
+        <p>
+          © {new Date().getFullYear()} 
+          <span className="font-medium mx-1">مصنع حلويات الجوديا</span> 
+          - جميع الحقوق محفوظة
         </p>
-        <p className="text-amber-600 mt-1">
+        <p className="mt-1 text-amber-600">
           {isRTL ? 'تم التطوير بواسطة فريق الجوديا التقني' : 'Developed by Al-Joudia Tech Team'}
         </p>
       </footer>
+
     </div>
   );
 }
