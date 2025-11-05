@@ -1328,7 +1328,7 @@ export const Dashboard: React.FC = () => {
                   <p className="text-xs text-gray-500">{entry.description}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-600">{entry.quantity}</p>
+                  <p className="text-xs text-gray-600">{entry.quantity}  {entry.product?.displayUnit} {entry.product?.displayName}</p>
                   <p className="text-xs text-gray-500">{entry.date}</p>
                 </div>
               </motion.div>
