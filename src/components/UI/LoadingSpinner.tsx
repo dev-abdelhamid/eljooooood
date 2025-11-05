@@ -227,16 +227,7 @@ export function LogoLoadingSpinner({
         </motion.div>
       )}
 
-      <style jsx>{`
-        @keyframes draw {
-          from {
-            stroke-dashoffset: ${length};
-          }
-          to {
-            stroke-dashoffset: 0;
-          }
-        }
-      `}</style>
+    
     </div>
   );
 }
