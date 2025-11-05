@@ -32,7 +32,6 @@ interface Stats {
   averageProductionTime?: number;
   chefUtilizationRate?: number;
 }
-
 interface Task {
   id: string;
   orderId: string;
@@ -48,7 +47,6 @@ interface Task {
   branchNameEn?: string;
   createdAt: string;
 }
-
 interface BranchPerformance {
   branchName: string;
   branchNameEn?: string;
@@ -57,7 +55,6 @@ interface BranchPerformance {
   totalOrders: number;
   completedOrders: number;
 }
-
 interface ChefPerformance {
   chefId: string;
   chefName: string;
@@ -66,7 +63,6 @@ interface ChefPerformance {
   totalTasks: number;
   completedTasks: number;
 }
-
 interface Order {
   id: string;
   orderNumber: string;
@@ -94,7 +90,6 @@ interface Order {
   createdBy: string;
   createdAt: string;
 }
-
 interface Return {
   id: string;
   returnNumber: string;
@@ -116,7 +111,6 @@ interface Return {
   reviewNotesEn?: string;
   createdAt: string;
 }
-
 interface Chef {
   _id: string;
   userId: string;
@@ -125,7 +119,6 @@ interface Chef {
   nameEn?: string;
   department: { _id: string; name: string; nameEn?: string } | null;
 }
-
 interface InventoryItem {
   _id: string;
   product: {
@@ -148,7 +141,6 @@ interface InventoryItem {
   maxStockLevel: number;
   status: 'low' | 'normal' | 'full';
 }
-
 interface ProductHistoryEntry {
   _id: string;
   date: string;
@@ -156,31 +148,27 @@ interface ProductHistoryEntry {
   quantity: number;
   description: string;
 }
-
 interface FilterState {
   search: string;
 }
-
 const timeFilterOptions = [
   { value: 'day', label: 'اليوم', enLabel: 'Today' },
   { value: 'week', label: 'هذا الأسبوع', enLabel: 'This Week' },
   { value: 'month', label: 'هذا الشهر', enLabel: 'This Month' },
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
-
 // Loader Component
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
-
 // StatsCard Component
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <motion.div
       whileHover={{ scale: 1.02 }}
-      className={`p-3 bg-gradient-to-br from-${color}-50 to-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-100 transition-all duration-200 shadow-sm`}
+      className={`p-3 bg-gradient-to-br from-white to-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-50 transition-all duration-300 shadow-sm`}
       aria-label={ariaLabel}
     >
       <div className="flex items-center gap-2">
@@ -193,7 +181,6 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
     </motion.div>
   )
 );
-
 // ChefDashboard Component
 const ChefDashboard: React.FC<{
   stats: Stats;
@@ -204,7 +191,6 @@ const ChefDashboard: React.FC<{
   handleCompleteTask: (taskId: string, orderId: string) => void;
 }> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ search: '' });
-
   const filteredTasks = useMemo(() => {
     const searchTerm = filter.search.toLowerCase();
     return tasks
@@ -218,7 +204,6 @@ const ChefDashboard: React.FC<{
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 6);
   }, [tasks, filter.search, isRtl]);
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
@@ -270,14 +255,14 @@ const ChefDashboard: React.FC<{
             {filteredTasks.length === 0 ? (
               <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
             ) : (
-              filteredTasks.map((task) => (
+              filteredTasks.map((task, index) => (
                 <motion.div
                   key={task.id}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="border border-amber-100 rounded-lg p-2 bg-amber-50/50 shadow-sm hover:bg-amber-100 transition-all duration-200"
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3, delay: index * 0.05, ease: 'easeOut' }}
+                  className="border border-amber-100 rounded-lg p-2 bg-amber-50/30 shadow-sm hover:bg-amber-50 transition-all duration-300"
                 >
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="font-semibold text-xs text-gray-800 truncate">
@@ -336,7 +321,6 @@ const ChefDashboard: React.FC<{
     </div>
   );
 });
-
 export const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -379,7 +363,6 @@ export const Dashboard: React.FC = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const cache = useMemo(() => new Map<string, any>(), []);
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
-
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
       if (!user?.id && !user?._id) {
@@ -730,7 +713,7 @@ export const Dashboard: React.FC = () => {
           type: 'error',
           message: errorMessage,
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           path: '/dashboard',
         });
       } finally {
@@ -739,18 +722,15 @@ export const Dashboard: React.FC = () => {
     }, 100),
     [user, isRtl, language, cacheKey, addNotification]
   );
-
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
   }, [fetchDashboardData, timeFilter]);
-
   useEffect(() => {
     if (refreshTasks) {
       fetchDashboardData(true);
     }
   }, [refreshTasks, fetchDashboardData]);
-
   useEffect(() => {
     if (!socket || !user || !isConnected) return;
     socket.on('connect_error', () => {
@@ -769,7 +749,7 @@ export const Dashboard: React.FC = () => {
         console.warn(`[${new Date().toISOString()} ] Invalid task assigned data:`, data);
         return;
       }
-      if (data.chefId !== (user?.id || user?._id) || !['admin', 'production', 'chef'].includes(user.role)) return;
+      if (data.chefId !== (user?.id || user?._id) || !/^[0-9a-fA-F]{24}$/.test(data.chefId) || !['admin', 'production', 'chef'].includes(user.role)) return;
       const notification = {
         _id: data.eventId,
         type: 'info' as const,
@@ -918,7 +898,6 @@ export const Dashboard: React.FC = () => {
       socket.off('inventoryUpdated');
     };
   }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
-
   const handleStartTask = useCallback(
     async (taskId: string, orderId: string) => {
       if (!isConnected) {
@@ -977,7 +956,6 @@ export const Dashboard: React.FC = () => {
     },
     [socket, user, isRtl, isConnected, tasks, language, addNotification]
   );
-
   const handleCompleteTask = useCallback(
     async (taskId: string, orderId: string) => {
       if (!isConnected) {
@@ -1036,7 +1014,6 @@ export const Dashboard: React.FC = () => {
     },
     [socket, user, isRtl, isConnected, tasks, language, addNotification]
   );
-
   const handleConfirmDelivery = useCallback(
     async (orderId: string, branchId: string) => {
       if (!isConnected) {
@@ -1058,7 +1035,6 @@ export const Dashboard: React.FC = () => {
     },
     [isConnected, socket, isRtl]
   );
-
   const filteredInventory = useMemo(() => {
     const searchTerm = inventoryFilter.search.toLowerCase();
     return inventory.filter((item) => {
@@ -1066,30 +1042,25 @@ export const Dashboard: React.FC = () => {
       return name?.toLowerCase().includes(searchTerm);
     });
   }, [inventory, inventoryFilter.search, isRtl]);
-
   const lowStockItems = useMemo(() => filteredInventory.filter((item) => item.currentStock <= item.minStockLevel).slice(0, 8), [filteredInventory]);
-
   const recentHistory = useMemo(() => history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8), [history]);
-
   const sortedPendingOrders = useMemo(() => {
     return [...orders]
       .filter((order) => ['pending', 'approved', 'in_production', 'in_transit'].includes(order.status))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 8);
   }, [orders]);
-
   const sortedLatestReturns = useMemo(() => {
     return [...returns]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 8);
   }, [returns]);
-
   const renderStats = () => (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"
+      transition={{ duration: 0.5, ease: 'easeOut' }}
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
     >
       <StatsCard
         title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
@@ -1161,7 +1132,7 @@ export const Dashboard: React.FC = () => {
             ariaLabel={isRtl ? 'قيمة المخزون' : 'Inventory Value'}
           />
           <StatsCard
-            title={isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Items'}
+            title={isRtl ? 'منتجات تحتاج تحتاج تجديد' : 'Low Stock Items'}
             value={stats.lowStockItems?.toString() || '0'}
             icon={AlertCircle}
             color="red"
@@ -1203,7 +1174,6 @@ export const Dashboard: React.FC = () => {
       )}
     </motion.div>
   );
-
   const renderBranchPerformance = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1218,11 +1188,11 @@ export const Dashboard: React.FC = () => {
             branchPerformance.map((branch, index) => (
               <motion.div
                 key={branch.branchId}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50/50 transition-all duration-200"
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, delay: index * 0.05, ease: 'easeOut' }}
+                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-all duration-300 rounded-md"
                 onClick={() => navigate(`/branches/${branch.branchId}`)}
               >
                 <div>
@@ -1248,7 +1218,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderChefPerformance = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1263,11 +1232,11 @@ export const Dashboard: React.FC = () => {
             chefPerformance.map((chef, index) => (
               <motion.div
                 key={chef.chefId}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50/50 transition-all duration-200"
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, delay: index * 0.05, ease: 'easeOut' }}
+                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-all duration-300 rounded-md"
                 onClick={() => navigate(`/chefs/${chef.chefId}`)}
               >
                 <div>
@@ -1293,7 +1262,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderLatestReturns = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1305,15 +1273,14 @@ export const Dashboard: React.FC = () => {
           {sortedLatestReturns.length === 0 ? (
             <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
           ) : (
-            sortedLatestReturns.map((ret) => (
+            sortedLatestReturns.map((ret, index) => (
               <motion.div
                 key={ret.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-2 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
-                onClick={() => navigate(`/returns/${ret.id}`)}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, delay: index * 0.05, ease: 'easeOut' }}
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50/30 shadow-sm hover:bg-amber-50 transition-all duration-300"
               >
                 <div className="flex items-center justify-between mb-1">
                   <h4 className="font-semibold text-xs text-gray-800 truncate">
@@ -1346,27 +1313,25 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderLowStockItems = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
         <AlertCircle className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
-        {isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Products'}
+        {isRtl ? 'منتجات تحتاج تحتاج تجديد' : 'Low Stock Items'}
       </h3>
-   
       <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {lowStockItems.length === 0 ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد منتجات منخفضة المخزون' : 'No low stock products'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد منتجات تحتاج تحتاج تجديد' : 'No low stock items'}</p>
           ) : (
             lowStockItems.map((item, index) => (
               <motion.div
                 key={item._id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, delay: index * 0.05, ease: 'easeOut' }}
+                className="flex items-center justify-between p-2 border-b border-gray-100 hover:bg-amber-50 transition-all duration-300 rounded-md"
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{item.product?.displayName}</p>
@@ -1382,14 +1347,13 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderRecentInventoryHistory = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
         <Clock className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أحدث سجل المخزون' : 'Recent Inventory History'}
       </h3>
-      <div className="space-y-2 w-full max-h-64  overflow-y-auto">
+      <div className="space-y-2 w-full max-h-64 overflow-y-auto">
         <AnimatePresence>
           {recentHistory.length === 0 ? (
             <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد سجلات' : 'No history available'}</p>
@@ -1397,18 +1361,18 @@ export const Dashboard: React.FC = () => {
             recentHistory.map((entry, index) => (
               <motion.div
                 key={entry._id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center  justify-between p-2 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, delay: index * 0.05, ease: 'easeOut' }}
+                className="flex items-center justify-between p-2 border-b border-gray-100 hover:bg-amber-50 transition-all duration-300 rounded-md"
               >
-                <div>
+                <div className="flex-1">
                   <p className="text-xs font-medium text-gray-800">{isRtl ? entry.type : entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</p>
-                  <p className="text-xs text-gray-500">{entry.description}</p>
+                  <p className="text-xs text-gray-500 truncate">{entry.description}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-600">{entry.quantity}</p>
+                <div className="text-right flex-1">
+                  <p className="text-xs text-gray-600">{entry.quantity} {isRtl ? 'كمية' : 'Quantity'}</p>
                   <p className="text-xs text-gray-500">{entry.date}</p>
                 </div>
               </motion.div>
@@ -1418,7 +1382,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderLatestOrders = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1430,14 +1393,14 @@ export const Dashboard: React.FC = () => {
           {sortedPendingOrders.length === 0 ? (
             <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
           ) : (
-            sortedPendingOrders.map((order) => (
+            sortedPendingOrders.map((order, index) => (
               <motion.div
                 key={order.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-2 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, delay: index * 0.05, ease: 'easeOut' }}
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50/30 shadow-sm cursor-pointer hover:bg-amber-50 transition-all duration-300"
                 onClick={() => navigate(`/orders/${order.id}`)}
               >
                 <div className="flex items-center justify-between mb-1">
@@ -1489,7 +1452,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   if (loading && isInitialLoad) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4 text-sm">{error}</div>;
   return (
@@ -1520,7 +1482,7 @@ export const Dashboard: React.FC = () => {
           handleCompleteTask={handleCompleteTask}
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {renderStats()}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {renderLatestOrders()}
