@@ -319,7 +319,7 @@ const ProductSearchInput: React.FC<{
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'left-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-600`}
+        className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-600`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
@@ -331,7 +331,7 @@ const ProductSearchInput: React.FC<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-3' : 'pl-10 pr-3'} py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -340,7 +340,7 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
+          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
@@ -381,7 +381,7 @@ const ProductDropdown: React.FC<{
       <button
         dir={isRtl ? 'rtl' : 'ltr'}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full py-1.5 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full py-3 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
@@ -542,8 +542,8 @@ const ReportsAnalytics: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [period, setPeriod] = useState('last30');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'sales' | 'orders' | 'returns' | 'trends'>('sales');
@@ -571,20 +571,22 @@ const ReportsAnalytics: React.FC = () => {
   }, [fetchBranches]);
 
   useEffect(() => {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    let newStart = todayStr;
-    if (period === 'today') {
-      newStart = todayStr;
-    } else if (period === 'last7') {
-      const last7 = new Date(today.getTime() - 7 * 86400000);
-      newStart = last7.toISOString().split('T')[0];
-    } else if (period === 'last30') {
-      const last30 = new Date(today.getTime() - 30 * 86400000);
-      newStart = last30.toISOString().split('T')[0];
+    if (period !== 'custom') {
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      let newStart = todayStr;
+      if (period === 'today') {
+        newStart = todayStr;
+      } else if (period === 'last7') {
+        const last7 = new Date(today.getTime() - 7 * 86400000);
+        newStart = last7.toISOString().split('T')[0];
+      } else if (period === 'last30') {
+        const last30 = new Date(today.getTime() - 30 * 86400000);
+        newStart = last30.toISOString().split('T')[0];
+      }
+      setStartDate(newStart);
+      setEndDate(todayStr);
     }
-    setStartDate(newStart);
-    setEndDate(todayStr);
   }, [period]);
 
   useEffect(() => {
@@ -1303,15 +1305,15 @@ const ReportsAnalytics: React.FC = () => {
     <div className="min-h-screen p-4 font-alexandria mx-auto">
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-4">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center justify-center md:justify-start gap-2 mb-4">
           <BarChart2 className="w-5 h-5 text-amber-600" />
           <div>
             <h1 className="text-lg font-semibold text-gray-800">{t.title}</h1>
             <p className="text-xs text-gray-500">{t.subtitle}</p>
           </div>
         </div>
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="flex-1 lg:max-w-[50%]">
+        <div className="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-4">
+          <div className="flex-1 lg:max-w-[50%] w-full max-w-md lg:max-w-none">
             <ProductSearchInput
               value={searchTerm}
               onChange={(e) => debouncedSearch(e.target.value)}
@@ -1320,8 +1322,8 @@ const ReportsAnalytics: React.FC = () => {
               className="w-full"
             />
           </div>
-          <div className="flex-1 lg:max-w-[50%] flex flex-wrap gap-3">
-            <div className="flex-1 min-w-[150px]">
+          <div className="flex-1 lg:max-w-[50%] flex flex-wrap gap-3 justify-center lg:justify-start">
+            <div className="flex-1 min-w-[150px] w-full max-w-xs lg:max-w-none">
               <ProductDropdown
                 value={selectedBranch}
                 onChange={setSelectedBranch}
@@ -1329,7 +1331,7 @@ const ReportsAnalytics: React.FC = () => {
                 ariaLabel={t.branchFilterPlaceholder}
               />
             </div>
-            <div className="flex-1 min-w-[150px]">
+            <div className="flex-1 min-w-[150px] w-full max-w-xs lg:max-w-none">
               <ProductDropdown
                 value={period}
                 onChange={setPeriod}
@@ -1340,24 +1342,24 @@ const ReportsAnalytics: React.FC = () => {
           </div>
         </div>
         {period === 'custom' && (
-          <div className="flex flex-wrap gap-3 mt-3">
-            <div className="flex-1 min-w-[150px]">
+          <div className="flex flex-wrap gap-3 mt-3 justify-center lg:justify-start">
+            <div className="flex-1 min-w-[150px] w-full max-w-xs lg:max-w-none">
               <label className="block text-xs text-gray-700 font-alexandria mb-1">{t.startDate}</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={handleStartDateChange}
-                className="w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                className="w-full py-3 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
                 aria-label={t.startDate}
               />
             </div>
-            <div className="flex-1 min-w-[150px]">
+            <div className="flex-1 min-w-[150px] w-full max-w-xs lg:max-w-none">
               <label className="block text-xs text-gray-700 font-alexandria mb-1">{t.endDate}</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={handleEndDateChange}
-                className="w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                className="w-full py-3 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
                 aria-label={t.endDate}
               />
             </div>
@@ -1729,7 +1731,7 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'trends' && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6">
               <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.totalSalesVsOrders}</h3>
                 {analytics.salesTrends.length > 0 ? (
