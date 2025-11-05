@@ -11,6 +11,7 @@ import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, inventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
+import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 
 // Interfaces (unchanged from previous)
 interface Stats {
@@ -160,7 +161,7 @@ const timeFilterOptions = [
 // Loader Component
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+    <LoadingSpinner className="w-16 h-16 text-amber-600" />
   </div>
 );
 // StatsCard Component
@@ -1132,7 +1133,7 @@ export const Dashboard: React.FC = () => {
             ariaLabel={isRtl ? 'قيمة المخزون' : 'Inventory Value'}
           />
           <StatsCard
-            title={isRtl ? 'منتجات تحتاج تحتاج تجديد' : 'Low Stock Items'}
+            title={isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Items'}
             value={stats.lowStockItems?.toString() || '0'}
             icon={AlertCircle}
             color="red"
@@ -1317,12 +1318,12 @@ export const Dashboard: React.FC = () => {
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
         <AlertCircle className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
-        {isRtl ? 'منتجات تحتاج تحتاج تجديد' : 'Low Stock Items'}
+        {isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Items'}
       </h3>
       <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {lowStockItems.length === 0 ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد منتجات تحتاج تحتاج تجديد' : 'No low stock items'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد منتجات منخفضة المخزون' : 'No low stock items'}</p>
           ) : (
             lowStockItems.map((item, index) => (
               <motion.div
@@ -1372,7 +1373,7 @@ export const Dashboard: React.FC = () => {
                   <p className="text-xs text-gray-500 truncate">{entry.description}</p>
                 </div>
                 <div className="text-right flex-1">
-                  <p className="text-xs text-gray-600">{entry.quantity} {isRtl ? 'كمية' : 'Quantity'}</p>
+                  <p className="text-xs text-gray-600">{entry.quantity} {entry.description}</p>
                   <p className="text-xs text-gray-500">{entry.date}</p>
                 </div>
               </motion.div>
