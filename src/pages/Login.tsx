@@ -295,7 +295,6 @@ export function Login() {
           - جميع الحقوق محفوظة
         </p>
         <p className="mt-1 text-amber-600">
-          {isRTL ? 'تم التطوير بواسطة فريق الجوديا التقني' : 'Developed by Al-Joudia Tech Team'}
         </p>
       </footer>
 
