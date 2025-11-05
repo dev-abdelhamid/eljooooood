@@ -431,7 +431,7 @@ export function ChefTasks() {
   );
 
   return (
-    <div className={`px-4 sm:px-6 lg:px-8 py-6 min-h-screen w-full ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`px-4 sm:px-6 lg:px-8 py-6 min-h-screen w-full`}>
       <Card className="mb-8 bg-white shadow-lg rounded-xl border border-gray-100 p-6 w-full">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="lg:w-2/3 w-full">
