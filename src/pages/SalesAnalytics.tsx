@@ -9,7 +9,6 @@ import { motion } from 'framer-motion';
 import { debounce } from 'lodash';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Title } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
-
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Title);
 
 interface SalesAnalytics {
@@ -171,6 +170,7 @@ const translations = {
     trendsTab: 'الاتجاهات',
     searchPlaceholder: 'ابحث عن منتجات، أقسام، فروع، طلبات، أو مرتجعات...',
     branchFilterPlaceholder: 'اختر فرعًا',
+    periodFilterPlaceholder: 'اختر الفترة',
     noAnalytics: 'لا توجد إحصائيات متاحة',
     noData: 'لا توجد بيانات',
     noCustomers: 'لا توجد عملاء',
@@ -225,6 +225,7 @@ const translations = {
     trendsTab: 'Trends',
     searchPlaceholder: 'Search products, departments, branches, orders, or returns...',
     branchFilterPlaceholder: 'Select a branch',
+    periodFilterPlaceholder: 'Select period',
     noAnalytics: 'No analytics available',
     noData: 'No data available',
     noCustomers: 'No customers',
@@ -312,15 +313,13 @@ const ProductSearchInput: React.FC<{
 }> = ({ value, onChange, placeholder, ariaLabel, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
-
   const handleClear = () => {
     onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
   };
-
   return (
     <div className={`relative group w-full ${className}`}>
       <motion.div
-        className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-600`}
+        className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'left-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-600`}
         initial={false}
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
@@ -332,7 +331,7 @@ const ProductSearchInput: React.FC<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-10 pr-3' : 'pl-10 pr-3'} py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md placeholder-gray-400 transition-all duration-300 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -341,7 +340,7 @@ const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
+          className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-600 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
@@ -364,7 +363,6 @@ const ProductDropdown: React.FC<{
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select', value: '' };
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -378,10 +376,10 @@ const ProductDropdown: React.FC<{
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen]);
-
   return (
     <div className={`relative group w-full ${className}`} ref={dropdownRef}>
       <button
+        dir={isRtl ? 'rtl' : 'ltr'}
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`w-full py-1.5 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs font-alexandria text-gray-700 flex justify-between items-center transition-all duration-300 ${isRtl ? 'text-right' : 'text-left'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
@@ -394,7 +392,7 @@ const ProductDropdown: React.FC<{
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
-          className={`absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
+          className={`absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-md scrollbar-thumb-amber-600 scrollbar-track-gray-100 font-alexandria ${isRtl ? 'text-right' : 'text-left'}`}
         >
           {options.map((option) => (
             <button
@@ -437,7 +435,7 @@ const DataTable: React.FC<{
       )}
     </div>
     {data.length > 0 ? (
-      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100">
+      <div className="overflow-x-auto overflow-y-auto max-h-[300px] scrollbar-thin scrollbar-thumb-rounded-md scrollbar-thumb-amber-600 scrollbar-track-gray-100">
         <table className="w-full text-xs min-w-max">
           <thead className="sticky top-0 bg-gray-50">
             <tr>
@@ -544,12 +542,12 @@ const ReportsAnalytics: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [startDate, setStartDate] = useState<string>(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  );
-  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [period, setPeriod] = useState('last30');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'sales' | 'orders' | 'returns' | 'trends'>('sales');
+  const fetchedRef = useRef({ sales: false, orders: false, returns: false });
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
 
   const fetchBranches = useCallback(async () => {
@@ -572,20 +570,26 @@ const ReportsAnalytics: React.FC = () => {
     fetchBranches();
   }, [fetchBranches]);
 
-  const fetchAllData = useCallback(async () => {
-    setLoading(true);
-    try {
-      await Promise.all([
-        fetchData('sales'),
-        fetchData('orders'),
-        fetchData('returns')
-      ]);
-    } catch (err) {
-      // Errors handled in fetchData
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    let newStart = todayStr;
+    if (period === 'today') {
+      newStart = todayStr;
+    } else if (period === 'last7') {
+      const last7 = new Date(today.getTime() - 7 * 86400000);
+      newStart = last7.toISOString().split('T')[0];
+    } else if (period === 'last30') {
+      const last30 = new Date(today.getTime() - 30 * 86400000);
+      newStart = last30.toISOString().split('T')[0];
     }
-  }, [startDate, endDate, selectedBranch, language, user, t, isRtl]);
+    setStartDate(newStart);
+    setEndDate(todayStr);
+  }, [period]);
+
+  useEffect(() => {
+    fetchedRef.current = { sales: false, orders: false, returns: false };
+  }, [startDate, endDate, selectedBranch, language]);
 
   const fetchData = useCallback(async (type: 'sales' | 'orders' | 'returns') => {
     if (user?.role !== 'admin' && user?.role !== 'production') {
@@ -593,13 +597,11 @@ const ReportsAnalytics: React.FC = () => {
       toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       return;
     }
-
     if (!isValidDate(startDate) || !isValidDate(endDate) || new Date(startDate) > new Date(endDate)) {
       setError(t.errors.invalid_dates);
       toast.error(t.errors.invalid_dates, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       return;
     }
-
     try {
       const params: any = {
         branch: selectedBranch,
@@ -804,8 +806,39 @@ const ReportsAnalytics: React.FC = () => {
   }, [user, t, isRtl, language, startDate, endDate, selectedBranch]);
 
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        if (activeTab === 'sales' && !fetchedRef.current.sales) {
+          await fetchData('sales');
+          fetchedRef.current.sales = true;
+        } else if (activeTab === 'orders' && !fetchedRef.current.orders) {
+          await fetchData('orders');
+          fetchedRef.current.orders = true;
+        } else if (activeTab === 'returns' && !fetchedRef.current.returns) {
+          await fetchData('returns');
+          fetchedRef.current.returns = true;
+        } else if (activeTab === 'trends') {
+          const promises = [];
+          if (!fetchedRef.current.sales) {
+            promises.push(fetchData('sales').then(() => { fetchedRef.current.sales = true; }));
+          }
+          if (!fetchedRef.current.orders) {
+            promises.push(fetchData('orders').then(() => { fetchedRef.current.orders = true; }));
+          }
+          if (!fetchedRef.current.returns) {
+            promises.push(fetchData('returns').then(() => { fetchedRef.current.returns = true; }));
+          }
+          await Promise.all(promises);
+        }
+      } catch (err) {
+        // Errors handled in fetchData
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [activeTab, startDate, endDate, selectedBranch, language, fetchData]);
 
   const filteredData = useMemo(() => ({
     productSales: analytics.productSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm)),
@@ -828,50 +861,60 @@ const ReportsAnalytics: React.FC = () => {
     [branches, t]
   );
 
+  const periodOptions = useMemo(
+    () => [
+      { value: 'today', label: isRtl ? 'اليوم' : 'Today' },
+      { value: 'last7', label: isRtl ? 'آخر ٧ أيام' : 'Last 7 days' },
+      { value: 'last30', label: isRtl ? 'آخر ٣٠ يوم' : 'Last 30 days' },
+      { value: 'custom', label: isRtl ? 'فترة مخصصة' : 'Custom period' },
+    ],
+    [isRtl]
+  );
+
   const getChartOptions = (isLine: boolean = false) => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { 
-        position: 'bottom' as const, 
-        labels: { 
-          font: { size: 10, family: 'Alexandria' }, 
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          font: { size: 10, family: 'Alexandria' },
           color: '#4B5563',
           padding: 12,
           usePointStyle: true,
-        } 
+        }
       },
-      tooltip: { 
-        bodyFont: { size: 10, family: 'Alexandria' }, 
-        padding: 8, 
+      tooltip: {
+        bodyFont: { size: 10, family: 'Alexandria' },
+        padding: 8,
         backgroundColor: 'rgba(31, 41, 55, 0.9)',
         titleFont: { size: 12, family: 'Alexandria' },
         cornerRadius: 6,
       },
-      title: { 
-        display: true, 
-        font: { size: 12, family: 'Alexandria' }, 
-        color: '#1F2937', 
-        padding: { top: 10, bottom: 10 } 
+      title: {
+        display: true,
+        font: { size: 12, family: 'Alexandria' },
+        color: '#1F2937',
+        padding: { top: 10, bottom: 10 }
       },
     },
     scales: {
-      x: { 
-        ticks: { 
-          font: { size: 10, family: 'Alexandria' }, 
-          color: '#4B5563', 
-          maxRotation: 45, 
-          autoSkip: true 
-        }, 
-        reverse: isRtl && !isLine, // Don't reverse for line charts (trends)
+      x: {
+        ticks: {
+          font: { size: 10, family: 'Alexandria' },
+          color: '#4B5563',
+          maxRotation: 45,
+          autoSkip: true
+        },
+        reverse: isRtl && !isLine,
         grid: { display: false },
       },
-      y: { 
-        ticks: { 
-          font: { size: 10, family: 'Alexandria' }, 
+      y: {
+        ticks: {
+          font: { size: 10, family: 'Alexandria' },
           color: '#4B5563',
           callback: (value: number) => value.toLocaleString(language),
-        }, 
+        },
         beginAtZero: true,
         grid: { color: 'rgba(0, 0, 0, 0.05)' },
       },
@@ -889,7 +932,6 @@ const ReportsAnalytics: React.FC = () => {
       gradient.addColorStop(1, end);
       return gradient;
     };
-
     return {
       productSales: {
         labels: filteredData.productSales.map((p) => p.displayName),
@@ -1176,56 +1218,6 @@ const ReportsAnalytics: React.FC = () => {
           },
         ],
       },
-      combinedTrends: {
-        labels: analytics.salesTrends.map((trend) => trend.period),
-        datasets: [
-          {
-            label: `${t.salesTrends} (${t.totalSales})`,
-            data: analytics.salesTrends.map((trend) => safeNumber(trend.totalSales)),
-            borderColor: '#3B82F6',
-            backgroundColor: (context: any) => {
-              const chart = context.chart;
-              const { ctx, chartArea } = chart;
-              if (!chartArea) return '#3B82F6';
-              return createGradient(ctx, chartArea, 'rgba(59, 130, 246, 0.2)', 'rgba(59, 130, 246, 0.8)');
-            },
-            fill: true,
-            tension: 0.4,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-          },
-          {
-            label: `${t.orderTrends} (${t.totalValue})`,
-            data: orderAnalytics.orderTrends.map((trend) => safeNumber(trend.totalValue)),
-            borderColor: '#36A2EB',
-            backgroundColor: (context: any) => {
-              const chart = context.chart;
-              const { ctx, chartArea } = chart;
-              if (!chartArea) return 'rgba(54, 162, 235, 0.1)';
-              return createGradient(ctx, chartArea, 'rgba(54, 162, 235, 0.2)', 'rgba(54, 162, 235, 0.8)');
-            },
-            fill: true,
-            tension: 0.4,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-          },
-          {
-            label: `${t.returnTrends} (${t.totalValue})`,
-            data: returnAnalytics.returnTrends.map((trend) => safeNumber(trend.totalValue)),
-            borderColor: '#FF6384',
-            backgroundColor: (context: any) => {
-              const chart = context.chart;
-              const { ctx, chartArea } = chart;
-              if (!chartArea) return 'rgba(255, 99, 132, 0.1)';
-              return createGradient(ctx, chartArea, 'rgba(255, 99, 132, 0.2)', 'rgba(255, 99, 132, 0.8)');
-            },
-            fill: true,
-            tension: 0.4,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-          },
-        ],
-      },
       salesVsOrders: {
         labels: analytics.salesTrends.map((trend) => trend.period),
         datasets: [
@@ -1297,8 +1289,18 @@ const ReportsAnalytics: React.FC = () => {
     );
   }
 
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setStartDate(e.target.value);
+    setPeriod('custom');
+  };
+
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEndDate(e.target.value);
+    setPeriod('custom');
+  };
+
   return (
-    <div className="min-h-screen p-4 font-alexandria  mx-auto" >
+    <div className="min-h-screen p-4 font-alexandria mx-auto">
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-4">
         <div className="flex items-center gap-2 mb-4">
@@ -1308,40 +1310,59 @@ const ReportsAnalytics: React.FC = () => {
             <p className="text-xs text-gray-500">{t.subtitle}</p>
           </div>
         </div>
-        <div className="flex flex-col md:flex-row justify-center  align-center items-center gap-3">
-          <ProductSearchInput
-            value={searchTerm}
-            onChange={(e) => debouncedSearch(e.target.value)}
-            placeholder={t.searchPlaceholder}
-            ariaLabel={t.searchPlaceholder}
-          />
-          <ProductDropdown
-            value={selectedBranch}
-            onChange={setSelectedBranch}
-            options={branchOptions}
-            ariaLabel={t.branchFilterPlaceholder}
-          />
-          <div className=" flex flex-col md:flex-row justify-center  align-center items-center ">
-            <label className="block text-xs text-gray-700 font-alexandria mb-1">{t.startDate}</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
-              aria-label={t.startDate}
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex-1 lg:max-w-[50%]">
+            <ProductSearchInput
+              value={searchTerm}
+              onChange={(e) => debouncedSearch(e.target.value)}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
+              className="w-full"
             />
           </div>
-          <div>
-            <label className="block text-xs text-gray-700 font-alexandria mb-1">{t.endDate}</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
-              aria-label={t.endDate}
-            />
+          <div className="flex-1 lg:max-w-[50%] flex flex-wrap gap-3">
+            <div className="flex-1 min-w-[150px]">
+              <ProductDropdown
+                value={selectedBranch}
+                onChange={setSelectedBranch}
+                options={branchOptions}
+                ariaLabel={t.branchFilterPlaceholder}
+              />
+            </div>
+            <div className="flex-1 min-w-[150px]">
+              <ProductDropdown
+                value={period}
+                onChange={setPeriod}
+                options={periodOptions}
+                ariaLabel={t.periodFilterPlaceholder}
+              />
+            </div>
           </div>
         </div>
+        {period === 'custom' && (
+          <div className="flex flex-wrap gap-3 mt-3">
+            <div className="flex-1 min-w-[150px]">
+              <label className="block text-xs text-gray-700 font-alexandria mb-1">{t.startDate}</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={handleStartDateChange}
+                className="w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                aria-label={t.startDate}
+              />
+            </div>
+            <div className="flex-1 min-w-[150px]">
+              <label className="block text-xs text-gray-700 font-alexandria mb-1">{t.endDate}</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={handleEndDateChange}
+                className="w-full py-1.5 px-3 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm hover:shadow-md transition-all duration-300 font-alexandria"
+                aria-label={t.endDate}
+              />
+            </div>
+          </div>
+        )}
       </header>
       {error && (
         <motion.div
@@ -1353,7 +1374,7 @@ const ReportsAnalytics: React.FC = () => {
           <span className="text-xs text-red-600 font-alexandria">{error}</span>
         </motion.div>
       )}
-      <div className="flex mb-4 border-b  flex-row  justify-center md:justify-start  align-center items-center md:items-start   border-gray-200">
+      <div className="flex mb-4 border-b flex-row justify-center md:justify-start align-center items-center md:items-start border-gray-200">
         {['sales', 'orders', 'returns', 'trends'].map((tab) => (
           <button
             key={tab}
@@ -1374,8 +1395,8 @@ const ReportsAnalytics: React.FC = () => {
           className="space-y-6"
         >
           {activeTab === 'sales' && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalSales}</h4>
                   <p className="text-lg font-bold font-alexandria">{analytics.totalSales.toFixed(2)} {t.currency}</p>
@@ -1393,7 +1414,7 @@ const ReportsAnalytics: React.FC = () => {
                   <p className="text-lg font-bold font-alexandria">{analytics.topProduct.displayName}</p>
                 </div>
               </div>
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="col-span-1 md:col-span-2 lg:col-span-2 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesTrends}</h3>
                 {analytics.salesTrends.length > 0 ? (
                   <div className="h-64">
@@ -1541,7 +1562,7 @@ const ReportsAnalytics: React.FC = () => {
                   className="text-xs mt-4"
                 />
               </div>
-              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 col-span-1 md:col-span-2 lg:col-span-3">
+              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 col-span-1 md:col-span-2 lg:col-span-2">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.topCustomers}</h3>
                 <DataTable
                   title={t.topCustomers}
@@ -1560,8 +1581,8 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'orders' && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-2 sm:grid-cols-3">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalOrders}</h4>
                   <p className="text-lg font-bold font-alexandria">{orderAnalytics.totalOrders}</p>
@@ -1575,7 +1596,7 @@ const ReportsAnalytics: React.FC = () => {
                   <p className="text-lg font-bold font-alexandria">{orderAnalytics.averageOrderValue.toFixed(2)} {t.currency}</p>
                 </div>
               </div>
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="col-span-1 md:col-span-2 lg:col-span-2 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.orderTrends}</h3>
                 {orderAnalytics.orderTrends.length > 0 ? (
                   <div className="h-64">
@@ -1634,8 +1655,8 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'returns' && (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 col-span-1 md:col-span-2 lg:col-span-2 sm:grid-cols-3">
                 <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                   <h4 className="text-xs text-gray-600 mb-1 font-alexandria">{t.totalReturns}</h4>
                   <p className="text-lg font-bold font-alexandria">{returnAnalytics.totalReturns}</p>
@@ -1649,7 +1670,7 @@ const ReportsAnalytics: React.FC = () => {
                   <p className="text-lg font-bold font-alexandria">{returnAnalytics.averageReturnValue.toFixed(2)} {t.currency}</p>
                 </div>
               </div>
-              <div className="col-span-1 md:col-span-2 lg:col-span-3 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <div className="col-span-1 md:col-span-2 lg:col-span-2 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.returnTrends}</h3>
                 {returnAnalytics.returnTrends.length > 0 ? (
                   <div className="h-64">
@@ -1708,78 +1729,36 @@ const ReportsAnalytics: React.FC = () => {
             </div>
           )}
           {activeTab === 'trends' && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-1">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
               <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesTrends}</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.totalSalesVsOrders}</h3>
                 {analytics.salesTrends.length > 0 ? (
                   <div className="h-64">
-                    <Line data={chartData.salesTrends} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.salesTrends } } }} />
+                    <Line data={chartData.salesVsOrders} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.totalSalesVsOrders } } }} />
                   </div>
                 ) : (
                   <NoDataMessage message={t.noData} />
                 )}
               </div>
               <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.orderTrends}</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesVsReturns}</h3>
+                {analytics.salesTrends.length > 0 ? (
+                  <div className="h-64">
+                    <Line data={chartData.salesVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.salesVsReturns } } }} />
+                  </div>
+                ) : (
+                  <NoDataMessage message={t.noData} />
+                )}
+              </div>
+              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.ordersVsReturns}</h3>
                 {orderAnalytics.orderTrends.length > 0 ? (
                   <div className="h-64">
-                    <Line data={chartData.orderTrends} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.orderTrends } } }} />
+                    <Line data={chartData.ordersVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.ordersVsReturns } } }} />
                   </div>
                 ) : (
                   <NoDataMessage message={t.noData} />
                 )}
-              </div>
-              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.returnTrends}</h3>
-                {returnAnalytics.returnTrends.length > 0 ? (
-                  <div className="h-64">
-                    <Line data={chartData.returnTrends} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.returnTrends } } }} />
-                  </div>
-                ) : (
-                  <NoDataMessage message={t.noData} />
-                )}
-              </div>
-              <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.comparisons}</h3>
-                {analytics.salesTrends.length > 0 ? (
-                  <div className="h-64">
-                    <Line data={chartData.combinedTrends} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.comparisons } } }} />
-                  </div>
-                ) : (
-                  <NoDataMessage message={t.noData} />
-                )}
-              </div>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.totalSalesVsOrders}</h3>
-                  {analytics.salesTrends.length > 0 ? (
-                    <div className="h-64">
-                      <Line data={chartData.salesVsOrders} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.totalSalesVsOrders } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                </div>
-                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.salesVsReturns}</h3>
-                  {analytics.salesTrends.length > 0 ? (
-                    <div className="h-64">
-                      <Line data={chartData.salesVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.salesVsReturns } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                </div>
-                <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3 font-alexandria">{t.ordersVsReturns}</h3>
-                  {orderAnalytics.orderTrends.length > 0 ? (
-                    <div className="h-64">
-                      <Line data={chartData.ordersVsReturns} options={{ ...getChartOptions(true), plugins: { ...getChartOptions(true).plugins, title: { text: t.ordersVsReturns } } }} />
-                    </div>
-                  ) : (
-                    <NoDataMessage message={t.noData} />
-                  )}
-                </div>
               </div>
             </div>
           )}
