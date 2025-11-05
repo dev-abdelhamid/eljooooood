@@ -76,10 +76,13 @@ export function Login() {
   return (
     <div
       dir={isRTL ? 'rtl' : 'ltr'}
-      className="min-h-screen bg-gradient-to-br from-amber-100 via-orange-100 to-amber-200 flex flex-col items-center justify-center p-4 sm:p-6"
+      className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden"
       style={{ fontFamily: 'Alexandria, sans-serif' }}
     >
-      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-6 items-center flex-1">
+      {/* Subtle Background Overlay for Texture */}
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Ccircle fill="%23FFF" fill-opacity=".03" cx="10" cy="10" r="10"/%3E%3C/g%3E%3C/svg%3E')] opacity-50" />
+
+      <div className="w-full max-w-5xl grid md:grid-cols-2 gap-8 items-center flex-1 relative z-10">
         {/* Left Side - Branding */}
         <div
           className={`hidden md:flex flex-col items-center justify-center text-center space-y-6 transition-all duration-700 ease-out ${
@@ -90,18 +93,18 @@ export function Login() {
             <img
               src="/logo.png"
               alt={isRTL ? 'الجوديا' : 'Al-Joudia'}
-              width={160}
-              height={160}
-              className="mx-auto drop-shadow-md transition-transform duration-500 group-hover:scale-105"
+              width={180}
+              height={180}
+              className="mx-auto drop-shadow-xl transition-transform duration-500 group-hover:scale-110 animate-pulse-slow"
             />
-            <div className="absolute -inset-3 bg-gradient-to-r from-amber-200/30 to-orange-200/30 rounded-full blur-lg transition-opacity duration-500 group-hover:opacity-100" />
+            <div className="absolute -inset-4 bg-gradient-to-r from-amber-300/20 to-orange-300/20 rounded-full blur-xl transition-opacity duration-500 group-hover:opacity-80" />
           </div>
 
-          <div className="space-y-3">
-            <h1 className="text-3xl font-bold text-amber-800">
+          <div className="space-y-4">
+            <h1 className="text-4xl font-extrabold text-amber-900 tracking-tight">
               {isRTL ? 'مرحباً بك في نظام الجوديا' : 'Welcome to Al-Joudia System'}
             </h1>
-            <p className="text-lg text-amber-700 max-w-sm mx-auto leading-relaxed">
+            <p className="text-lg text-amber-800 max-w-md mx-auto leading-relaxed font-medium">
               {isRTL
                 ? 'اكتشف تجربة إدارة مبتكرة لمصنع الجوديا مع تتبع ذكي للعمليات الداخلية وتنسيق سلس بين الإنتاج والفروع لتعزيز الكفاءة'
                 : 'Discover an innovative management experience for the sweets factory, with smart tracking of internal operations and seamless coordination between production and branches to enhance efficiency'}
@@ -111,30 +114,31 @@ export function Login() {
 
         {/* Right Side - Form */}
         <div
-          className={`w-full max-w-sm mx-auto transition-all duration-700 ease-out delay-200 ${
+          className={`w-full max-w-md mx-auto transition-all duration-700 ease-out delay-200 ${
             mounted ? 'opacity-100 translate-x-0' : (isRTL ? 'opacity-0 -translate-x-20' : 'opacity-0 translate-x-20')
           }`}
         >
-          <Card className="border-amber-100/50 shadow-md bg-white/90 backdrop-blur-sm rounded-xl overflow-hidden p-5 sm:p-6">
-            <div className="text-center space-y-3 mb-5">
+          <Card className="border-2 border-amber-200/30 shadow-lg bg-white/80 backdrop-blur-md rounded-2xl overflow-hidden p-6 sm:p-8 relative transition-all duration-500 hover:shadow-2xl hover:border-amber-300/50">
+            <div className="absolute inset-0 bg-gradient-to-r from-amber-100/10 to-orange-100/10 rounded-2xl transition-opacity duration-500 hover:opacity-80" />
+            <div className="relative text-center space-y-4 mb-6">
               <div className="md:hidden relative mx-auto w-fit group">
                 <img
                   src="/logo.png"
                   alt="الجوديا"
-                  width={70}
-                  height={70}
-                  className="transition-transform duration-500 group-hover:scale-105"
+                  width={80}
+                  height={80}
+                  className="transition-transform duration-500 group-hover:scale-110 animate-pulse-slow"
                 />
-                <div className="absolute -inset-2 bg-gradient-to-r from-amber-200/20 to-orange-200/20 rounded-full blur-md transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="absolute -inset-3 bg-gradient-to-r from-amber-200/20 to-orange-200/20 rounded-full blur-lg transition-opacity duration-500 group-hover:opacity-80" />
               </div>
 
-              <h1 className="text-xl sm:text-2xl font-bold text-amber-800">
+              <h1 className="text-2xl sm:text-3xl font-bold text-amber-900 tracking-tight">
                 {showForgot 
                   ? (isRTL ? 'إعادة تعيين كلمة المرور' : 'Reset Password')
                   : (isRTL ? 'تسجيل الدخول' : 'Login')
                 }
               </h1>
-              <p className="text-sm sm:text-base text-amber-600">
+              <p className="text-base sm:text-lg text-amber-700 font-medium">
                 {showForgot
                   ? (isRTL ? 'أدخل بريدك الإلكتروني لتلقي رابط الإعادة' : 'Enter your email to receive a reset link')
                   : (isRTL ? 'أدخل بياناتك للوصول إلى لوحة التحكم' : 'Enter your credentials to access the dashboard')
@@ -142,23 +146,23 @@ export function Login() {
               </p>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-6">
               {error && (
-                <div className="p-3 bg-red-50/70 border border-red-100 rounded-md">
-                  <p className="text-red-700 text-xs sm:text-sm">{error}</p>
+                <div className="p-4 bg-red-50/80 border border-red-200/50 rounded-lg shadow-sm transition-all duration-300">
+                  <p className="text-red-800 text-sm">{error}</p>
                 </div>
               )}
               {successMessage && (
-                <div className="p-3 bg-green-50/70 border border-green-100 rounded-md">
-                  <p className="text-green-700 text-xs sm:text-sm">{successMessage}</p>
+                <div className="p-4 bg-green-50/80 border border-green-200/50 rounded-lg shadow-sm transition-all duration-300">
+                  <p className="text-green-800 text-sm">{successMessage}</p>
                 </div>
               )}
 
               {!showForgot ? (
-                <form onSubmit={handleSubmit} className="space-y-5">
+                <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Username Field */}
                   <div>
-                    <label className="block text-amber-800 text-sm sm:text-base font-medium mb-2">
+                    <label className="block text-amber-900 text-sm sm:text-base font-semibold mb-2">
                       {isRTL ? 'اسم المستخدم' : 'Username'}
                     </label>
                     <div className="relative group">
@@ -166,19 +170,19 @@ export function Login() {
                         type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-2.5 bg-white/10 border border-amber-100/50 rounded-md focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 text-xs sm:text-sm outline-none transition-all duration-300 hover:bg-white/20`}
+                        className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3 bg-white/5 border-b-2 border-amber-200/50 rounded-t-md focus:border-amber-400 focus:ring-0 text-sm sm:text-base outline-none transition-all duration-300 hover:bg-white/10 group-hover:border-amber-300/70 relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-amber-400 after:transition-all after:duration-500 group-hover:after:w-full`}
                         placeholder={isRTL ? 'أدخل اسم المستخدم' : 'Enter username'}
                         required
                       />
                       <div className={`absolute inset-y-0 ${isRTL ? 'right-0' : 'left-0'} flex items-center justify-center w-12 pointer-events-none`}>
-                        <User className="h-5 w-5 text-amber-600 group-hover:text-amber-800 transition-colors" />
+                        <User className="h-5 w-5 text-amber-700 group-hover:text-amber-900 transition-colors" />
                       </div>
                     </div>
                   </div>
 
                   {/* Password Field */}
                   <div>
-                    <label className="block text-amber-800 text-sm sm:text-base font-medium mb-2">
+                    <label className="block text-amber-900 text-sm sm:text-base font-semibold mb-2">
                       {isRTL ? 'كلمة المرور' : 'Password'}
                     </label>
                     <div className="relative group">
@@ -186,17 +190,17 @@ export function Login() {
                         type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className={`w-full ${isRTL ? 'pr-12 pl-12' : 'pl-12 pr-12'} py-2.5 bg-white/10 border border-amber-100/50 rounded-md focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 text-xs sm:text-sm outline-none transition-all duration-300 hover:bg-white/20`}
+                        className={`w-full ${isRTL ? 'pr-12 pl-12' : 'pl-12 pr-12'} py-3 bg-white/5 border-b-2 border-amber-200/50 rounded-t-md focus:border-amber-400 focus:ring-0 text-sm sm:text-base outline-none transition-all duration-300 hover:bg-white/10 group-hover:border-amber-300/70 relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-amber-400 after:transition-all after:duration-500 group-hover:after:w-full`}
                         placeholder="••••••••"
                         required
                       />
                       <div className={`absolute inset-y-0 ${isRTL ? 'right-0' : 'left-0'} flex items-center justify-center w-12 pointer-events-none`}>
-                        <Lock className="h-5 w-5 text-amber-600 group-hover:text-amber-800 transition-colors" />
+                        <Lock className="h-5 w-5 text-amber-700 group-hover:text-amber-900 transition-colors" />
                       </div>
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className={`absolute inset-y-0 ${isRTL ? 'left-0' : 'right-0'} flex items-center justify-center w-12 text-amber-600 hover:text-amber-800 transition-colors`}
+                        className={`absolute inset-y-0 ${isRTL ? 'left-0' : 'right-0'} flex items-center justify-center w-12 text-amber-700 hover:text-amber-900 transition-colors`}
                       >
                         {showPassword ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
                       </button>
@@ -204,19 +208,19 @@ export function Login() {
                   </div>
 
                   {/* Links */}
-                  <div className="flex justify-between text-xs sm:text-sm">
+                  <div className="flex justify-between text-sm">
                     <button
                       type="button"
                       onClick={() => setShowForgot(true)}
-                      className="text-amber-600 hover:text-amber-800 font-medium flex items-center gap-1"
+                      className="text-amber-700 hover:text-amber-900 font-semibold flex items-center gap-1 transition-colors duration-300 hover:underline"
                     >
                       <Key className="h-4 w-4" />
-                      {isRTL ? 'نسيت كلمة السر ؟' : 'Forgot Password ?'}
+                      {isRTL ? 'نسيت كلمة السر؟' : 'Forgot Password?'}
                     </button>
                     <button
                       type="button"
                       onClick={toggleLanguage}
-                      className="text-amber-600 hover:text-amber-800 font-medium flex items-center gap-1"
+                      className="text-amber-700 hover:text-amber-900 font-semibold flex items-center gap-1 transition-colors duration-300 hover:underline"
                     >
                       <ArrowLeftRight className="h-4 w-4" />
                       {isRTL ? 'EN' : 'AR'}
@@ -227,7 +231,7 @@ export function Login() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-2.5 rounded-md shadow-sm hover:shadow-md transition-all duration-300 text-sm font-medium"
+                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 text-base font-semibold"
                   >
                     {loading ? (
                       <div className="flex items-center justify-center gap-2">
@@ -243,9 +247,9 @@ export function Login() {
                   </Button>
                 </form>
               ) : (
-                <form onSubmit={handleForgotSubmit} className="space-y-5">
+                <form onSubmit={handleForgotSubmit} className="space-y-6">
                   <div>
-                    <label className="block text-amber-800 text-sm sm:text-base font-medium mb-2">
+                    <label className="block text-amber-900 text-sm sm:text-base font-semibold mb-2">
                       {isRTL ? 'البريد الإلكتروني' : 'Email'}
                     </label>
                     <div className="relative group">
@@ -253,12 +257,12 @@ export function Login() {
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-2.5 bg-white/10 border border-amber-100/50 rounded-md focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 text-xs sm:text-sm outline-none transition-all duration-300 hover:bg-white/20`}
+                        className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3 bg-white/5 border-b-2 border-amber-200/50 rounded-t-md focus:border-amber-400 focus:ring-0 text-sm sm:text-base outline-none transition-all duration-300 hover:bg-white/10 group-hover:border-amber-300/70 relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-amber-400 after:transition-all after:duration-500 group-hover:after:w-full`}
                         placeholder="email@company.com"
                         required
                       />
                       <div className={`absolute inset-y-0 ${isRTL ? 'right-0' : 'left-0'} flex items-center justify-center w-12 pointer-events-none`}>
-                        <User className="h-5 w-5 text-amber-600 group-hover:text-amber-800 transition-colors" />
+                        <User className="h-5 w-5 text-amber-700 group-hover:text-amber-900 transition-colors" />
                       </div>
                     </div>
                   </div>
@@ -266,7 +270,7 @@ export function Login() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-2.5 rounded-md shadow-sm hover:shadow-md transition-all duration-300 text-sm font-medium"
+                    className="w-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-500 hover:to-orange-500 text-white py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 text-base font-semibold"
                   >
                     {loading ? 'جاري الإرسال...' : (isRTL ? 'إرسال الرابط' : 'Send Reset Link')}
                   </Button>
@@ -275,9 +279,9 @@ export function Login() {
                     type="button"
                     variant="ghost"
                     onClick={handleBackToLogin}
-                    className="w-full text-amber-600 hover:text-amber-800 py-2.5 rounded-md text-sm font-medium hover:bg-amber-50/50 transition-all"
+                    className="w-full text-amber-700 hover:text-amber-900 py-3 rounded-lg text-base font-semibold hover:bg-amber-50/70 transition-all duration-300 flex items-center justify-center gap-2"
                   >
-                    <ArrowLeft className="h-4 w-4 me-2" />
+                    <ArrowLeft className="h-4 w-4" />
                     {isRTL ? 'العودة' : 'Back to Login'}
                   </Button>
                 </form>
@@ -287,17 +291,14 @@ export function Login() {
         </div>
       </div>
 
-      {/* جميع الحقوق محفوظة */}
-      <footer className="mt-8 text-center text-amber-700 text-xs sm:text-sm opacity-80">
-        <p>
+      {/* Footer */}
+      <footer className="mt-10 text-center text-amber-800 text-sm opacity-90 transition-all duration-300 hover:opacity-100">
+        <p className="group">
           © {new Date().getFullYear()} 
-          <span className="font-medium mx-1">مصنع حلويات الجوديا</span> 
-          - جميع الحقوق محفوظة
-        </p>
-        <p className="mt-1 text-amber-600">
+          <span className="font-semibold mx-1 transition-colors duration-300 group-hover:text-amber-900">مصنع حلويات الجوديا</span> 
+          - {isRTL ? 'جميع الحقوق محفوظة' : 'All Rights Reserved'}
         </p>
       </footer>
-
     </div>
   );
 }
