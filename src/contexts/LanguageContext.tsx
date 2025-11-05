@@ -335,6 +335,13 @@ const translations = {
     "errors.fetch_sales": "فشل جلب المبيعات",
     "errors.create_sale_failed": "فشل إنشاء المبيعة",
 
+
+"orders.number": "رقم ",
+"orders.products": "المنتجات",
+"	orders.actions": "الإجراءات",
+
+    "orders.total_quantity": "إجمالي الكمية",
+    "orders.confirm_delivery": "تأكيد التسليم",
     // حالات الطلب
     "order_status.pending": "قيد الانتظار",
     "order_status.confirmed": "مؤكد",
@@ -431,7 +438,8 @@ const translations = {
     "productionTasks": " production tasks ",
     "returns-vs-orders": "returns vs orders",
     "orders.search_Placeholder": "Search by order number, product , or notes",
-
+ "orders.confirm_delivery": "Confirm Delivery",
+ "orders.total_quantity": "Total Quantity",
 
     "returns.review": " returns Review",
 
@@ -509,6 +517,12 @@ const translations = {
     "orders.priority.low": "Low",
         "orders.updated_at": "Production At ",
         "orders.chef_tasks": "Production Tasks ",
+
+
+
+        "orders.number": "Number ",
+        "orders.products": "Products",
+        "	orders.actions": "Actions",
 
 
     "orders.priority.medium": "Medium",
