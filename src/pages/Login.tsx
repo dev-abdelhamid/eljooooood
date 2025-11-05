@@ -211,7 +211,7 @@ export function Login() {
                       className="text-amber-600 hover:text-amber-800 font-medium flex items-center gap-1"
                     >
                       <Key className="h-4 w-4" />
-                      {isRTL ? 'نسيت؟' : 'Forgot?'}
+                      {isRTL ? 'نسيت كلمة السر ؟' : 'Forgot Password ?'}
                     </button>
                     <button
                       type="button"
