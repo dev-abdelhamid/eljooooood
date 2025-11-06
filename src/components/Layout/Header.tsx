@@ -16,11 +16,11 @@ export function Header({ onMenuToggle }: HeaderProps) {
       className="sticky top-0 z-50 w-full flex items-center justify-between h-16 px-2 sm:px-4 lg:px-4 border-b border-amber-200 bg-amber-100 shadow-md"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
-      <div className="flex items-center gap-2 sm:gap-4 flex-1">
+      <div className="flex items-center px-2  flex-1">
         <img
           src="/logo (3).png"
           alt={t('app.logo_alt')}
-          className="w-32 h-12 object-contain drop-shadow-xl"
+          className="w-36 h-16 object-contain drop-shadow-xl"
         />
     
       </div>
