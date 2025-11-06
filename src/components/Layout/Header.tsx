@@ -25,15 +25,15 @@ export function Header({ onMenuToggle }: HeaderProps) {
       <div className="flex items-center px-2 flex-1">
         <button
           onClick={handleLogoClick}
-          className="transition-all duration-300 hover:scale-105 active:scale-100 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-opacity-50 rounded-lg p-1"
+          className=""
           aria-label={t('app.logo_alt')}
         >
           <img
             src="/logo (3).png"
             alt={t('app.logo_alt')}
             className="w-36 h-16 object-contain 
-                       filter drop-shadow-[0_4px_8px_rgba(180,83,9,0.25)] 
-                       hover:drop-shadow-[0_6px_12px_rgba(180,83,9,0.35)] 
+                       filter drop-shadow-[0_6px_10px_rgba(180,83,9,0.50)] 
+                       hover:drop-shadow-[0_6px_12px_rgba(180,83,9,0.50)] 
                        transition-all duration-300"
           />
         </button>

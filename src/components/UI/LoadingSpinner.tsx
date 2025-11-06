@@ -21,93 +21,31 @@ export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerPr
     }
   }, []);
 
-  const bPath = `
-    M 35 25 
-    C 45 25, 52 28, 52 35
-    C 52 40, 48 43, 43 44
-    C 48 45, 52 48, 52 54
-    C 52 61, 45 64, 35 64
-    L 20 64
-    L 20 25
-    L 35 25
-    Z
-    M 28 32 L 28 57
-    M 35 32
-    C 40 32, 43 33, 43 36
-    C 43 39, 40 40, 35 40
-    L 28 40
-    M 35 49
-    C 40 49, 43 50, 43 53
-    C 43 56, 40 57, 35 57
-    L 28 57
-  `;
-
   return (
     <div className={`flex items-center justify-center ${className}`}>
-      <svg
-        className={`${sizes[size]} animate-pulse`}
-        viewBox="0 0 80 90"
-        xmlns="http://www.w3.org/2000/svg"
-        style={{ filter: 'drop-shadow(0 2px 4px rgba(180, 83, 9, 0.15))' }}
-      >
+      <svg className={`${sizes[size]}`} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
         {length > 0 && (
           <style>
-            {`
-              @keyframes draw {
-                0% { stroke-dashoffset: ${length}; }
-                70% { stroke-dashoffset: 0; }
-                100% { stroke-dashoffset: 0; }
-              }
-              @keyframes fadeIn {
-                0% { opacity: 0; }
-                50% { opacity: 0; }
-                100% { opacity: 1; }
-              }
-              .draw-path {
-                stroke-dasharray: ${length};
+            {`@keyframes draw {
+              0% {
                 stroke-dashoffset: ${length};
-                animation: draw 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite,
-                           fadeIn 2.2s ease-in-out infinite;
               }
-              .fill-path {
-                animation: fadeIn 2.2s ease-in-out infinite;
+              100% {
+                stroke-dashoffset: 0;
               }
-            `}
+            }`}
           </style>
         )}
-
-        <g transform="translate(2, 2)">
+        <g transform="translate(20, 10) scale(1.2)">
           <path
             ref={pathRef}
-            d={bPath}
+            d="M45.691667,45.15 C48.591667,46.1 50.691667,48.95 50.691667,52.2 C50.691667,57.95 46.691667,61 40.291667,61 L28.541667,61 L28.541667,30.3 L39.291667,30.3 C45.691667,30.3 49.691667,33.15 49.691667,38.65 C49.691667,41.95 47.941667,44.35 45.691667,45.15 Z M33.591667,43.2 L39.241667,43.2 C42.791667,43.2 44.691667,41.85 44.691667,38.95 C44.691667,36.05 42.791667,34.8 39.241667,34.8 L33.591667,34.8 L33.591667,43.2 Z M33.591667,47.5 L33.591667,56.5 L40.191667,56.5 C43.691667,56.5 45.591667,54.75 45.591667,52 C45.591667,49.2 43.691667,47.5 40.191667,47.5 L33.591667,47.5 Z"
             fill="none"
             stroke="#B45309"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="draw-path"
-          />
-          <path
-            d={bPath}
-            fill="none"
-            stroke="#fef3c7"
-            strokeWidth="2.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="fill-path"
-            style={{ animationDelay: '1s' }}
+            strokeWidth="2"
+            style={length > 0 ? { strokeDasharray: length, animation: 'draw 2s ease-in-out infinite' } : {}}
           />
         </g>
-
-        <style>
-          {`
-            @keyframes pulse {
-              0%, 100% { opacity: 0.9; }
-              50% { opacity: 0.7; }
-            }
-            .animate-pulse { animation: pulse 2.2s ease-in-out infinite; }
-          `}
-        </style>
       </svg>
     </div>
   );
