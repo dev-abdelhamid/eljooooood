@@ -6,7 +6,7 @@ import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
 import { Modal } from '../components/UI/Modal';
-import { AlertCircle, Edit2, Key, Eye, EyeOff, Save, X, Check } from 'lucide-react';
+import { AlertCircle, Edit2, Key, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
@@ -87,8 +87,6 @@ const translations = {
     nameEnRequired: 'الاسم الإنجليزي مطلوب',
     cancel: 'إلغاء',
     save: 'حفظ',
-    editing: 'جاري التعديل...',
-    saved: 'تم الحفظ',
   },
   en: {
     profile: 'Profile',
@@ -124,8 +122,6 @@ const translations = {
     nameEnRequired: 'English name is required',
     cancel: 'Cancel',
     save: 'Save',
-    editing: 'Editing...',
-    saved: 'Saved',
   },
 };
 
@@ -137,13 +133,12 @@ export function Profile() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', nameEn: '', phone: '', email: '' });
+  const [formData, setFormData] = useState({ name: '', nameEn: '' });
   const [passwordData, setPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState({ password: false, confirmPassword: false });
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -151,12 +146,7 @@ export function Profile() {
       try {
         const response = await authAPI.getProfile();
         setProfile(response.user);
-        setFormData({
-          name: response.user.name,
-          nameEn: response.user.nameEn || '',
-          phone: response.user.phone || '',
-          email: response.user.email || '',
-        });
+        setFormData({ name: response.user.name, nameEn: response.user.nameEn || '' });
         setError('');
       } catch (err: any) {
         setError(err.message || t.updateError);
@@ -168,10 +158,10 @@ export function Profile() {
     fetchProfile();
   }, [isRtl, t.updateError]);
 
-  const validateForm = () => {
+  const validateNameForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = t.nameRequired;
-    if (!formData.nameEn.trim()) errors.nameEn = t.nameEnRequired;
+    if (!formData.name) errors.name = t.nameRequired;
+    if (!formData.nameEn) errors.nameEn = t.nameEnRequired;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -186,25 +176,18 @@ export function Profile() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSaveProfile = async () => {
-    if (!validateForm()) return;
-    setSaving(true);
+  const handleUpdateName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateNameForm()) return;
     try {
-      const response = await authAPI.updateProfile({
-        name: formData.name,
-        nameEn: formData.nameEn,
-        phone: formData.phone,
-        email: formData.email,
-      });
+      const response = await authAPI.updateProfile({ name: formData.name, nameEn: formData.nameEn });
       setProfile(response.user);
       updateUser(response.user);
-      setIsEditMode(false);
+      setIsEditModalOpen(false);
       toast.success(t.updateSuccess, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
       setError(err.message || t.updateError);
       toast.error(t.updateError, { position: isRtl ? 'top-right' : 'top-left' });
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -226,8 +209,8 @@ export function Profile() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner size="lg" />
+      <div className="flex items-center justify-center min-h-screen ">
+        <LoadingSpinner size="md" />
       </div>
     );
   }
@@ -237,196 +220,174 @@ export function Profile() {
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
         <p className="text-red-500">{error || 'No profile data'}</p>
       </div>
-    );
+    );md
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8" dir={isRtl ? 'rtl' : 'ltr'}>
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-amber-900 flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-              <Edit2 className="w-5 h-5 text-amber-700" />
-            </div>
-            {t.profile}
-          </h1>
-          {!isEditMode && (
-            <Button
-              variant="outline"
-              icon={Edit2}
-              onClick={() => setIsEditMode(true)}
-              className="bg-white border-amber-400 text-amber-700 hover:bg-amber-50 rounded-full shadow-sm transition-all hover:shadow-md"
-            >
-              {t.editProfile}
-            </Button>
+    <div className={`mx-auto p-4 `}>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{t.profile}</h1>
+
+      <Card className="p-6 bg-white rounded-2xl shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="font-medium text-gray-600">{t.name}</p>
+            <p className="text-gray-800">{profile.name}</p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600">{t.nameEn}</p>
+            <p className="text-gray-800">{profile.nameEn || '-'}</p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600">{t.username}</p>
+            <p className="text-gray-800">{profile.username}</p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600">{t.email}</p>
+            <p className="text-gray-800">{profile.email || '-'}</p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600">{t.phone}</p>
+            <p className="text-gray-800">{profile.phone || '-'}</p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600">{t.role}</p>
+            <p className="text-gray-800">{t[profile.role] || profile.role}</p>
+          </div>
+          {profile.branch && (
+            <>
+              <div>
+                <p className="font-medium text-gray-600">{t.branch}</p>
+                <p className="text-gray-800">{isRtl ? profile.branch.name : profile.branch.nameEn || profile.branch.name}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.branchCode}</p>
+                <p className="text-gray-800">{profile.branch.code || '-'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.branchAddress}</p>
+                <p className="text-gray-800">{profile.branch.address || '-'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.branchCity}</p>
+                <p className="text-gray-800">{profile.branch.city || '-'}</p>
+              </div>
+            </>
           )}
+          {profile.department && (
+            <>
+              <div>
+                <p className="font-medium text-gray-600">{t.department}</p>
+                <p className="text-gray-800">{isRtl ? profile.department.name : profile.department.nameEn || profile.department.name}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.departmentCode}</p>
+                <p className="text-gray-800">{profile.department.code || '-'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.departmentDescription}</p>
+                <p className="text-gray-800">{profile.department.description || '-'}</p>
+              </div>
+            </>
+          )}
+          {profile.chefProfile && (
+            <div>
+              <p className="font-medium text-gray-600">{t.chefStatus}</p>
+              <p className={`font-medium ${profile.chefProfile.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>
+                {profile.chefProfile.status === 'active' ? t.active : t.inactive}
+              </p>
+            </div>
+          )}
+          <div>
+            <p className="font-medium text-gray-600">{t.status}</p>
+            <p className={`font-medium ${profile.isActive ? 'text-green-600' : 'text-red-600'}`}>
+              {profile.isActive ? t.active : t.inactive}
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600">{t.createdAt}</p>
+            <p className="text-gray-800">{new Date(profile.createdAt).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600">{t.updatedAt}</p>
+            <p className="text-gray-800">{new Date(profile.updatedAt).toLocaleString()}</p>
+          </div>
         </div>
+        <div className="flex gap-4 mt-6">
+          <Button
+            variant="outline"
+            icon={Edit2}
+            onClick={() => setIsEditModalOpen(true)}
+            className="flex-1 text-amber-500 hover:text-amber-600 border-amber-500 rounded-full text-sm px-4 py-2"
+          >
+            {t.editProfile}
+          </Button>
+          <Button
+            variant="outline"
+            icon={Key}
+            onClick={() => setIsChangePasswordModalOpen(true)}
+            className="flex-1 text-blue-500 hover:text-blue-600 border-blue-500 rounded-full text-sm px-4 py-2"
+          >
+            {t.changePassword}
+          </Button>
+        </div>
+      </Card>
 
-        <Card className="p-6 lg:p-8 bg-gradient-to-br from-amber-50 to-white rounded-3xl shadow-lg border border-amber-100">
-          <AnimatePresence mode="wait">
-            {isEditMode ? (
-              <motion.div
-                key="edit"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-5"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <Input
-                    label={t.name}
-                    value={formData.name}
-                    onChange={(value) => setFormData({ ...formData, name: value })}
-                    required
-                    error={formErrors.name}
-                    className="bg-white border-amber-200 focus:border-amber-500 focus:ring-amber-500 rounded-xl text-base"
-                    placeholder="أدخل الاسم بالعربي"
-                  />
-                  <Input
-                    label={t.nameEn}
-                    value={formData.nameEn}
-                    onChange={(value) => setFormData({ ...formData, nameEn: value })}
-                    required
-                    error={formErrors.nameEn}
-                    className="bg-white border-amber-200 focus:border-amber-500 focus:ring-amber-500 rounded-xl text-base"
-                    placeholder="Enter English name"
-                  />
-                  <Input
-                    label={t.email}
-                    value={formData.email}
-                    onChange={(value) => setFormData({ ...formData, email: value })}
-                    type="email"
-                    className="bg-white border-amber-200 focus:border-amber-500 focus:ring-amber-500 rounded-xl text-base"
-                    placeholder="email@example.com"
-                  />
-                  <Input
-                    label={t.phone}
-                    value={formData.phone}
-                    onChange={(value) => setFormData({ ...formData, phone: value })}
-                    className="bg-white border-amber-200 focus:border-amber-500 focus:ring-amber-500 rounded-xl text-base"
-                    placeholder="+201xxxxxxxxx"
-                  />
-                </div>
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title={t.editProfile}
+        size="md"
+      >
+        <form onSubmit={handleUpdateName} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <Input
+            label={t.name}
+            value={formData.name}
+            onChange={(value) => setFormData({ ...formData, name: value })}
+            required
+            error={formErrors.name}
+            className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm"
+          />
+          <Input
+            label={t.nameEn}
+            value={formData.nameEn}
+            onChange={(value) => setFormData({ ...formData, nameEn: value })}
+            required
+            error={formErrors.nameEn}
+            className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm"
+          />
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-red-500 text-sm">{error}</span>
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button
+              type="submit"
+              variant="primary"
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm"
+            >
+              {t.save}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsEditModalOpen(false)}
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm"
+            >
+              {t.cancel}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700"
-                  >
-                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                    <span className="text-sm">{error}</span>
-                  </motion.div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    onClick={handleSaveProfile}
-                    disabled={saving}
-                    className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-full px-6 py-3 font-medium shadow-md transition-all hover:shadow-lg flex items-center justify-center gap-2"
-                  >
-                    {saving ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        {t.editing}
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        {t.save}
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setIsEditMode(false)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full px-6 py-3 font-medium transition-all flex items-center justify-center gap-2"
-                  >
-                    <X className="w-4 h-4" />
-                    {t.cancel}
-                  </Button>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="view"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-6"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-sm">
-                  <InfoItem label={t.name} value={profile.name} />
-                  <InfoItem label={t.nameEn} value={profile.nameEn || '—'} />
-                  <InfoItem label={t.username} value={profile.username} />
-                  <InfoItem label={t.email} value={profile.email || '—'} />
-                  <InfoItem label={t.phone} value={profile.phone || '—'} />
-                  <InfoItem label={t.role} value={t[profile.role] || profile.role} highlight />
-
-                  {profile.branch && (
-                    <>
-                      <InfoItem label={t.branch} value={isRtl ? profile.branch.name : profile.branch.nameEn || profile.branch.name} />
-                      <InfoItem label={t.branchCode} value={profile.branch.code} />
-                      <InfoItem label={t.branchAddress} value={profile.branch.address} />
-                      <InfoItem label={t.branchCity} value={profile.branch.city} />
-                    </>
-                  )}
-
-                  {profile.department && (
-                    <>
-                      <InfoItem label={t.department} value={isRtl ? profile.department.name : profile.department.nameEn || profile.department.name} />
-                      <InfoItem label={t.departmentCode} value={profile.department.code} />
-                      <InfoItem label={t.departmentDescription} value={profile.department.description || '—'} />
-                    </>
-                  )}
-
-                  {profile.chefProfile && (
-                    <InfoItem
-                      label={t.chefStatus}
-                      value={profile.chefProfile.status === 'active' ? t.active : t.inactive}
-                      status={profile.chefProfile.status}
-                    />
-                  )}
-
-                  <InfoItem
-                    label={t.status}
-                    value={profile.isActive ? t.active : t.inactive}
-                    status={profile.isActive ? 'active' : 'inactive'}
-                  />
-
-                  <InfoItem label={t.createdAt} value={new Date(profile.createdAt).toLocaleString()} />
-                  <InfoItem label={t.updatedAt} value={new Date(profile.updatedAt).toLocaleString()} />
-                </div>
-
-                <div className="flex gap-3 pt-4 border-t border-amber-100">
-                  <Button
-                    variant="outline"
-                    icon={Key}
-                    onClick={() => setIsChangePasswordModalOpen(true)}
-                    className="flex-1 bg-white border-blue-400 text-blue-600 hover:bg-blue-50 rounded-full shadow-sm transition-all hover:shadow-md"
-                  >
-                    {t.changePassword}
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </Card>
-      </motion.div>
-
-      {/* Password Modal */}
       <Modal
         isOpen={isChangePasswordModalOpen}
         onClose={() => setIsChangePasswordModalOpen(false)}
         title={t.changePassword}
         size="md"
       >
-        <form onSubmit={handleChangePassword} className="space-y-5">
+        <form onSubmit={handleChangePassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <Input
             label={t.newPassword}
             value={passwordData.password}
@@ -434,7 +395,7 @@ export function Profile() {
             type={showPassword.password ? 'text' : 'password'}
             required
             error={formErrors.password}
-            className="bg-white border-gray-200 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
+            className="border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
             icon={showPassword.password ? EyeOff : Eye}
             onIconClick={() => setShowPassword({ ...showPassword, password: !showPassword.password })}
           />
@@ -445,21 +406,21 @@ export function Profile() {
             type={showPassword.confirmPassword ? 'text' : 'password'}
             required
             error={formErrors.confirmPassword}
-            className="bg-white border-gray-200 focus:border-blue-500 focus:ring-blue-500 rounded-xl"
+            className="border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
             icon={showPassword.confirmPassword ? EyeOff : Eye}
             onIconClick={() => setShowPassword({ ...showPassword, confirmPassword: !showPassword.confirmPassword })}
           />
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
-              <AlertCircle className="w-5 h-5" />
-              <span className="text-sm">{error}</span>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-red-500 text-sm">{error}</span>
             </div>
           )}
           <div className="flex gap-3">
             <Button
               type="submit"
               variant="primary"
-              className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-full px-6 py-3 shadow-md transition-all hover:shadow-lg"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full px-4 py-2 text-sm"
             >
               {t.save}
             </Button>
@@ -467,7 +428,7 @@ export function Profile() {
               type="button"
               variant="secondary"
               onClick={() => setIsChangePasswordModalOpen(false)}
-              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full px-6 py-3"
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm"
             >
               {t.cancel}
             </Button>
@@ -477,24 +438,3 @@ export function Profile() {
     </div>
   );
 }
-
-// مكون فرعي لعرض الحقول بشكل جميل
-const InfoItem: React.FC<{
-  label: string;
-  value: string;
-  highlight?:.boolean;
-  status?: 'active' | 'inactive';
-}> = ({ label, value, highlight, status }) => {
-  const statusColor = status === 'active' ? 'text-green-600' : status === 'inactive' ? 'text-red-600' : 'text-gray-800';
-  const bgColor = highlight ? 'bg-amber-50' : 'bg-white';
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      className={`p-4 rounded-2xl border ${highlight ? 'border-amber-300' : 'border-gray-100'} ${bgColor} transition-all`}
-    >
-      <p className="text-xs font-medium text-amber-700 mb-1">{label}</p>
-      <p className={`font-semibold ${statusColor}`}>{value}</p>
-    </motion.div>
-  );
-};
