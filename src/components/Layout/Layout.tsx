@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { LoadingSpinner } from '../UI/LoadingSpinner';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { language } = useLanguage();
@@ -40,7 +39,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  if (isLoading) return <LoadingSpinner />;
 
   const sidebarWidth = isLargeScreen
     ? sidebarExpanded
