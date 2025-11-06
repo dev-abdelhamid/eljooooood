@@ -1,38 +1,19 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { 
-  ShoppingCart, 
-  Clock, 
-  BarChart3, 
-  CheckCircle, 
-  AlertCircle, 
-  Package, 
-  DollarSign, 
-  ChefHat, 
-  RotateCcw, 
-  Timer, 
-  Users 
-} from 'lucide-react';
+import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw, Timer, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { 
-  ordersAPI, 
-  productionAssignmentsAPI, 
-  chefsAPI, 
-  branchesAPI, 
-  returnsAPI, 
-  inventoryAPI 
-} from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, inventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 
-// ================== INTERFACES ==================
+// Interfaces (unchanged from previous)
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
@@ -52,7 +33,6 @@ interface Stats {
   averageProductionTime?: number;
   chefUtilizationRate?: number;
 }
-
 interface Task {
   id: string;
   orderId: string;
@@ -68,7 +48,6 @@ interface Task {
   branchNameEn?: string;
   createdAt: string;
 }
-
 interface BranchPerformance {
   branchName: string;
   branchNameEn?: string;
@@ -77,7 +56,6 @@ interface BranchPerformance {
   totalOrders: number;
   completedOrders: number;
 }
-
 interface ChefPerformance {
   chefId: string;
   chefName: string;
@@ -86,7 +64,6 @@ interface ChefPerformance {
   totalTasks: number;
   completedTasks: number;
 }
-
 interface Order {
   id: string;
   orderNumber: string;
@@ -114,7 +91,6 @@ interface Order {
   createdBy: string;
   createdAt: string;
 }
-
 interface Return {
   id: string;
   returnNumber: string;
@@ -136,16 +112,14 @@ interface Return {
   reviewNotesEn?: string;
   createdAt: string;
 }
-
 interface Chef {
   _id: string;
   userId: string;
   username: string;
   name: string;
   nameEn?: string;
-  department: { _id: string; name: string; nameEn?: string } | null;
+  department: Array<{ _id: string; name: string; nameEn?: string }> | null;
 }
-
 interface InventoryItem {
   _id: string;
   product: {
@@ -168,7 +142,6 @@ interface InventoryItem {
   maxStockLevel: number;
   status: 'low' | 'normal' | 'full';
 }
-
 interface ProductHistoryEntry {
   _id: string;
   date: string;
@@ -176,49 +149,40 @@ interface ProductHistoryEntry {
   quantity: number;
   description: string;
 }
-
 interface FilterState {
   search: string;
 }
-
 const timeFilterOptions = [
   { value: 'day', label: 'اليوم', enLabel: 'Today' },
   { value: 'week', label: 'هذا الأسبوع', enLabel: 'This Week' },
   { value: 'month', label: 'هذا الشهر', enLabel: 'This Month' },
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
-
-// ================== LOADER WITH LOGO ==================
+// Loader Component
 const Loader: React.FC = () => (
-  <div className="flex justify-center items-center h-screen bg-gradient-to-br from-amber-50 to-amber-100">
-    <LoadingSpinner size="xxl" showText={true} animate={true} />
+  <div className="flex justify-center items-center h-screen">
+    <LoadingSpinner />
   </div>
 );
-
-// ================== STATS CARD ==================
-const StatsCard: React.FC<{ 
-  title: string; 
-  value: string; 
-  icon: React.FC<any>; 
-  color: string; 
-  ariaLabel: string 
-}> = React.memo(({ title, value, icon: Icon, color, ariaLabel }) => (
-  <motion.div
-    whileHover={{ scale: 1.02 }}
-    className={`p-3 bg-gradient-to-br from-${color}-50 to-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-100 transition-all duration-200 shadow-sm`}
-    aria-label={ariaLabel}
-  >
-    <div className="flex items-center gap-2">
-      <Icon className={`w-5 h-5 text-${color}-600`} />
-      <div>
-        <p className="text-xs text-gray-600 font-medium">{title}</p>
-        <p className="text-base font-semibold text-gray-900">{value}</p>
+// StatsCard Component
+const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
+  ({ title, value, icon: Icon, color, ariaLabel }) => (
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      className={`p-3 bg-gradient-to-br from-${color}-50 to-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-100 transition-all duration-200 shadow-sm`}
+      aria-label={ariaLabel}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className={`w-5 h-5 text-${color}-600`} />
+        <div>
+          <p className="text-xs text-gray-600 font-medium">{title}</p>
+          <p className="text-base font-semibold text-gray-900">{value}</p>
+        </div>
       </div>
-    </div>
-  </motion.div>
-));
-
-// ================== CHEF DASHBOARD ==================
+    </motion.div>
+  )
+);
+// ChefDashboard Component
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
@@ -228,51 +192,51 @@ const ChefDashboard: React.FC<{
   handleCompleteTask: (taskId: string, orderId: string) => void;
 }> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ search: '' });
-
   const filteredTasks = useMemo(() => {
     const searchTerm = filter.search.toLowerCase();
     return tasks
-      .filter((task) => {
-        const name = isRtl ? task.productName : (task.productNameEn || task.productName);
-        return name?.toLowerCase().includes(searchTerm) || task.orderNumber.toLowerCase().includes(searchTerm);
-      })
+      .filter(
+        (task) =>
+          (isRtl ? task.productName : task.productNameEn || task.productName)
+            ?.toLowerCase()
+            .includes(searchTerm) ||
+          task.orderNumber.toLowerCase().includes(searchTerm)
+      )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 6);
   }, [tasks, filter.search, isRtl]);
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
-        <StatsCard 
-          title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'} 
-          value={stats.totalOrders.toString()} 
-          icon={ShoppingCart} 
-          color="amber" 
-          ariaLabel="Total Orders" 
+        <StatsCard
+          title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
+          value={stats.totalOrders.toString()}
+          icon={ShoppingCart}
+          color="amber"
+          ariaLabel={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
         />
-        <StatsCard 
-          title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'} 
-          value={stats.completedTasks.toString()} 
-          icon={CheckCircle} 
-          color="green" 
-          ariaLabel="Completed Tasks" 
+        <StatsCard
+          title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+          value={stats.completedTasks.toString()}
+          icon={CheckCircle}
+          color="green"
+          ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
         />
-        <StatsCard 
-          title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'} 
-          value={stats.inProgressTasks.toString()} 
-          icon={Clock} 
-          color="blue" 
-          ariaLabel="In Progress Tasks" 
+        <StatsCard
+          title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+          value={stats.inProgressTasks.toString()}
+          icon={Clock}
+          color="blue"
+          ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
         />
-        <StatsCard 
-          title={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'} 
-          value={stats.pendingOrders.toString()} 
-          icon={AlertCircle} 
-          color="red" 
-          ariaLabel="Pending Orders" 
+        <StatsCard
+          title={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
+          value={stats.pendingOrders.toString()}
+          icon={AlertCircle}
+          color="red"
+          ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
         />
       </div>
-
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row items-center justify-between mb-3 gap-2">
           <h3 className="text-base font-semibold text-gray-800 flex items-center">
@@ -287,7 +251,6 @@ const ChefDashboard: React.FC<{
             ariaLabel={isRtl ? 'البحث في المهام' : 'Search tasks'}
           />
         </div>
-
         <div className="space-y-2 overflow-y-auto max-h-80">
           <AnimatePresence>
             {filteredTasks.length === 0 ? (
@@ -327,11 +290,9 @@ const ChefDashboard: React.FC<{
                     </span>
                   </div>
                   <p className="text-xs text-gray-600 truncate">
-                    {`${task.quantity} × ${isRtl ? task.productName : (task.productNameEn || task.productName)}`}
+                    {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName}`}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    {isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}
-                  </p>
+                  <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
                   <div className="flex items-center gap-2 mt-1">
                     {(task.status === 'pending' || task.status === 'assigned') && (
                       <button
@@ -361,8 +322,6 @@ const ChefDashboard: React.FC<{
     </div>
   );
 });
-
-// ================== MAIN DASHBOARD COMPONENT ==================
 export const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -370,7 +329,6 @@ export const Dashboard: React.FC = () => {
   const { socket, isConnected } = useSocket();
   const { addNotification, refreshTasks } = useNotifications();
   const navigate = useNavigate();
-
   const [orders, setOrders] = useState<Order[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [chefs, setChefs] = useState<Chef[]>([]);
@@ -399,16 +357,13 @@ export const Dashboard: React.FC = () => {
     averageProductionTime: 0,
     chefUtilizationRate: 0,
   });
-
   const [timeFilter, setTimeFilter] = useState('week');
   const [inventoryFilter, setInventoryFilter] = useState<FilterState>({ search: '' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-
   const cache = useMemo(() => new Map<string, any>(), []);
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
-
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
       if (!user?.id && !user?._id) {
@@ -416,9 +371,16 @@ export const Dashboard: React.FC = () => {
         setError(errorMessage);
         setLoading(false);
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        addNotification({
+          _id: `error-noUserId-${Date.now()}`,
+          type: 'error',
+          message: errorMessage,
+          read: false,
+          createdAt: new Date().toLocaleString(language),
+          path: '/dashboard',
+        });
         return;
       }
-
       if (!forceRefresh && cache.has(cacheKey)) {
         const cachedData = cache.get(cacheKey);
         setOrders(cachedData.orders);
@@ -435,7 +397,6 @@ export const Dashboard: React.FC = () => {
         setIsInitialLoad(false);
         return;
       }
-
       setLoading(true);
       try {
         const now = new Date();
@@ -459,13 +420,7 @@ export const Dashboard: React.FC = () => {
             startDate = new Date(now);
             startDate.setDate(now.getDate() - 7);
         }
-
-        const query: Record<string, any> = { 
-          startDate: startDate.toISOString(), 
-          endDate: now.toISOString(), 
-          limit: 20 
-        };
-
+        const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20 };
         let ordersResponse: any[] = [];
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
@@ -473,7 +428,6 @@ export const Dashboard: React.FC = () => {
         let returnsResponse: any = { returns: [], total: 0 };
         let inventoryResponse: any[] = [];
         let historyResponse: any[] = [];
-
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
           const chefId = chefProfile?._id;
@@ -484,22 +438,40 @@ export const Dashboard: React.FC = () => {
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
           if (user.role === 'production' && user.department) query.departmentId = user.department._id;
-
           const promises = [
-            ordersAPI.getAll(query).catch(() => []),
-            user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch(() => []) : Promise.resolve([]),
-            ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
-            ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
-            ['admin', 'production', 'branch'].includes(user.role) 
-              ? returnsAPI.getAll(query).catch(() => ({ returns: [], total: 0 })) 
+            ordersAPI.getAll(query).catch((err) => {
+              console.error(err);
+              return [];
+            }),
+            user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch((err) => {
+              console.error(err);
+              return [];
+            }) : Promise.resolve([]),
+            ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch((err) => {
+              console.error(err);
+              return [];
+            }) : Promise.resolve([]),
+            ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch((err) => {
+              console.error(err);
+              return [];
+            }) : Promise.resolve([]),
+            ['admin', 'production', 'branch'].includes(user.role)
+              ? returnsAPI.getAll(query).catch((err) => {
+                  console.error(`Error fetching returns:`, err);
+                  return { returns: [], total: 0 };
+                })
               : Promise.resolve({ returns: [], total: 0 }),
           ];
-
           if (user.role === 'branch') {
-            promises.push(inventoryAPI.getByBranch(user.branchId || user._id).catch(() => []));
-            promises.push(inventoryAPI.getHistory({ branchId: user.branchId || user._id, limit: 10 }).catch(() => []));
+            promises.push(inventoryAPI.getByBranch(user.branchId || user._id).catch((err) => {
+              console.error(err);
+              return [];
+            }));
+            promises.push(inventoryAPI.getHistory({ branchId: user.branchId || user._id, limit: 10 }).catch((err) => {
+              console.error(err);
+              return [];
+            }));
           }
-
           const results = await Promise.all(promises);
           ordersResponse = results[0];
           tasksResponse = results[1];
@@ -511,8 +483,6 @@ export const Dashboard: React.FC = () => {
             historyResponse = results[6];
           }
         }
-
-        // === MAPPING DATA ===
         const mappedOrders = ordersResponse.map((order: any) => ({
           id: order._id || crypto.randomUUID(),
           orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
@@ -542,7 +512,6 @@ export const Dashboard: React.FC = () => {
           createdBy: order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
           createdAt: formatDate(order.createdAt || new Date(), language),
         }));
-
         const mappedTasks = tasksResponse.map((task: any) => ({
           id: task._id || crypto.randomUUID(),
           orderId: task.order?._id || 'unknown',
@@ -558,16 +527,14 @@ export const Dashboard: React.FC = () => {
           branchNameEn: task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown',
           createdAt: formatDate(task.createdAt || new Date(), language),
         }));
-
         const mappedChefs = chefsResponse.map((chef: any) => ({
           _id: chef._id || crypto.randomUUID(),
           userId: chef.user?._id || chef._id,
           username: chef.user?.username || chef.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
           name: chef.user?.name || chef.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
           nameEn: chef.user?.nameEn || chef.name || 'Unknown',
-          department: chef.department || null,
+          department: Array.isArray(chef.department) ? chef.department : (chef.department ? [chef.department] : []),
         }));
-
         const mappedBranches = branchesResponse
           .map((branch: any) => ({
             _id: branch._id || crypto.randomUUID(),
@@ -575,7 +542,6 @@ export const Dashboard: React.FC = () => {
             nameEn: branch.nameEn || branch.name || 'Unknown',
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
-
         const mappedReturns = returnsResponse.returns.map((ret: any) => ({
           id: ret._id || crypto.randomUUID(),
           returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
@@ -597,7 +563,6 @@ export const Dashboard: React.FC = () => {
           reviewNotesEn: ret.reviewNotesEn || ret.reviewNotes || '',
           createdAt: formatDate(ret.createdAt || new Date(), language),
         }));
-
         let mappedInventory: InventoryItem[] = [];
         let mappedHistory: ProductHistoryEntry[] = [];
         if (user.role === 'branch') {
@@ -611,8 +576,8 @@ export const Dashboard: React.FC = () => {
               unit: item.product.unit,
               unitEn: item.product.unitEn,
               department: item.product.department,
-              displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
-              displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+              displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+              displayUnit: isRtl ? (item.product.unit || 'غير محدد') : item.product.unitEn || item.product.unit || 'N/A',
               price: item.product.price || 0,
             } : null,
             branch: item.branch,
@@ -628,11 +593,15 @@ export const Dashboard: React.FC = () => {
             date: formatDate(entry.date || new Date(), language),
             type: entry.type,
             quantity: entry.quantity,
-            description: entry.description,
+            description: entry.description.replace(/×/g, 'x').trim(), // Fix for "2 × بسبوسة" by replacing × with x and trimming
           }));
+          // Deduplicate history entries to fix potential duplication issues
+          mappedHistory = mappedHistory.filter((entry, index, self) =>
+            index === self.findIndex((t) => (
+              t._id === entry._id && t.description === entry.description
+            ))
+          );
         }
-
-        // === PERFORMANCE CALCULATIONS ===
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
           const total = branchOrders.length;
@@ -647,12 +616,11 @@ export const Dashboard: React.FC = () => {
             completedOrders: completed,
           };
         }).filter((b: any) => b.totalOrders > 0);
-
         const chefPerf = mappedChefs.map((chef: any) => {
           const chefTasks = mappedTasks.filter((task) => {
             const order = mappedOrders.find((o) => o.id === task.orderId);
             const item = order?.items.find((i) => i.productId === task.productId);
-            return item?.assignedTo?._id === chef.userId;
+            return item ? item.assignedTo?._id === chef.userId : false;
           });
           const total = chefTasks.length;
           const completed = chefTasks.filter((t) => t.status === 'completed').length;
@@ -666,34 +634,29 @@ export const Dashboard: React.FC = () => {
             completedTasks: completed,
           };
         }).filter((c: any) => c.totalTasks > 0);
-
-        // === STATS CALCULATIONS ===
         const totalOrders = user.role === 'chef' ? mappedTasks.length : mappedOrders.length;
         const pendingOrders = user.role === 'chef'
-          ? mappedTasks.filter((t) => t.status === 'pending' || t.status === 'assigned').length
+          ? mappedTasks.filter((task) => task.status === 'pending' || task.status === 'assigned').length
           : mappedOrders.filter((o) => o.status === 'pending').length;
         const inProductionOrders = mappedOrders.filter((o) => o.status === 'in_production').length;
         const inTransitOrders = mappedOrders.filter((o) => o.status === 'in_transit').length;
         const deliveredOrders = mappedOrders.filter((o) => o.status === 'delivered').length;
         const totalOrderValue = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
-        const completedTasks = mappedTasks.filter((t) => t.status === 'completed').length;
-        const inProgressTasks = mappedTasks.filter((t) => t.status === 'in_progress').length;
+        const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
+        const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const totalReturns = mappedReturns.length;
         const pendingReturns = mappedReturns.filter((r) => r.status === 'pending_approval').length;
         const approvedReturns = mappedReturns.filter((r) => r.status === 'approved').length;
         const rejectedReturns = mappedReturns.filter((r) => r.status === 'rejected').length;
         const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
-
         let totalInventoryValue = 0;
         let lowStockItems = 0;
         let averageProductionTime = 0;
         let chefUtilizationRate = 0;
-
         if (user.role === 'branch') {
           totalInventoryValue = mappedInventory.reduce((sum, item) => sum + (item.currentStock * (item.product?.price || 0)), 0);
           lowStockItems = mappedInventory.filter((item) => item.currentStock <= item.minStockLevel).length;
         }
-
         if (['admin', 'production'].includes(user.role)) {
           const completedOrders = mappedOrders.filter((o) => o.status === 'completed' || o.status === 'delivered');
           const totalProductionTime = completedOrders.reduce((sum, order) => {
@@ -701,11 +664,10 @@ export const Dashboard: React.FC = () => {
             const completed = new Date(order.date).getTime();
             return sum + (completed - created);
           }, 0);
-          averageProductionTime = completedOrders.length > 0 ? totalProductionTime / completedOrders.length / (1000 * 60 * 60) : 0;
+          averageProductionTime = completedOrders.length > 0 ? totalProductionTime / completedOrders.length / (1000 * 60 * 60) : 0; // Convert to hours
           const activeChefs = chefPerf.filter((c) => c.totalTasks > 0).length;
           chefUtilizationRate = mappedChefs.length > 0 ? (activeChefs / mappedChefs.length) * 100 : 0;
         }
-
         const newData = {
           orders: mappedOrders,
           tasks: mappedTasks,
@@ -717,13 +679,25 @@ export const Dashboard: React.FC = () => {
           branchPerformance: branchPerf,
           chefPerformance: chefPerf,
           stats: {
-            totalOrders, pendingOrders, inProductionOrders, inTransitOrders, deliveredOrders,
-            totalOrderValue, completedTasks, inProgressTasks, totalReturns, pendingReturns,
-            approvedReturns, rejectedReturns, averageOrderValue, totalInventoryValue,
-            lowStockItems, averageProductionTime, chefUtilizationRate
-          }
+            totalOrders,
+            pendingOrders,
+            inProductionOrders,
+            inTransitOrders,
+            deliveredOrders,
+            totalOrderValue,
+            completedTasks,
+            inProgressTasks,
+            totalReturns,
+            pendingReturns,
+            approvedReturns,
+            rejectedReturns,
+            averageOrderValue,
+            totalInventoryValue,
+            lowStockItems,
+            averageProductionTime,
+            chefUtilizationRate,
+          },
         };
-
         cache.set(cacheKey, newData);
         setOrders(newData.orders);
         setTasks(newData.tasks);
@@ -738,43 +712,63 @@ export const Dashboard: React.FC = () => {
         setError('');
         setIsInitialLoad(false);
       } catch (err: any) {
-        const errorMessage = err.status === 403 
-          ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') 
-          : (isRtl ? 'خطأ في الخادم' : 'Server error');
+        const errorMessage = err.status === 403 ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') : (isRtl ? 'خطأ في الخادم' : 'Server error');
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        addNotification({
+          _id: `error-fetch-${Date.now()}`,
+          type: 'error',
+          message: errorMessage,
+          read: false,
+          createdAt: new Date().toLocaleString(language),
+          path: '/dashboard',
+        });
       } finally {
         setLoading(false);
       }
     }, 100),
     [user, isRtl, language, cacheKey, addNotification]
   );
-
-  // === EFFECTS ===
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
   }, [fetchDashboardData, timeFilter]);
-
   useEffect(() => {
-    if (refreshTasks) fetchDashboardData(true);
+    if (refreshTasks) {
+      fetchDashboardData(true);
+    }
   }, [refreshTasks, fetchDashboardData]);
-
-  // === SOCKET LISTENERS ===
   useEffect(() => {
     if (!socket || !user || !isConnected) return;
-
-    const handleTaskAssigned = (data: any) => {
-      if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) return;
+    socket.on('connect_error', () => {
+      const errorMessage = isRtl ? 'خطأ في الاتصال بالسوكت' : 'Socket connection error';
+      addNotification({
+        _id: `socket-error-${Date.now()}`,
+        type: 'error',
+        message: errorMessage,
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        path: '/dashboard',
+      });
+    });
+    socket.on('taskAssigned', (data: any) => {
+      if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) {
+        console.warn(`[${new Date().toISOString()} ] Invalid task assigned data:`, data);
+        return;
+      }
       if (data.chefId !== (user?.id || user?._id) || !['admin', 'production', 'chef'].includes(user.role)) return;
-
       const notification = {
         _id: data.eventId,
         type: 'info' as const,
         message: isRtl
           ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${data.unit}) للطلب ${data.orderNumber} - ${data.branchName}`
           : `Task assigned: ${data.productName} (${data.quantity} ${data.unit}) for order ${data.orderNumber} - ${data.branchName}`,
-        data: { orderId: data.orderId, taskId: data.taskId, chefId: data.chefId, eventId: data.eventId },
+        data: {
+          orderId: data.orderId,
+          taskId: data.taskId,
+          chefId: data.chefId,
+          eventId: data.eventId,
+        },
         read: false,
         createdAt: formatDate(new Date(), language),
         sound: '/sounds/task-assigned.mp3',
@@ -782,7 +776,6 @@ export const Dashboard: React.FC = () => {
         path: '/dashboard',
       };
       addNotification(notification);
-
       if (user.role === 'chef') {
         setTasks((prev) => [
           {
@@ -804,17 +797,18 @@ export const Dashboard: React.FC = () => {
         ]);
       }
       fetchDashboardData(true);
-    };
-
-    const handleOrderCompleted = (data: any) => {
+    });
+    socket.on('orderCompleted', (data: any) => {
       if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
       if (!['admin', 'branch', 'production'].includes(user.role)) return;
-
       addNotification({
         _id: data.eventId,
         type: 'success' as const,
         message: isRtl ? `تم إكمال الطلب ${data.orderNumber} - ${data.branchName}` : `Order completed: ${data.orderNumber} - ${data.branchName}`,
-        data: { orderId: data.orderId, eventId: data.eventId },
+        data: {
+          orderId: data.orderId,
+          eventId: data.eventId,
+        },
         read: false,
         createdAt: formatDate(new Date(), language),
         sound: '/sounds/order-completed.mp3',
@@ -822,18 +816,18 @@ export const Dashboard: React.FC = () => {
         path: '/dashboard',
       });
       fetchDashboardData(true);
-    };
-
-    const handleItemStatusUpdated = (data: any) => {
-      if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName || !data.productName || !data.eventId) return;
+    });
+    socket.on('itemStatusUpdated', (data: any) => {
+      if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName || !data.productName || !data.eventId) {
+        console.warn(`[${new Date().toISOString()} ] Invalid item status update data:`, data);
+        return;
+      }
       if (!['admin', 'production', 'chef'].includes(user.role) || (user.role === 'chef' && data.chefId !== user._id)) return;
-
       setTasks((prev) =>
         prev.map((task) =>
           task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task
         )
       );
-
       addNotification({
         _id: data.eventId,
         type: 'info',
@@ -848,12 +842,13 @@ export const Dashboard: React.FC = () => {
         vibrate: [200, 100, 200],
       });
       fetchDashboardData(true);
-    };
-
-    const handleReturnCreated = (data: any) => {
-      if (!data.returnId || !data.returnNumber || !data.branchId || !data.branchName || !data.items || !data.status || !data.eventId) return;
+    });
+    socket.on('returnCreated', (data: any) => {
+      if (!data.returnId || !data.returnNumber || !data.branchId || !data.branchName || !data.items || !data.status || !data.eventId) {
+        console.warn(`[${new Date().toISOString()} ] Invalid return created data:`, data);
+        return;
+      }
       if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
-
       addNotification({
         _id: data.eventId,
         type: 'info',
@@ -868,18 +863,18 @@ export const Dashboard: React.FC = () => {
         path: '/returns',
       });
       fetchDashboardData(true);
-    };
-
-    const handleReturnStatusUpdated = (data: any) => {
-      if (!data.returnId || !data.returnNumber || !data.status || !data.branchId || !data.branchName || !data.eventId) return;
+    });
+    socket.on('returnStatusUpdated', (data: any) => {
+      if (!data.returnId || !data.returnNumber || !data.status || !data.branchId || !data.branchName || !data.eventId) {
+        console.warn(`[${new Date().toISOString()} ] Invalid return status update data:`, data);
+        return;
+      }
       if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
-
       setReturns((prev) =>
         prev.map((ret) =>
           ret.id === data.returnId ? { ...ret, status: data.status, reviewNotes: data.reviewNotes || '', reviewNotesEn: data.reviewNotesEn || data.reviewNotes || '' } : ret
         )
       );
-
       addNotification({
         _id: data.eventId,
         type: 'info',
@@ -894,202 +889,179 @@ export const Dashboard: React.FC = () => {
         vibrate: [200, 100, 200],
       });
       fetchDashboardData(true);
-    };
-
-    const handleInventoryUpdated = (data: any) => {
+    });
+    socket.on('inventoryUpdated', (data: any) => {
       if (user.role === 'branch' && data.branchId === user.branchId) {
         fetchDashboardData(true);
       }
-    };
-
-    socket.on('taskAssigned', handleTaskAssigned);
-    socket.on('orderCompleted', handleOrderCompleted);
-    socket.on('itemStatusUpdated', handleItemStatusUpdated);
-    socket.on('returnCreated', handleReturnCreated);
-    socket.on('returnStatusUpdated', handleReturnStatusUpdated);
-    socket.on('inventoryUpdated', handleInventoryUpdated);
-
+    });
     return () => {
-      socket.off('taskAssigned', handleTaskAssigned);
-      socket.off('orderCompleted', handleOrderCompleted);
-      socket.off('itemStatusUpdated', handleItemStatusUpdated);
-      socket.off('returnCreated', handleReturnCreated);
-      socket.off('returnStatusUpdated', handleReturnStatusUpdated);
-      socket.off('inventoryUpdated', handleInventoryUpdated);
+      socket.off('connect_error');
+      socket.off('taskAssigned');
+      socket.off('orderCompleted');
+      socket.off('itemStatusUpdated');
+      socket.off('returnCreated');
+      socket.off('returnStatusUpdated');
+      socket.off('inventoryUpdated');
     };
   }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
-
-  // === TASK HANDLERS ===
-  const handleStartTask = useCallback(async (taskId: string, orderId: string) => {
-    if (!isConnected) {
-      addNotification({
-        _id: `warn-socket-${Date.now()}`,
-        type: 'warning',
-        message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-      });
-      return;
-    }
-
-    try {
-      await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
-      const task = tasks.find((t) => t.id === taskId);
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'in_progress' } : t)));
-
-      const eventId = crypto.randomUUID();
-      socket.emit('itemStatusUpdated', {
-        orderId,
-        itemId: taskId,
-        status: 'in_progress',
-        chefId: user?.id || user?._id,
-        eventId,
-        orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-        branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-        branchNameEn: task?.branchNameEn || task?.branchName || 'Unknown',
-        productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-        productNameEn: task?.productNameEn || task?.productName || 'Unknown',
-        quantity: task?.quantity || 0,
-        unit: task?.unit || 'غير محدد',
-        unitEn: task?.unitEn || task?.unit || 'N/A',
-      });
-
-      addNotification({
-        _id: `success-task-${taskId}-${Date.now()}`,
-        type: 'success',
-        message: isRtl ? 'تم بدء المهمة' : 'Task started',
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-        sound: '/sounds/task-status-updated.mp3',
-        vibrate: [200, 100, 200],
-      });
-    } catch (err: any) {
-      const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
-      addNotification({
-        _id: `error-task-${taskId}-${Date.now()}`,
-        type: 'error',
-        message: errorMessage,
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-      });
-    }
-  }, [socket, user, isRtl, isConnected, tasks, language, addNotification]);
-
-  const handleCompleteTask = useCallback(async (taskId: string, orderId: string) => {
-    if (!isConnected) {
-      addNotification({
-        _id: `warn-socket-${Date.now()}`,
-        type: 'warning',
-        message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-      });
-      return;
-    }
-
-    try {
-      await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
-      const task = tasks.find((t) => t.id === taskId);
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'completed' } : t)));
-
-      const eventId = crypto.randomUUID();
-      socket.emit('itemStatusUpdated', {
-        orderId,
-        itemId: taskId,
-        status: 'completed',
-        chefId: user?.id || user?._id,
-        eventId,
-        orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-        branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-        branchNameEn: task?.branchNameEn || task?.branchName || 'Unknown',
-        productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-        productNameEn: task?.productNameEn || task?.productName || 'Unknown',
-        quantity: task?.quantity || 0,
-        unit: task?.unit || 'غير محدد',
-        unitEn: task?.unitEn || task?.unit || 'N/A',
-      });
-
-      addNotification({
-        _id: `success-complete-${taskId}-${Date.now()}`,
-        type: 'success',
-        message: isRtl ? 'تم إكمال المهمة' : 'Task completed',
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-        sound: '/sounds/task-completed.mp3',
-        vibrate: [400, 100, 400],
-      });
-    } catch (err: any) {
-      const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
-      addNotification({
-        _id: `error-complete-${taskId}-${Date.now()}`,
-        type: 'error',
-        message: errorMessage,
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-      });
-    }
-  }, [socket, user, isRtl, isConnected, tasks, language, addNotification]);
-
-  const handleConfirmDelivery = useCallback(async (orderId: string, branchId: string) => {
-    if (!isConnected) {
-      toast.error(isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected');
-      return;
-    }
-
-    try {
-      await ordersAPI.confirmDelivery(orderId);
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: 'delivered' } : o)));
-      const eventId = crypto.randomUUID();
-      socket.emit('inventoryUpdated', { branchId, eventId });
-      toast.success(isRtl ? 'تم تأكيد التسليم ونقل المخزون' : 'Delivery confirmed and inventory transferred');
-    } catch (err: any) {
-      toast.error(err.message || (isRtl ? 'فشل تأكيد التسليم' : 'Failed to confirm delivery'));
-    }
-  }, [isConnected, socket, isRtl]);
-
-  // === MEMOIZED FILTERS ===
+  const handleStartTask = useCallback(
+    async (taskId: string, orderId: string) => {
+      if (!isConnected) {
+        addNotification({
+          _id: `warn-socket-${Date.now()}`,
+          type: 'warning',
+          message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
+          read: false,
+          createdAt: formatDate(new Date(), language),
+          path: '/dashboard',
+        });
+        return;
+      }
+      try {
+        await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
+        const task = tasks.find((t) => t.id === taskId);
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'in_progress' } : t)));
+        const eventId = crypto.randomUUID();
+        socket.emit('itemStatusUpdated', {
+          orderId,
+          itemId: taskId,
+          status: 'in_progress',
+          chefId: user?.id || user?._id,
+          eventId,
+          orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+          branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchNameEn: task?.branchNameEn || task?.branchName || 'Unknown',
+          productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+          productNameEn: task?.productNameEn || task?.productName || 'Unknown',
+          quantity: task?.quantity || 0,
+          unit: task?.unit || 'غير محدد',
+          unitEn: task?.unitEn || task?.unit || 'N/A',
+        });
+        addNotification({
+          _id: `success-task-${taskId}-${Date.now()}`,
+          type: 'success',
+          message: isRtl ? 'تم بدء المهمة' : 'Task started',
+          read: false,
+          createdAt: formatDate(new Date(), language),
+          path: '/dashboard',
+          sound: '/sounds/task-status-updated.mp3',
+          vibrate: [200, 100, 200],
+        });
+      } catch (err: any) {
+        const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        addNotification({
+          _id: `error-task-${taskId}-${Date.now()}`,
+          type: 'error',
+          message: errorMessage,
+          read: false,
+          createdAt: formatDate(new Date(), language),
+          path: '/dashboard',
+        });
+      }
+    },
+    [socket, user, isRtl, isConnected, tasks, language, addNotification]
+  );
+  const handleCompleteTask = useCallback(
+    async (taskId: string, orderId: string) => {
+      if (!isConnected) {
+        addNotification({
+          _id: `warn-socket-${Date.now()}`,
+          type: 'warning',
+          message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
+          read: false,
+          createdAt: formatDate(new Date(), language),
+          path: '/dashboard',
+        });
+        return;
+      }
+      try {
+        await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
+        const task = tasks.find((t) => t.id === taskId);
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'completed' } : t)));
+        const eventId = crypto.randomUUID();
+        socket.emit('itemStatusUpdated', {
+          orderId,
+          itemId: taskId,
+          status: 'completed',
+          chefId: user?.id || user?._id,
+          eventId,
+          orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+          branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchNameEn: task?.branchNameEn || task?.branchName || 'Unknown',
+          productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+          productNameEn: task?.productNameEn || task?.productName || 'Unknown',
+          quantity: task?.quantity || 0,
+          unit: task?.unit || 'غير محدد',
+          unitEn: task?.unitEn || task?.unit || 'N/A',
+        });
+        addNotification({
+          _id: `success-complete-${taskId}-${Date.now()}`,
+          type: 'success',
+          message: isRtl ? 'تم إكمال المهمة' : 'Task completed',
+          read: false,
+          createdAt: formatDate(new Date(), language),
+          path: '/dashboard',
+          sound: '/sounds/task-completed.mp3',
+          vibrate: [400, 100, 400],
+        });
+      } catch (err: any) {
+        const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        addNotification({
+          _id: `error-complete-${taskId}-${Date.now()}`,
+          type: 'error',
+          message: errorMessage,
+          read: false,
+          createdAt: formatDate(new Date(), language),
+          path: '/dashboard',
+        });
+      }
+    },
+    [socket, user, isRtl, isConnected, tasks, language, addNotification]
+  );
+  const handleConfirmDelivery = useCallback(
+    async (orderId: string, branchId: string) => {
+      if (!isConnected) {
+        toast.error(isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected');
+        return;
+      }
+      try {
+        await ordersAPI.confirmDelivery(orderId);
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: 'delivered' } : o)));
+        const eventId = crypto.randomUUID();
+        socket.emit('inventoryUpdated', {
+          branchId,
+          eventId,
+        });
+        toast.success(isRtl ? 'تم تأكيد التسليم ونقل المخزون' : 'Delivery confirmed and inventory transferred');
+      } catch (err: any) {
+        toast.error(err.message || (isRtl ? 'فشل تأكيد التسليم' : 'Failed to confirm delivery'));
+      }
+    },
+    [isConnected, socket, isRtl]
+  );
   const filteredInventory = useMemo(() => {
     const searchTerm = inventoryFilter.search.toLowerCase();
     return inventory.filter((item) => {
-      const name = isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name);
+      const name = isRtl ? item.product?.name : item.product?.nameEn || item.product?.name;
       return name?.toLowerCase().includes(searchTerm);
     });
   }, [inventory, inventoryFilter.search, isRtl]);
-
-  const lowStockItems = useMemo(() => 
-    filteredInventory.filter((item) => item.currentStock <= item.minStockLevel).slice(0, 8), 
-    [filteredInventory]
-  );
-
-  const recentHistory = useMemo(() => 
-    history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8), 
-    [history]
-  );
-
-  const sortedPendingOrders = useMemo(() => 
-    [...orders]
+  const lowStockItems = useMemo(() => filteredInventory.filter((item) => item.currentStock <= item.minStockLevel).slice(0, 8), [filteredInventory]);
+  const recentHistory = useMemo(() => history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8), [history]);
+  const sortedPendingOrders = useMemo(() => {
+    return [...orders]
       .filter((order) => ['pending', 'approved', 'in_production', 'in_transit'].includes(order.status))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8), 
-    [orders]
-  );
-
-  const sortedLatestReturns = useMemo(() => 
-    [...returns]
+      .slice(0, 8);
+  }, [orders]);
+  const sortedLatestReturns = useMemo(() => {
+    return [...returns]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8), 
-    [returns]
-  );
-
-  // === RENDER FUNCTIONS ===
+      .slice(0, 8);
+  }, [returns]);
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1097,38 +1069,118 @@ export const Dashboard: React.FC = () => {
       transition={{ duration: 0.3 }}
       className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"
     >
-      <StatsCard title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'} value={stats.totalOrders.toString()} icon={ShoppingCart} color="amber" ariaLabel="Total Orders" />
-      <StatsCard title={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'} value={stats.pendingOrders.toString()} icon={AlertCircle} color="red" ariaLabel="Pending Orders" />
-      <StatsCard title={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'} value={stats.inProductionOrders.toString()} icon={Package} color="blue" ariaLabel="In Production" />
-      <StatsCard title={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'} value={stats.deliveredOrders.toString()} icon={CheckCircle} color="green" ariaLabel="Delivered Orders" />
-      
+      <StatsCard
+        title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
+        value={stats.totalOrders.toString()}
+        icon={ShoppingCart}
+        color="amber"
+        ariaLabel={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
+      />
+      <StatsCard
+        title={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
+        value={stats.pendingOrders.toString()}
+        icon={AlertCircle}
+        color="red"
+        ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
+      />
+      <StatsCard
+        title={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
+        value={stats.inProductionOrders.toString()}
+        icon={Package}
+        color="blue"
+        ariaLabel={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
+      />
+      <StatsCard
+        title={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
+        value={stats.deliveredOrders.toString()}
+        icon={CheckCircle}
+        color="green"
+        ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
+      />
       {['admin', 'production', 'branch'].includes(user.role) && (
         <>
-          <StatsCard title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'} value={stats.totalReturns.toString()} icon={RotateCcw} color="orange" ariaLabel="Total Returns" />
-          <StatsCard title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'} value={stats.pendingReturns.toString()} icon={AlertCircle} color="red" ariaLabel="Pending Returns" />
-          <StatsCard title={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'} value={stats.approvedReturns.toString()} icon={CheckCircle} color="green" ariaLabel="Approved Returns" />
-          <StatsCard title={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'} value={stats.rejectedReturns.toString()} icon={AlertCircle} color="red" ariaLabel="Rejected Returns" />
+          <StatsCard
+            title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+            value={stats.totalReturns.toString()}
+            icon={RotateCcw}
+            color="orange"
+            ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+          />
+          <StatsCard
+            title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
+            value={stats.pendingReturns.toString()}
+            icon={AlertCircle}
+            color="red"
+            ariaLabel={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
+          />
+          <StatsCard
+            title={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
+            value={stats.approvedReturns.toString()}
+            icon={CheckCircle}
+            color="green"
+            ariaLabel={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
+          />
+          <StatsCard
+            title={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
+            value={stats.rejectedReturns.toString()}
+            icon={AlertCircle}
+            color="red"
+            ariaLabel={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
+          />
         </>
       )}
-      
       {user.role === 'branch' && (
         <>
-          <StatsCard title={isRtl ? 'قيمة المخزون' : 'Inventory Value'} value={stats.totalInventoryValue?.toFixed(2) || '0'} icon={Package} color="purple" ariaLabel="Inventory Value" />
-          <StatsCard title={isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Items'} value={stats.lowStockItems?.toString() || '0'} icon={AlertCircle} color="red" ariaLabel="Low Stock Items" />
+          <StatsCard
+            title={isRtl ? 'قيمة المخزون' : 'Inventory Value'}
+            value={stats.totalInventoryValue?.toFixed(2) || '0'}
+            icon={Package}
+            color="purple"
+            ariaLabel={isRtl ? 'قيمة المخزون' : 'Inventory Value'}
+          />
+          <StatsCard
+            title={isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Items'}
+            value={stats.lowStockItems?.toString() || '0'}
+            icon={AlertCircle}
+            color="red"
+            ariaLabel={isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Items'}
+          />
         </>
       )}
-      
       {['admin', 'production'].includes(user.role) && (
         <>
-          <StatsCard title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'} value={stats.completedTasks.toString()} icon={CheckCircle} color="green" ariaLabel="Completed Tasks" />
-          <StatsCard title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'} value={stats.inProgressTasks.toString()} icon={Clock} color="blue" ariaLabel="In Progress Tasks" />
-          <StatsCard title={isRtl ? 'متوسط وقت الإنتاج' : 'Avg Production Time'} value={`${stats.averageProductionTime?.toFixed(1) || '0'} ${isRtl ? 'ساعات' : 'hours'}`} icon={Timer} color="teal" ariaLabel="Average Production Time" />
-          <StatsCard title={isRtl ? 'معدل استجابة الطهاة' : 'Chef Utilization'} value={`${stats.chefUtilizationRate?.toFixed(1) || '0'}%`} icon={Users} color="indigo" ariaLabel="Chef Utilization Rate" />
+          <StatsCard
+            title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+            value={stats.completedTasks.toString()}
+            icon={CheckCircle}
+            color="green"
+            ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+          />
+          <StatsCard
+            title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+            value={stats.inProgressTasks.toString()}
+            icon={Clock}
+            color="blue"
+            ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+          />
+          <StatsCard
+            title={isRtl ? 'متوسط وقت الإنتاج' : 'Avg Production Time'}
+            value={`${stats.averageProductionTime?.toFixed(1) || '0'} ${isRtl ? 'ساعات' : 'hours'}`}
+            icon={Timer}
+            color="teal"
+            ariaLabel={isRtl ? 'متوسط وقت الإنتاج' : 'Average Production Time'}
+          />
+          <StatsCard
+            title={isRtl ? 'معدل استجابة الطهاة' : 'Chef Utilization'}
+            value={`${stats.chefUtilizationRate?.toFixed(1) || '0'}%`}
+            icon={Users}
+            color="indigo"
+            ariaLabel={isRtl ? 'معدل استجابة الطهاة' : 'Chef Utilization Rate'}
+          />
         </>
       )}
     </motion.div>
   );
-
   const renderBranchPerformance = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1159,7 +1211,10 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                    <div className="bg-amber-600 h-1.5 rounded-full" style={{ width: `${Math.min(branch.performance, 100)}%` }}></div>
+                    <div
+                      className="bg-amber-600 h-1.5 rounded-full"
+                      style={{ width: `${Math.min(branch.performance, 100)}%` }}
+                    ></div>
                   </div>
                   <span className="text-xs text-gray-600">{branch.performance.toFixed(1)}%</span>
                 </div>
@@ -1170,7 +1225,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderChefPerformance = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1201,7 +1255,10 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-20 bg-gray-200 rounded-full h-1.5">
-                    <div className="bg-amber-600 h-1.5 rounded-full" style={{ width: `${Math.min(chef.performance, 100)}%` }}></div>
+                    <div
+                      className="bg-amber-600 h-1.5 rounded-full"
+                      style={{ width: `${Math.min(chef.performance, 100)}%` }}
+                    ></div>
                   </div>
                   <span className="text-xs text-gray-600">{chef.performance.toFixed(1)}%</span>
                 </div>
@@ -1212,7 +1269,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderLatestReturns = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1265,13 +1321,13 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderLowStockItems = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
         <AlertCircle className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
         {isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Products'}
       </h3>
+  
       <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {lowStockItems.length === 0 ? (
@@ -1300,7 +1356,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderRecentInventoryHistory = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1322,13 +1377,11 @@ export const Dashboard: React.FC = () => {
                 className="flex items-center justify-between p-2 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
               >
                 <div>
-                  <p className="text-xs font-medium text-gray-800">
-                    {isRtl ? entry.type : entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
-                  </p>
+                  <p className="text-xs font-medium text-gray-800">{isRtl ? entry.type : entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</p>
                   <p className="text-xs text-gray-500">{entry.description}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-600">{entry.quantity}  {entry.product?.displayUnit} {entry.product?.displayName}</p>
+                  <p className="text-xs text-gray-600">{entry.quantity}</p>
                   <p className="text-xs text-gray-500">{entry.date}</p>
                 </div>
               </motion.div>
@@ -1338,7 +1391,6 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
   const renderLatestOrders = () => (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1409,30 +1461,26 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-
-  // === MAIN RENDER ===
   if (loading && isInitialLoad) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4 text-sm">{error}</div>;
-
   return (
-    <div className={`mx-auto px-4 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
+    <div className={` mx-auto px-4 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
-          <BarChart3 className="w-6 h-6 text-amber-600" />
-          {isRtl ? 'لوحة التحكم' : 'Dashboard'}
-        </h1>
-        <ProductDropdown
-          value={timeFilter}
-          onChange={(value) => setTimeFilter(value)}
-          options={timeFilterOptions.map((option) => ({
-            value: option.value,
-            label: isRtl ? option.label : option.enLabel,
-          }))}
-          ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-          className="w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-        />
-      </div>
-
+      <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
+        <BarChart3 className="w-6 h-6 text-amber-600" />
+        {isRtl ? 'لوحة التحكم' : 'Dashboard'}
+      </h1>
+      <ProductDropdown
+        value={timeFilter}
+        onChange={(value) => setTimeFilter(value)}
+        options={timeFilterOptions.map((option) => ({
+          value: option.value,
+          label: isRtl ? option.label : option.enLabel,
+        }))}
+        ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+        className="w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+      />
+    </div>
       {user.role === 'chef' ? (
         <ChefDashboard
           stats={stats}

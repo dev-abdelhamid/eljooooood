@@ -25,7 +25,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
     
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
-        <Notifications />
+      
         <button
           onClick={toggleLanguage}
           aria-label={t('header.toggle_language')}
