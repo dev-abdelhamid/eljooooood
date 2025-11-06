@@ -5,28 +5,29 @@ interface LoadingSpinnerProps {
   className?: string;
 }
 
-export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerProps) {
+export function LoadingSpinner({ size = 'lg', className = '' }: LoadingSpinnerProps) {
   const sizes = {
-    sm: 'w-24 h-20',
-    md: 'w-36 h-28',
-    lg: 'w-48 h-36'
+    sm: 'w-32 h-32',
+    md: 'w-48 h-48',
+    lg: 'w-64 h-64'
   };
 
-  const pathRef = useRef<SVGPathElement>(null);
+  const jRef = useRef<SVGPathElement>(null);
+  const bRef = useRef<SVGPathElement>(null);
   const leafRef = useRef<SVGPathElement>(null);
-  const [length, setLength] = useState(0);
+  const [jLength, setJLength] = useState(0);
+  const [bLength, setBLength] = useState(0);
 
   useEffect(() => {
-    if (pathRef.current) {
-      setLength(pathRef.current.getTotalLength());
-    }
+    if (jRef.current) setJLength(jRef.current.getTotalLength());
+    if (bRef.current) setBLength(bRef.current.getTotalLength());
   }, []);
 
   return (
     <div className={`flex items-center justify-center ${className}`}>
       <svg
         className={`${sizes[size]} drop-shadow-2xl`}
-        viewBox="0 0 100 100"
+        viewBox="0 0 280 280"
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
@@ -36,8 +37,8 @@ export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerPr
             <stop offset="100%" stopColor="#b45309" />
           </linearGradient>
 
-          <filter id="softGlow">
-            <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="6" result="blur"/>
             <feMerge>
               <feMergeNode in="blur"/>
               <feMergeNode in="SourceGraphic"/>
@@ -45,57 +46,106 @@ export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerPr
           </filter>
         </defs>
 
-        {/* الورقة الأصلية تمامًا – تنبض وتطفو */}
+        {/* الورقة تنبت من الصفر */}
+        <g className="leaf-group">
+          <path
+            ref={leafRef}
+            d="M 78 68 
+               C 76 62, 78 56, 82 56 
+               C 86 56, 88 62, 86 68 
+               L 82 80 
+               L 78 68"
+            fill="#b45309"
+            className="leaf"
+          />
+        </g>
+
+        {/* J - يُرسم أولاً */}
         <path
-          ref={leafRef}
-          d="M23.5 19.5 C23.5 18.4 24.4 17.5 25.5 17.5 C26.6 17.5 27.5 18.4 27.5 19.5 C27.5 20.6 26.6 21.5 25.5 21.5 C24.4 21.5 23.5 20.6 23.5 19.5 Z"
-          fill="#b45309"
-          className="leaf"
+          ref={jRef}
+          d="M 55 200 
+             C 40 200, 30 185, 30 165 
+             C 30 145, 40 130, 55 130 
+             L 75 130 
+             Q 85 130, 90 140 
+             Q 95 150, 95 165 
+             Q 95 185, 80 195 
+             L 75 200 
+             Z"
+          fill="none"
+          stroke="url(#gold)"
+          strokeWidth="14"
+          strokeLinecap="round"
+          filter="url(#glow)"
+          className="draw-j"
+          style={{ strokeDasharray: jLength, strokeDashoffset: jLength }}
         />
 
-        {/* JB الأصلي – لا تغيير في حرف واحد */}
-        {length > 0 && (
-          <g transform="translate(20, 10) scale(1.2)">
-            <path
-              ref={pathRef}
-              d="M45.691667,45.15 C48.591667,46.1 50.691667,48.95 50.691667,52.2 C50.691667,57.95 46.691667,61 40.291667,61 L28.541667,61 L28.541667,30.3 L39.291667,30.3 C45.691667,30.3 49.691667,33.15 49.691667,38.65 C49.691667,41.95 47.941667,44.35 45.691667,45.15 Z M33.591667,43.2 L39.241667,43.2 C42.791667,43.2 44.691667,41.85 44.691667,38.95 C44.691667,36.05 42.791667,34.8 39.241667,34.8 L33.591667,34.8 L33.591667,43.2 Z M33.591667,47.5 L33.591667,56.5 L40.191667,56.5 C43.691667,56.5 45.591667,54.75 45.591667,52 C45.591667,49.2 43.691667,47.5 40.191667,47.5 L33.591667,47.5 Z"
-              fill="none"
-              stroke="url(#gold)"
-              strokeWidth="2.8"
-              strokeLinecap="round"
-              filter="url(#softGlow)"
-              style={{
-                strokeDasharray: length,
-                strokeDashoffset: length,
-              }}
-              className="jb-draw"
-            />
-          </g>
-        )}
+        {/* B - يُرسم بعد J */}
+        <path
+          ref={bRef}
+          d="M 120 130 
+             L 120 200 
+             L 155 200 
+             Q 180 200, 195 185 
+             Q 210 170, 210 150 
+             Q 210 135, 200 125 
+             Q 215 115, 215 95 
+             Q 215 70, 195 60 
+             Q 175 50, 155 50 
+             L 120 50 
+             Z
+             M 140 75 L 155 75 
+             Q 165 75, 170 80 
+             Q 175 85, 175 95 
+             Q 175 105, 170 110 
+             Q 165 115, 155 115 
+             L 140 115 
+             Z
+             M 140 135 L 155 135 
+             Q 170 135, 180 142 
+             Q 190 149, 190 158 
+             Q 190 167, 180 173 
+             Q 170 180, 155 180 
+             L 140 180 
+             Z"
+          fill="none"
+          stroke="url(#gold)"
+          strokeWidth="14"
+          strokeLinecap="round"
+          filter="url(#glow)"
+          className="draw-b"
+          style={{ strokeDasharray: bLength, strokeDashoffset: bLength }}
+        />
 
         {/* الأنيميشن السحري */}
         <style jsx>{`
-          @keyframes draw {
+          @keyframes drawJ {
             to { stroke-dashoffset: 0; }
           }
-          @keyframes leafPop {
-            0%   { transform: scale(0)   rotate(-180deg); opacity: 0; }
-            60%  { transform: scale(0.5) rotate(-60deg);  opacity: 0.8; }
-            100% { transform: scale(1)   rotate(0deg);    opacity: 1; }
+          @keyframes drawB {
+            to { stroke-dashoffset: 0; }
+          }
+          @keyframes growLeaf {
+            0%   { transform: scale(0) translateY(30px); opacity: 0; }
+            70%  { transform: scale(0.3) translateY(10px); opacity: 0.6; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
           }
           @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50%      { transform: translateY(-4px); }
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50%      { transform: translateY(-6px) rotate(2deg); }
           }
 
-          .jb-draw {
-            animation: draw 2.8s cubic-bezier(0.4, 0, 0.2, 1) forwards infinite;
+          .draw-j {
+            animation: drawJ 2.2s ease-out 0.3s forwards infinite;
           }
-          .leaf {
-            transform-origin: 25.5px 19.5px;
-            animation: 
-              leafPop 2.8s ease-out 0.6s forwards infinite,
-              float 3.6s ease-in-out infinite;
+          .draw-b {
+            animation: drawB 2.2s ease-out 1.2s forwards infinite;
+          }
+          .leaf-group {
+            transform-origin: 82px 80px;
+            animation: growLeaf 2.8s ease-out 1.8s forwards infinite,
+                       float 5s ease-in-out 3s infinite;
           }
         `}</style>
       </svg>
