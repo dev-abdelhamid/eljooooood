@@ -20,7 +20,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <img
           src="/logo (3).png"
           alt={t('app.logo_alt')}
-          className="w-32 h-10  rounded-xl border border-amber-300 shadow-sm"
+          className="w-32 h-12 object-contain drop-shadow-xl"
         />
     
       </div>
