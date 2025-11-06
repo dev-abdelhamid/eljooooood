@@ -30,7 +30,7 @@ import {
 } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
-import { LogoLoadingSpinner } from '../components/UI/LogoLoadingSpinner';
+import { LogoLoadingSpinner } from '../components/UI/LoadingSpinner';
 
 // ================== INTERFACES ==================
 interface Stats {
