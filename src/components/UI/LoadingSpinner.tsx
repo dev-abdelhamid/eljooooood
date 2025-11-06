@@ -8,7 +8,7 @@ interface LogoLoadingSpinnerProps {
   animate?: boolean;
 }
 
-export function LogoLoadingSpinner({ 
+export function LoadingSpinner({ 
   size = 'lg', 
   className = '', 
   showText = true,

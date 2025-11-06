@@ -30,7 +30,7 @@ import {
 } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
-import { LogoLoadingSpinner } from '../components/UI/LoadingSpinner';
+import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 
 // ================== INTERFACES ==================
 interface Stats {
@@ -191,7 +191,7 @@ const timeFilterOptions = [
 // ================== LOADER WITH LOGO ==================
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen bg-gradient-to-br from-amber-50 to-amber-100">
-    <LogoLoadingSpinner size="xxl" showText={true} animate={true} />
+    <LoadingSpinner size="xxl" showText={true} animate={true} />
   </div>
 );
 
