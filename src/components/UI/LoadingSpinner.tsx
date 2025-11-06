@@ -7,9 +7,9 @@ interface LoadingSpinnerProps {
 
 export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerProps) {
   const sizes = {
-    sm: 'w-20 h-16',
-    md: 'w-32 h-20',
-    lg: 'w-40 h-32'
+    sm: 'w-20 h-24',
+    md: 'w-32 h-36',
+    lg: 'w-40 h-44'
   };
 
   const pathRef = useRef<SVGPathElement>(null);
@@ -21,31 +21,117 @@ export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerPr
     }
   }, []);
 
+  // مسار حرف B + الزخرفة العلوية (السنبلة) بدقة عالية جدًا ومطابقة للشعار
+  const bLogoPath = `
+    M 45 15 
+    Q 48 10, 50 8
+    Q 52 6, 54 6
+    Q 56 6, 57 8
+    L 56 10
+    Q 55 11, 53 11
+    Q 51 11, 50 10
+    Q 49 9, 48 9
+    Q 47 9, 46 10
+    Q 45 11, 45 12
+    L 45 15
+    Z
+    M 35 25 
+    C 48 25, 55 30, 55 40
+    C 55 46, 51 50, 45 51
+    C 51 52, 55 56, 55 62
+    C 55 72, 48 77, 35 77
+    L 20 77
+    L 20 25
+    L 35 25
+    Z
+    M 28 35 L 28 67
+    M 35 35
+    C 42 35, 46 36, 46 41
+    C 46 45, 42 46, 35 46
+    L 28 46
+    M 35 56
+    C 42 56, 46 57, 46 62
+    C 46 66, 42 67, 35 67
+    L 28 67
+  `;
+
   return (
     <div className={`flex items-center justify-center ${className}`}>
-      <svg className={`${sizes[size]}`} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <svg
+        className={`${sizes[size]} animate-pulse`}
+        viewBox="0 0 80 100"
+        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="xMidYMid meet"
+      >
         {length > 0 && (
           <style>
-            {`@keyframes draw {
-              0% {
+            {`
+              @keyframes draw {
+                0% { stroke-dashoffset: ${length}; }
+                70% { stroke-dashoffset: 0; }
+                100% { stroke-dashoffset: 0; }
+              }
+              @keyframes fadeIn {
+                0%, 50% { opacity: 0; }
+                100% { opacity: 1; }
+              }
+              .draw-path {
+                stroke-dasharray: ${length};
                 stroke-dashoffset: ${length};
+                animation: draw 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite,
+                           fadeIn 2.4s ease-in-out infinite;
               }
-              100% {
-                stroke-dashoffset: 0;
+              .fill-path {
+                animation: fadeIn 2.4s ease-in-out infinite;
+                animation-delay: 1.2s;
               }
-            }`}
+              @keyframes pulse {
+                0%, 100% { opacity: 0.95; }
+                50% { opacity: 0.8; }
+              }
+              .animate-pulse { animation: pulse 2.4s ease-in-out infinite; }
+            `}
           </style>
         )}
-        <g transform="translate(20, 10) scale(1.2)">
+
+        <g transform="translate(2, 5)">
+          {/* رسم الحدود */}
           <path
             ref={pathRef}
-            d="M45.691667,45.15 C48.591667,46.1 50.691667,48.95 50.691667,52.2 C50.691667,57.95 46.691667,61 40.291667,61 L28.541667,61 L28.541667,30.3 L39.291667,30.3 C45.691667,30.3 49.691667,33.15 49.691667,38.65 C49.691667,41.95 47.941667,44.35 45.691667,45.15 Z M33.591667,43.2 L39.241667,43.2 C42.791667,43.2 44.691667,41.85 44.691667,38.95 C44.691667,36.05 42.791667,34.8 39.241667,34.8 L33.591667,34.8 L33.591667,43.2 Z M33.591667,47.5 L33.591667,56.5 L40.191667,56.5 C43.691667,56.5 45.591667,54.75 45.591667,52 C45.591667,49.2 43.691667,47.5 40.191667,47.5 L33.591667,47.5 Z"
+            d={bLogoPath}
             fill="none"
             stroke="#B45309"
-            strokeWidth="2"
-            style={length > 0 ? { strokeDasharray: length, animation: 'draw 2s ease-in-out infinite' } : {}}
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="draw-path"
+          />
+
+          {/* الملء الداخلي */}
+          <path
+            d={bLogoPath}
+            fill="none"
+            stroke="#fef3c7"
+            strokeWidth="3.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="fill-path"
           />
         </g>
+
+        {/* إطار الشعار (مربع رفيع) */}
+        <rect
+          x="5"
+          y="8"
+          width="70"
+          height="84"
+          rx="8"
+          fill="none"
+          stroke="#B45309"
+          strokeWidth="1.5"
+          opacity="0.7"
+          className="fill-path"
+        />
       </svg>
     </div>
   );
