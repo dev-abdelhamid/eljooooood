@@ -1,52 +1,143 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
-interface LoadingSpinnerProps {
-  size?: 'sm' | 'md' | 'lg';
-  className?: string;
-}
-
-export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerProps) {
-  const sizes = {
-    sm: 'w-20 h-16',
-    md: 'w-32 h-20',
-    lg: 'w-40 h-32'
-  };
-
-  const pathRef = useRef<SVGPathElement>(null);
-  const [length, setLength] = useState(0);
-
-  useEffect(() => {
-    if (pathRef.current) {
-      setLength(pathRef.current.getTotalLength());
-    }
-  }, []);
+export default function LoadingSpinner() {
+  const leafRef = useRef<SVGPathElement>(null);
+  const jRef = useRef<SVGPathElement>(null);
+  const bRef = useRef<SVGPathElement>(null);
 
   return (
-    <div className={`flex items-center justify-center ${className}`}>
-      <svg className={`${sizes[size]}`} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        {length > 0 && (
-          <style>
-            {`@keyframes draw {
-              0% {
-                stroke-dashoffset: ${length};
-              }
-              100% {
-                stroke-dashoffset: 0;
-              }
-            }`}
-          </style>
-        )}
-        <g transform="translate(20, 10) scale(1.2)">
-          <path
-            ref={pathRef}
-            d="M45.691667,45.15 C48.591667,46.1 50.691667,48.95 50.691667,52.2 C50.691667,57.95 46.691667,61 40.291667,61 L28.541667,61 L28.541667,30.3 L39.291667,30.3 C45.691667,30.3 49.691667,33.15 49.691667,38.65 C49.691667,41.95 47.941667,44.35 45.691667,45.15 Z M33.591667,43.2 L39.241667,43.2 C42.791667,43.2 44.691667,41.85 44.691667,38.95 C44.691667,36.05 42.791667,34.8 39.241667,34.8 L33.591667,34.8 L33.591667,43.2 Z M33.591667,47.5 L33.591667,56.5 L40.191667,56.5 C43.691667,56.5 45.591667,54.75 45.591667,52 C45.591667,49.2 43.691667,47.5 40.191667,47.5 L33.591667,47.5 Z"
-            fill="none"
-            stroke="#B45309"
-            strokeWidth="2"
-            style={length > 0 ? { strokeDasharray: length, animation: 'draw 2s ease-in-out infinite' } : {}}
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-amber-50 to-orange-50">
+      <div className="relative">
+        <svg
+          width="180"
+          height="180"
+          viewBox="0 0 180 180"
+          className="drop-shadow-2xl"
+        >
+          {/* خلفية توهج دافئة */}
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#f59e0b" />
+              <stop offset="50%" stopColor="#d97706" />
+              <stop offset="100%" stopColor="#b45309" />
+            </linearGradient>
+          </defs>
+
+          {/* دوران خفيف للكل */}
+          <g className="animate-spin-slow origin-center">
+            {/* J مع تأثير الرسم */}
+            <path
+              ref={jRef}
+              d="M 55 135 
+                   C 45 135, 38 128, 38 118 
+                   C 38 108, 45 95, 55 95 
+                   L 65 95 
+                   L 65 135 
+                   Z"
+              fill="none"
+              stroke="url(#goldGradient)"
+              strokeWidth="8"
+              strokeLinecap="round"
+              pathLength="100"
+              className="draw-j"
+              filter="url(#glow)"
+            />
+
+            {/* B مع تأثير الرسم */}
+            <path
+              ref={bRef}
+              d="M 90 95 
+                   C 105 95, 115 102, 115 115 
+                   C 115 125, 108 130, 100 132 
+                   C 110 134, 118 140, 118 150 
+                   C 118 162, 108 170, 95 170 
+                   L 80 170 
+                   L 80 95 
+                   Z 
+                   M 90 105 L 90 125 
+                   M 90 135 L 90 160"
+              fill="none"
+              stroke="url(#goldGradient)"
+              strokeWidth="8"
+              strokeLinecap="round"
+              pathLength="100"
+              className="draw-b delay-300"
+              filter="url(#glow)"
+            />
+
+            {/* الورقة النابتة */}
+            <g className="origin-center leaf-grow">
+              <path
+                ref={leafRef}
+                d="M 50 70 
+                     C 48 65, 50 60, 53 60 
+                     C 56 60, 58 65, 56 70 
+                     L 53 78 
+                     L 50 70"
+                fill="#d97706"
+                className="leaf-path"
+              />
+            </g>
+          </g>
+
+          {/* نبضة خفيفة */}
+          <circle
+            cx="90"
+            cy="90"
+            r="4"
+            fill="#f59e0b"
+            className="animate-ping"
           />
-        </g>
-      </svg>
+        </svg>
+
+        <style jsx>{`
+          @keyframes draw-j {
+            from { stroke-dashoffset: 100; }
+            to { stroke-dashoffset: 0; }
+          }
+          @keyframes draw-b {
+            from { stroke-dashoffset: 100; }
+            to { stroke-dashoffset: 0; }
+          }
+          @keyframes leaf-grow {
+            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+            60% { transform: scale(0.3) rotate(-90deg); opacity: 0.6; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+          }
+          @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+
+          .draw-j {
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+            animation: draw-j 2.5s ease-out forwards infinite;
+          }
+          .draw-b {
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+            animation: draw-b 2.5s ease-out 0.4s forwards infinite;
+          }
+          .leaf-grow {
+            animation: leaf-grow 3s ease-out 1s forwards infinite;
+          }
+          .animate-spin-slow {
+            animation: spin-slow 20s linear infinite;
+          }
+        `}</style>
+      </div>
+
+      <div className="mt-8 text-center">
+        <p className="text-amber-700 font-medium animate-pulse">جاري التحميل بأناقة...</p>
+      </div>
     </div>
   );
 }
