@@ -7,9 +7,9 @@ interface LoadingSpinnerProps {
 
 export function LoadingSpinner({ size = 'md', className = '' }: LoadingSpinnerProps) {
   const sizes = {
-    sm: 'w-10 h-10',
-    md: 'w-16 h-16',
-    lg: 'w-24 h-24'
+    sm: 'w-20 h-16',
+    md: 'w-32 h-20',
+    lg: 'w-40 h-32'
   };
 
   const pathRef = useRef<SVGPathElement>(null);
