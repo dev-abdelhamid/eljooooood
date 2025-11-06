@@ -18,13 +18,11 @@ export function Header({ onMenuToggle }: HeaderProps) {
     >
       <div className="flex items-center gap-2 sm:gap-4 flex-1">
         <img
-          src="/logo.png"
+          src="/logo (3).png"
           alt={t('app.logo_alt')}
-          className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl border border-amber-300 shadow-sm"
+          className="w-20 h-10 sm:w-12 sm:h-12 rounded-xl border border-amber-300 shadow-sm"
         />
-        <h1 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 truncate flex-1">
-          {t('app.title')}
-        </h1>
+    
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
         <Notifications />
