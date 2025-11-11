@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
-import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown, Upload, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -46,6 +46,7 @@ const translations = {
     price: 'السعر',
     unit: 'الوحدة',
     status: 'الحالة',
+    image: 'صورة المنتج',
     edit: 'تعديل',
     delete: 'حذف',
     namePlaceholder: 'أدخل اسم المنتج',
@@ -55,11 +56,13 @@ const translations = {
     unitPlaceholder: 'اختر الوحدة',
     departmentPlaceholder: 'اختر القسم',
     statusPlaceholder: 'اختر الحالة',
+    imagePlaceholder: 'اختر صورة (اختياري)',
     update: 'تحديث المنتج',
     requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
     invalidUnit: 'الوحدة غير صالحة، اختر من القائمة',
     invalidStatus: 'الحالة غير صالحة، اختر من القائمة',
     invalidPrice: 'السعر يجب أن يكون رقمًا إيجابيًا',
+    invalidImage: 'الصورة يجب أن تكون بصيغة JPG أو PNG',
     unauthorized: 'غير مصرح',
     fetchError: 'خطأ في جلب البيانات',
     saveError: 'خطأ في حفظ المنتج',
@@ -87,6 +90,7 @@ const translations = {
     price: 'Price',
     unit: 'Unit',
     status: 'Status',
+    image: 'Product Image',
     edit: 'Edit',
     delete: 'Delete',
     namePlaceholder: 'Enter product name',
@@ -96,11 +100,13 @@ const translations = {
     unitPlaceholder: 'Select Unit',
     departmentPlaceholder: 'Select Department',
     statusPlaceholder: 'Select Status',
+    imagePlaceholder: 'Choose image (optional)',
     update: 'Update Product',
     requiredFields: 'Please fill all required fields',
     invalidUnit: 'Invalid unit, please select from the list',
     invalidStatus: 'Invalid status, please select from the list',
     invalidPrice: 'Price must be a positive number',
+    invalidImage: 'Image must be JPG or PNG',
     unauthorized: 'Unauthorized',
     fetchError: 'Error fetching data',
     saveError: 'Error saving product',
@@ -174,8 +180,6 @@ const CustomInput = ({
     </div>
   );
 };
-
-
 
 export function Products() {
   const { language } = useLanguage();
@@ -252,7 +256,9 @@ export function Products() {
         price: product.price.toString(),
         unit: product.unit || '',
         status: product.status || 'Available',
+        image: product.image || '',
       });
+      setImagePreview(product.image || '');
     } else {
       setEditingProduct(null);
       setFormData({
@@ -263,7 +269,9 @@ export function Products() {
         price: '',
         unit: '',
         status: 'Available',
+        image: '',
       });
+      setImagePreview('');
     }
     setIsModalOpen(true);
   };
@@ -272,6 +280,7 @@ export function Products() {
     setIsModalOpen(false);
     setEditingProduct(null);
     setError('');
+    setImagePreview('');
   };
 
   const [formData, setFormData] = useState({
@@ -282,7 +291,37 @@ export function Products() {
     price: '',
     unit: '',
     status: 'Available' as 'Available' | 'Unavailable',
+    image: '',
   });
+
+  const [imagePreview, setImagePreview] = useState<string>('');
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      setError(t.invalidImage);
+      toast.error(t.invalidImage);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      setImagePreview(result);
+      setFormData({ ...formData, image: result });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setImagePreview('');
+    setFormData({ ...formData, image: '' });
+    const input = document.getElementById('image-upload') as HTMLInputElement;
+    if (input) input.value = '';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,8 +345,9 @@ export function Products() {
       toast.error(t.invalidStatus);
       return;
     }
+
     try {
-      const productData = {
+      const productData: any = {
         name: formData.name.trim(),
         nameEn: formData.nameEn?.trim() || undefined,
         code: formData.code.trim(),
@@ -315,7 +355,9 @@ export function Products() {
         price: parseFloat(formData.price),
         unit: formData.unit || undefined,
         status: formData.status,
+        image: formData.image || undefined,
       };
+
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
@@ -469,9 +511,28 @@ export function Products() {
             {products.map((product) => (
               <div
                 key={product._id}
-                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col"
               >
-                <div className="space-y-1.5">
+                {/* Product Image */}
+                <div className="mb-3 h-32 bg-gray-100 rounded-lg overflow-hidden">
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.displayName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = '';
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`w-full h-full flex items-center justify-center bg-gray-50 ${product.image ? 'hidden' : ''}`}>
+                    <ImageIcon className="w-10 h-10 text-gray-300" />
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="font-semibold text-gray-900 text-sm truncate">{product.displayName}</h3>
                     <p className="text-xs text-gray-500">{product.code}</p>
@@ -483,6 +544,7 @@ export function Products() {
                     {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
                   </p>
                 </div>
+
                 {['admin', 'production'].includes(user?.role ?? '') && (
                   <div className="mt-3 flex items-center justify-end gap-1.5">
                     <button
@@ -507,9 +569,10 @@ export function Products() {
         )}
       </div>
 
+      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-3">{editingProduct ? t.edit : t.add}</h3>
             <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -601,6 +664,46 @@ export function Products() {
                   />
                 </div>
               </div>
+
+              {/* Image Upload Section */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t.image}</label>
+                <div className="space-y-2">
+                  {imagePreview ? (
+                    <div className="relative">
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-full h-32 object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                        title={isRtl ? 'إزالة الصورة' : 'Remove image'}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="image-upload"
+                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
+                    >
+                      <Upload className="w-8 h-8 text-gray-400 mb-1" />
+                      <span className="text-xs text-gray-500">{t.imagePlaceholder}</span>
+                      <input
+                        id="image-upload"
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png"
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600" />
@@ -629,6 +732,7 @@ export function Products() {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
           <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
