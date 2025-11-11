@@ -522,7 +522,7 @@ export function Products() {
                 className="p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col"
               >
                 {/* Product Image - Smaller */}
-                <div className="mb-2 h-32 w-full bg-gray-100 rounded-lg overflow-hidden">
+                <div className="mb-2 h-40 w-full bg-gray-100 rounded-lg overflow-hidden">
                   {product.image ? (
                     <img
                       src={product.image}
