@@ -151,9 +151,9 @@ const CustomInput = ({
         initial={{ opacity: value ? 0 : 1 }}
         animate={{ opacity: value ? 0 : 1 }}
         transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
       >
-        <Search className="w-4 h-4" />
+        <Search className="w-5 h-5" />
       </motion.div>
       <input
         type="text"
@@ -167,14 +167,14 @@ const CustomInput = ({
         initial={{ opacity: value ? 1 : 0 }}
         animate={{ opacity: value ? 1 : 0 }}
         transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+        className={`absolute ${isRtl ? 'left-5' : 'right-5'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
       >
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
           className="flex items-center justify-center"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
       </motion.div>
     </div>
@@ -522,7 +522,7 @@ export function Products() {
                 className="p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col"
               >
                 {/* Product Image - Smaller */}
-                <div className="mb-2 h-24 bg-gray-100 rounded-lg overflow-hidden">
+                <div className="mb-2 h-32 w-full bg-gray-100 rounded-lg overflow-hidden">
                   {product.image ? (
                     <img
                       src={product.image}
