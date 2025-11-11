@@ -21,6 +21,7 @@ interface Product {
   status: 'Available' | 'Unavailable';
   displayName: string;
   displayUnit: string;
+  createdAt: string; // مهم للترتيب
 }
 
 interface Department {
@@ -221,12 +222,18 @@ export function Products() {
           departmentAPI.getAll({ limit: 100 }),
         ]);
 
-        const productsWithDisplay = productsResponse.data.map((product: Product) => ({
+        const productsWithDisplay = productsResponse.data.data.map((product: any) => ({
           ...product,
           displayName: isRtl ? product.name : (product.nameEn || product.name),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         }));
-        setProducts(productsWithDisplay);
+
+        // ترتيب حسب تاريخ الإنشاء (الأحدث أولاً)
+        const sortedProducts = productsWithDisplay.sort(
+          (a: Product, b: Product) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        setProducts(sortedProducts);
         setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
@@ -360,28 +367,29 @@ export function Products() {
 
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
-        setProducts(
-          products.map((p) =>
-            p._id === editingProduct._id
-              ? {
-                  ...updatedProduct,
-                  displayName: isRtl ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name),
-                  displayUnit: isRtl ? (updatedProduct.unit || 'غير محدد') : (updatedProduct.unitEn || updatedProduct.unit || 'N/A'),
-                }
-              : p
-          )
-        );
+        const updatedWithDisplay = {
+          ...updatedProduct.data,
+          displayName: isRtl ? updatedProduct.data.name : (updatedProduct.data.nameEn || updatedProduct.data.name),
+          displayUnit: isRtl ? (updatedProduct.data.unit || 'غير محدد') : (updatedProduct.data.unitEn || updatedProduct.data.unit || 'N/A'),
+        };
+
+        setProducts(prev => {
+          const filtered = prev.filter(p => p._id !== editingProduct._id);
+          return [updatedWithDisplay, ...filtered].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
         toast.success(t.updated);
       } else {
         const newProduct = await productsAPI.create(productData);
-        setProducts([
-          ...products,
-          {
-            ...newProduct,
-            displayName: isRtl ? newProduct.name : (newProduct.nameEn || newProduct.name),
-            displayUnit: isRtl ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
-          },
-        ]);
+        const newWithDisplay = {
+          ...newProduct.data,
+          displayName: isRtl ? newProduct.data.name : (newProduct.data.nameEn || newProduct.data.name),
+          displayUnit: isRtl ? (newProduct.data.unit || 'غير محدد') : (newProduct.data.unitEn || newProduct.data.unit || 'N/A'),
+        };
+
+        // إضافة في البداية فورًا
+        setProducts(prev => [newWithDisplay, ...prev]);
         toast.success(t.added);
       }
       closeModal();
@@ -411,7 +419,7 @@ export function Products() {
     }
     try {
       await productsAPI.delete(deletingProductId);
-      setProducts(products.filter((p) => p._id !== deletingProductId));
+      setProducts(prev => prev.filter(p => p._id !== deletingProductId));
       toast.success(t.deleted);
       closeDeleteModal();
     } catch (err: any) {
@@ -451,10 +459,9 @@ export function Products() {
       )}
 
       <div className="space-y-3">
-        {/* Search + Filter Row - 2/3 and 1/3 */}
+        {/* Search + Filter Row */}
         <div className="p-4 bg-white rounded-xl shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Search: 2/3 */}
             <div className="md:col-span-2">
               <CustomInput
                 value={searchInput}
@@ -466,7 +473,6 @@ export function Products() {
                 ariaLabel={t.searchPlaceholder}
               />
             </div>
-            {/* Filter: 1/3 */}
             <div className="md:col-span-1">
               <CustomDropdown
                 value={filterDepartment}
@@ -493,7 +499,7 @@ export function Products() {
             {[...Array(6)].map((_, index) => (
               <div key={index} className="p-3 bg-white rounded-xl shadow-sm">
                 <div className="space-y-2 animate-pulse">
-                  <div className="h-20 bg-gray-200 rounded-lg"></div>
+                  <div className="h-28 bg-gray-200 rounded-lg"></div>
                   <div className="h-3 bg-gray-200 rounded w-3/4"></div>
                   <div className="h-2 bg-gray-200 rounded w-1/4"></div>
                 </div>
@@ -521,22 +527,21 @@ export function Products() {
                 key={product._id}
                 className="p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col"
               >
-                {/* Product Image - Smaller */}
-                <div className="mb-2 h-24 bg-gray-100 rounded-lg overflow-hidden">
+                {/* Product Image - محسنة بالكامل */}
+                <div className="mb-2 h-28 bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
                   {product.image ? (
                     <img
                       src={product.image}
                       alt={product.displayName}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain p-1"
                       onError={(e) => {
-                        e.currentTarget.src = '';
                         e.currentTarget.style.display = 'none';
                         e.currentTarget.nextElementSibling?.classList.remove('hidden');
                       }}
                     />
                   ) : null}
                   <div className={`w-full h-full flex items-center justify-center bg-gray-50 ${product.image ? 'hidden' : ''}`}>
-                    <ImageIcon className="w-8 h-8 text-gray-300" />
+                    <ImageIcon className="w-10 h-10 text-gray-300" />
                   </div>
                 </div>
 
@@ -673,7 +678,6 @@ export function Products() {
                 </div>
               </div>
 
-              {/* Image Upload Section */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{t.image}</label>
                 <div className="space-y-2">
@@ -682,7 +686,7 @@ export function Products() {
                       <img
                         src={imagePreview}
                         alt="Preview"
-                        className="w-full h-32 object-cover rounded-lg"
+                        className="w-full h-32 object-contain bg-gray-50 rounded-lg border border-gray-200 p-1"
                       />
                       <button
                         type="button"
