@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
 import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown, Upload, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 interface Product {
@@ -197,7 +197,6 @@ export function Products() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -282,7 +281,6 @@ export function Products() {
     setEditingProduct(null);
     setError('');
     setImagePreview('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const [formData, setFormData] = useState({
@@ -313,15 +311,16 @@ export function Products() {
     reader.onloadend = () => {
       const result = reader.result as string;
       setImagePreview(result);
-      setFormData(prev => ({ ...prev, image: result }));
+      setFormData({ ...formData, image: result });
     };
     reader.readAsDataURL(file);
   };
 
   const removeImage = () => {
     setImagePreview('');
-    setFormData(prev => ({ ...prev, image: '' }));
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setFormData({ ...formData, image: '' });
+    const input = document.getElementById('image-upload') as HTMLInputElement;
+    if (input) input.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -361,15 +360,17 @@ export function Products() {
 
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
-        setProducts(products.map(p =>
-          p._id === editingProduct._id
-            ? {
-                ...updatedProduct,
-                displayName: isRtl ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name),
-                displayUnit: isRtl ? (updatedProduct.unit || 'غير محدد') : (updatedProduct.unitEn || updatedProduct.unit || 'N/A'),
-              }
-            : p
-        ));
+        setProducts(
+          products.map((p) =>
+            p._id === editingProduct._id
+              ? {
+                  ...updatedProduct,
+                  displayName: isRtl ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name),
+                  displayUnit: isRtl ? (updatedProduct.unit || 'غير محدد') : (updatedProduct.unitEn || updatedProduct.unit || 'N/A'),
+                }
+              : p
+          )
+        );
         toast.success(t.updated);
       } else {
         const newProduct = await productsAPI.create(productData);
@@ -450,43 +451,51 @@ export function Products() {
       )}
 
       <div className="space-y-3">
+        {/* Search + Filter Row - 2/3 and 1/3 */}
         <div className="p-4 bg-white rounded-xl shadow-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <CustomInput
-              value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                debouncedSearch(e.target.value);
-              }}
-              placeholder={t.searchPlaceholder}
-              ariaLabel={t.searchPlaceholder}
-            />
-            <CustomDropdown
-              value={filterDepartment}
-              onChange={setFilterDepartment}
-              options={[
-                { value: '', label: t.allDepartments },
-                ...departments.map((d) => ({
-                  value: d._id,
-                  label: isRtl ? d.name : (d.nameEn || d.name),
-                })),
-              ]}
-              ariaLabel={t.filterDepartment}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Search: 2/3 */}
+            <div className="md:col-span-2">
+              <CustomInput
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  debouncedSearch(e.target.value);
+                }}
+                placeholder={t.searchPlaceholder}
+                ariaLabel={t.searchPlaceholder}
+              />
+            </div>
+            {/* Filter: 1/3 */}
+            <div className="md:col-span-1">
+              <CustomDropdown
+                value={filterDepartment}
+                onChange={setFilterDepartment}
+                options={[
+                  { value: '', label: t.allDepartments },
+                  ...departments.map((d) => ({
+                    value: d._id,
+                    label: isRtl ? d.name : (d.nameEn || d.name),
+                  })),
+                ]}
+                ariaLabel={t.filterDepartment}
+              />
+            </div>
           </div>
         </div>
+
         <div className="text-center text-xs text-gray-600">
           {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {[...Array(10)].map((_, i) => (
-              <div key={i} className="p-3 bg-white rounded-xl shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none">
+            {[...Array(6)].map((_, index) => (
+              <div key={index} className="p-3 bg-white rounded-xl shadow-sm">
                 <div className="space-y-2 animate-pulse">
-                  <div className="h-24 bg-gray-200 rounded-lg"></div>
+                  <div className="h-20 bg-gray-200 rounded-lg"></div>
                   <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-2 bg-gray-200 rounded w-1/4"></div>
                 </div>
               </div>
             ))}
@@ -506,33 +515,35 @@ export function Products() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none">
             {products.map((product) => (
               <div
                 key={product._id}
                 className="p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col"
               >
-                <div className="mb-2.5 h-24 bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
+                {/* Product Image - Smaller */}
+                <div className="mb-2 h-24 bg-gray-100 rounded-lg overflow-hidden">
                   {product.image ? (
                     <img
                       src={product.image}
                       alt={product.displayName}
-                      className="w-full h-full object-contain p-1"
+                      className="w-full h-full object-cover"
                       onError={(e) => {
+                        e.currentTarget.src = '';
                         e.currentTarget.style.display = 'none';
                         e.currentTarget.nextElementSibling?.classList.remove('hidden');
                       }}
                     />
                   ) : null}
                   <div className={`w-full h-full flex items-center justify-center bg-gray-50 ${product.image ? 'hidden' : ''}`}>
-                    <ImageIcon className="w-9 h-9 text-gray-300" />
+                    <ImageIcon className="w-8 h-8 text-gray-300" />
                   </div>
                 </div>
 
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-semibold text-gray-900 text-xs truncate">{product.displayName}</h3>
-                    <p className="text-xs text-gray-500 shrink-0">{product.code}</p>
+                    <p className="text-xs text-gray-500">{product.code}</p>
                   </div>
                   <p className="text-xs text-amber-600 truncate">
                     {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
@@ -543,7 +554,7 @@ export function Products() {
                 </div>
 
                 {['admin', 'production'].includes(user?.role ?? '') && (
-                  <div className="mt-2.5 flex items-center justify-end gap-1">
+                  <div className="mt-2 flex items-center justify-end gap-1">
                     <button
                       onClick={() => openModal(product)}
                       className="p-1.5 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
@@ -568,8 +579,8 @@ export function Products() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-full max-w-md p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-3">{editingProduct ? t.edit : t.add}</h3>
             <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -662,6 +673,7 @@ export function Products() {
                 </div>
               </div>
 
+              {/* Image Upload Section */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{t.image}</label>
                 <div className="space-y-2">
@@ -670,12 +682,12 @@ export function Products() {
                       <img
                         src={imagePreview}
                         alt="Preview"
-                        className="w-full h-28 object-contain bg-gray-50 rounded-lg border border-gray-200 p-1"
+                        className="w-full h-32 object-cover rounded-lg"
                       />
                       <button
                         type="button"
                         onClick={removeImage}
-                        className="absolute top-1.5 right-1.5 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                        className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
                         title={isRtl ? 'إزالة الصورة' : 'Remove image'}
                       >
                         <X className="w-3 h-3" />
@@ -684,12 +696,11 @@ export function Products() {
                   ) : (
                     <label
                       htmlFor="image-upload"
-                      className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
+                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
                     >
-                      <Upload className="w-7 h-7 text-gray-400 mb-1" />
+                      <Upload className="w-8 h-8 text-gray-400 mb-1" />
                       <span className="text-xs text-gray-500">{t.imagePlaceholder}</span>
                       <input
-                        ref={fileInputRef}
                         id="image-upload"
                         type="file"
                         accept="image/jpeg,image/jpg,image/png"
@@ -729,9 +740,10 @@ export function Products() {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
+          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
             <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
             {error && (

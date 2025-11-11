@@ -135,25 +135,20 @@ export const authAPI = {
 export const productsAPI = {
   getAll: async (params = {}) => {
     if (params.department && !isValidObjectId(params.department)) {
-      console.error(`[${new Date().toISOString()}] productsAPI.getAll - Invalid department ID:`, params.department);
       throw new Error('Invalid department ID');
     }
     const response = await api.get('/products', { params });
-    console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
     return response;
   },
+
   getById: async (id) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] productsAPI.getById - Invalid product ID:`, id);
-      throw new Error('Invalid product ID');
-    }
+    if (!isValidObjectId(id)) throw new Error('Invalid product ID');
     const response = await api.get(`/products/${id}`);
-    console.log(`[${new Date().toISOString()}] productsAPI.getById - Response:`, response);
     return response;
   },
+
   create: async (productData) => {
     if (!isValidObjectId(productData.department)) {
-      console.error(`[${new Date().toISOString()}] productsAPI.create - Invalid department ID:`, productData.department);
       throw new Error('Invalid department ID');
     }
     const response = await api.post('/products', {
@@ -163,19 +158,15 @@ export const productsAPI = {
       department: productData.department,
       price: productData.price,
       unit: productData.unit?.trim(),
-      unitEn: productData.unitEn?.trim(),
       description: productData.description?.trim(),
+      image: productData.image, // إرسال الصورة
     });
-    console.log(`[${new Date().toISOString()}] productsAPI.create - Response:`, response);
     return response;
   },
+
   update: async (id, productData) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] productsAPI.update - Invalid product ID:`, id);
-      throw new Error('Invalid product ID');
-    }
+    if (!isValidObjectId(id)) throw new Error('Invalid product ID');
     if (productData.department && !isValidObjectId(productData.department)) {
-      console.error(`[${new Date().toISOString()}] productsAPI.update - Invalid department ID:`, productData.department);
       throw new Error('Invalid department ID');
     }
     const response = await api.put(`/products/${id}`, {
@@ -185,19 +176,15 @@ export const productsAPI = {
       department: productData.department,
       price: productData.price,
       unit: productData.unit?.trim(),
-      unitEn: productData.unitEn?.trim(),
       description: productData.description?.trim(),
+      image: productData.image, // إرسال الصورة
     });
-    console.log(`[${new Date().toISOString()}] productsAPI.update - Response:`, response);
     return response;
   },
+
   delete: async (id) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] productsAPI.delete - Invalid product ID:`, id);
-      throw new Error('Invalid product ID');
-    }
+    if (!isValidObjectId(id)) throw new Error('Invalid product ID');
     const response = await api.delete(`/products/${id}`);
-    console.log(`[${new Date().toISOString()}] productsAPI.delete - Response:`, response);
     return response;
   },
 };
